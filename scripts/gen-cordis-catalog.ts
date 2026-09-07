@@ -676,6 +676,7 @@ export const FOUNDATION_TYPE_NAMES: ReadonlySet<string> = new Set([
 
 /** Project types deliberately documented outside the subsystems catalog. */
 export const TYPE_LINK_EXEMPTIONS: Readonly<Record<string, string>> = {
+  IncomingMessage: 'Node HTTP request type is owned by https://nodejs.org/api/http.html#class-httpincomingmessage',
   z: 'schemastery schema constructor is owned by vendor/schemastery (vendored upstream)',
   BeginCommandRequest: 'event-local request contract is owned by packages/client/ui-input-trigger/src/types.ts',
   InsertReferenceRequest: 'event-local request contract is owned by packages/client/ui-input-trigger/src/types.ts',

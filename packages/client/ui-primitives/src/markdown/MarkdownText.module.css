@@ -9,6 +9,13 @@
   color: var(--dsw-alias-label-primary);
 }
 
+@media (max-width: 600px) {
+  .markdown {
+    font-size: max(12px, calc(var(--dsh-content-font-size, 14px) - 1px));
+    line-height: calc(23px + var(--dsh-content-font-delta, 0px));
+  }
+}
+
 .markdown strong {
   font-weight: 600;
 }

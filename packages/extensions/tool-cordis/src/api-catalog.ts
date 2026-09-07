@@ -2808,6 +2808,12 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
     description: 'The browser HTTP carrier service. Activation listens immediately. Route registration order does not affect requests because configured named routes must be distinct, and the fallback handler answers anything not yet claimed during startup with 404 until its owner registers. A listen failure rejects initialization, and the boot process reports the failed fiber.',
     methods: [
       {
+        signature: 'async listenOn(address: string, accepts: (request: IncomingMessage) => boolean): Promise<() => Promise<void>>',
+        description: 'Serve the existing routes on another interface at the primary port.',
+        parameters: [{ name: 'address', description: 'concrete local interface address to bind.' }, { name: 'accepts', description: 'listener-specific request policy, applied before dispatch.' }],
+        returns: 'disposer closing this listener and all of its HTTP and upgrade sockets.',
+      },
+      {
         signature: 'register(route: WebRoute): () => void',
         description: 'Register a named route. Duplicate (kind, path) throws — route patterns are a composition-level contract, so a collision is a misconfiguration.',
         parameters: [{ name: 'route', description: 'kind, path, and the owning handler.' }],

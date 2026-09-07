@@ -101,7 +101,7 @@ export function apply(ctx: ClientContext): void {
     locale: NS,
     inject: (sessionId: SessionId) => ({
       start: (url?: string) => startSessionBrowser(sessionId, url),
-      closePanel: () => ctx.layout.closeBrowser(),
+      closePanel: () => { ctx.layout.closeBrowser() },
     }),
   }, StartBrowserDock))
 
@@ -118,7 +118,7 @@ export function apply(ctx: ClientContext): void {
           const result = await ctx.remote.browser.close({ sessionId })
           if (!result.ok) throw new Error(result.error.message)
         },
-        closePanel: () => ctx.layout.closeBrowser(),
+        closePanel: () => { ctx.layout.closeBrowser() },
       }),
     }, BrowserPanel),
   )

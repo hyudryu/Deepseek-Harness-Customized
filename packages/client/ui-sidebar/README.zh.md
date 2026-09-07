@@ -33,7 +33,7 @@ kind: "package-reference"
 
 ### 折叠行为
 
-实时收起时，展开内容在当前宽度淡出，上方控件共用一次淡入并左移进入 56px 轨道，由布局的栏滑动结束整段动画。页面初始即为收起状态时会静态渲染轨道；减少动态效果模式会禁用两段过渡。固定在底部的 `sidebar.settings` 控件只共用淡入时序，不发生横向位移。
+桌面收起时，展开内容在当前宽度淡出，上方控件共用一次淡入并左移进入 56px 轨道，由布局的栏滑动结束整段动画。桌面页面初始即为收起状态时会静态渲染轨道；减少动态效果模式会禁用两段过渡。固定在底部的 `sidebar.settings` 控件只共用淡入时序，不发生横向位移。[移动布局](../ui-layout/README.zh.md#use-this-package)会完全隐藏关闭的侧边栏，并以导航覆盖层打开它。
 
 ### 滚动条
 
@@ -51,7 +51,7 @@ kind: "package-reference"
 
 ### Slot 纪律
 
-声明感知的 `slots.inject()` 让替换包无论先于还是后于侧边栏激活都能生效。页脚承载 `sidebar.settings` 席位：侧边栏只渲染固定在底部的布局 slot，并共享其栏状态（`wide`）。`/client` 导出接口只包含插件主体（`apply`/`inject`）及约定类型；SidebarRoot、行组件与树派生仍由 slot 注册封装在包内。
+可感知声明的 `slots.inject()` 允许替换包在侧边栏之前或之后激活。底部渲染单一 `sidebar.settings` 席位以及根作用域的 `sidebar.settings.action` 列表插槽，并向两者共享栏状态（`wide`）。展开时操作位于 Settings 右侧，收起轨道中则位于其下方；每个功能拥有自己的交互，包括[移动访问控件](../ui-mobile-access/README.zh.md)。`/client` 导出仅包括插件体（`apply`/`inject`）和契约类型；SidebarRoot、行组件和树派生保留在插槽注册后的包内部。
 
 </details>
 

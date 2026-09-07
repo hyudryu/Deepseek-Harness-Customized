@@ -43,6 +43,11 @@
   grid-column: 2;
 }
 
+@media (max-width: 600px) {
+  .root { padding-inline: 12px; }
+  .headline { font-size: 22px; line-height: 28px; column-gap: 8px; }
+}
+
 .previewBadge {
   grid-row: 1;
   grid-column: 3;

@@ -11,7 +11,7 @@
  * resizes are driven through the ResizeObserver stub.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { act, cleanup, render } from '@testing-library/react'
+import { act, cleanup, fireEvent, render } from '@testing-library/react'
 import { useSyncExternalStore } from 'react'
 import { AppFrame } from '@deepseek-ai/dsh-client-ui-layout/src/client/AppFrame.tsx'
 import type { AppFrameProps } from '@deepseek-ai/dsh-client-ui-layout/src/client/AppFrame.tsx'
@@ -109,7 +109,7 @@ function mountFrame() {
 }
 
 function tracks(frame: HTMLElement): number[] {
-  const m = /^(\d+)px minmax\(0, 1fr\) (\d+)px$/.exec(frame.style.gridTemplateColumns)
+  const m = /^(\d+)px minmax\(0, 1fr\) (\d+)px 0px$/.exec(frame.style.gridTemplateColumns)
   if (m === null) throw new Error(`unexpected template: ${frame.style.gridTemplateColumns}`)
   return [Number(m[1]), Number(m[2])]
 }
@@ -153,6 +153,25 @@ afterEach(() => {
 })
 
 describe('AppFrame', () => {
+  it('opens the phone sidebar from its menu and dismisses the overlay backdrop', () => {
+    frameWidth = 390
+    const view = mountFrame()
+    fireEvent.click(view.getByRole('button', { name: 'sidebar.open' }))
+    expect(view.instance.getSnapshot().narrowExpanded).toBe(true)
+    expect(view.queryByRole('button', { name: 'sidebar.open' })).toBeNull()
+    fireEvent.click(view.getByRole('button', { name: 'sidebar.close' }))
+    expect(view.instance.getSnapshot().narrowExpanded).toBe(false)
+    expect(view.getByRole('button', { name: 'sidebar.open' })).toBeDefined()
+  })
+  it('keeps an explicitly opened phone browser visible when desktop columns would concede it', () => {
+    frameWidth = 390
+    const view = mountFrame()
+    act(() => { view.instance.actions.openBrowser() })
+    expect(view.frame.hasAttribute('data-browser-collapsed')).toBe(false)
+    expect(view.slotCalls.filter(call => call.key === 'browser.toggle').at(-1)?.props).toEqual({ expanded: true })
+    act(() => { view.instance.actions.closeBrowser() })
+    expect(view.frame.hasAttribute('data-browser-collapsed')).toBe(true)
+  })
   it('localizes the product title when the build does not supply one', () => {
     mountFrame()
     expect(document.title).toBe('DSH Local Build')

@@ -92,6 +92,11 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
         parameters: [],
       },
       {
+        signature: 'closeSidebar(): void',
+        description: 'Close the sidebar without reopening an already closed panel.',
+        parameters: [],
+      },
+      {
         signature: 'openDetails(): void',
         description: 'Open the details panel (no-op when already open).',
         parameters: [],

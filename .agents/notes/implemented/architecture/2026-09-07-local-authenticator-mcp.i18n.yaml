@@ -1,0 +1,6 @@
+# Bilingual-pair consistency record (docs/i18n/README.md): the git blob hash of each
+# side as of the last confirmed-consistent state. Both languages carry equal authority;
+# after editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write .agents/notes/implemented/architecture/2026-09-07-local-authenticator-mcp.md
+2026-09-07-local-authenticator-mcp.md: a5d0f63104fa05abfcf211d8c506c793cda535d7
+2026-09-07-local-authenticator-mcp.zh.md: d2f507d845ac6470d0f93506159aee098f1ea9c3

@@ -45,8 +45,10 @@ declare module '@deepseek-ai/dsh-client-ui-slots' {
      * The sidebar passes only its column state — it holds no settings state.
      */
     'sidebar.settings': { kind: 'single'; scope: 'root'; owner: SidebarSettingsOwnerProps }
+    /** Optional icon actions immediately beside the Settings trigger. */
+    'sidebar.settings.action': { kind: 'list'; scope: 'root'; owner: SidebarFooterActionOwnerProps }
     /**
-     * Optional actions beside Settings at the sidebar foot. Declared by this
+     * Optional actions above Settings at the sidebar foot. Declared by this
      * package's 'sidebar' entry; each action receives only the column state.
      */
     'sidebar.footer.action': { kind: 'list'; scope: 'root'; owner: SidebarFooterActionOwnerProps }
@@ -91,7 +93,7 @@ export interface SidebarSettingsOwnerProps {
   wide: boolean
 }
 
-/** Owner share of an action rendered beside Settings at the sidebar foot. */
+/** Owner share of sidebar footer actions and Settings-adjacent icons. */
 export interface SidebarFooterActionOwnerProps {
   /** Whether the sidebar renders wide content (false = 56px rail). */
   wide: boolean
@@ -126,6 +128,7 @@ export type SidebarRootComponentProps =
     | 'sidebar.workspaces'
     | 'sidebar.automations'
     | 'sidebar.settings'
+    | 'sidebar.settings.action'
     | 'sidebar.footer.action'
   >
   & SidebarRootInjected & PropsLocale<'sidebar'>

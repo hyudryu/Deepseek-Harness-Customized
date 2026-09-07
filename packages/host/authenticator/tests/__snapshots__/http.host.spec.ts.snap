@@ -1,0 +1,29 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`imports, returns codes through REST and official MCP, and deletes through the settings route 1`] = `
+[
+  {
+    "description": "List stored authenticator account ids, labels and issuers without provisioning secrets.",
+    "name": "authenticator_list_accounts",
+    "parameters": {
+      "properties": {},
+      "type": "object",
+    },
+  },
+  {
+    "description": "Get the current six-digit TOTP code and expiration for a stored authenticator account id.",
+    "name": "authenticator_get_code",
+    "parameters": {
+      "properties": {
+        "id": {
+          "type": "string",
+        },
+      },
+      "required": [
+        "id",
+      ],
+      "type": "object",
+    },
+  },
+]
+`;

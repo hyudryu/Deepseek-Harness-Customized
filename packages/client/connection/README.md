@@ -38,6 +38,8 @@ The cookie signing secret is the owner-scoped `client-connection/browser-session
 
 Before authentication, every request still passes `src/api-request-trust.ts`. Its `Host` must be loopback or match a `trustedHosts` entry: exact on `host:port`, any port on port-less entries, both sides WHATWG-normalized. An attached `Origin` must equal that Host and `sec-fetch-site: cross-site` is refused. Malformed configured authorities fail plugin load. These checks defend DNS rebinding and cross-site browser requests; they never establish identity. A failed Host/Origin check returns 403, while a trusted but unauthenticated request returns 401. `dsh web --host 0.0.0.0` remains unsupported. Decision records: [browser request trust](../../../.agents/notes/implemented/architecture/2026-07-28-api-browser-trust-boundary.md) and [browser token authentication](../../../.agents/notes/implemented/architecture/2026-08-24-browser-token-authentication.md).
 
+`registerListeningAuthority(authority, localAddress)` grants additional authority trust only to requests whose receiving socket matches that local interface. The returned disposer revokes the grant. It does not bypass cookie or Origin checks. [Mobile access](../../host/mobile-access/README.md) pairs the grant with the lifetime of its Tailscale listener.
+
 <a id="connection-generation"></a>
 ## Connection generation
 

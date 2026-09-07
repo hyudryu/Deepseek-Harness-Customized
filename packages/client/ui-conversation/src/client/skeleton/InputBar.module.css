@@ -358,3 +358,9 @@
   font-size: 12px;
   cursor: pointer;
 }
+
+@media (max-width: 600px) {
+  .root { padding-bottom: max(8px, env(safe-area-inset-bottom)); --dsh-composer-side-clearance: 8px; }
+  .card { font-size: max(16px, var(--dsh-content-font-size, 14px)); }
+  .primary { width: 44px; height: 44px; }
+}

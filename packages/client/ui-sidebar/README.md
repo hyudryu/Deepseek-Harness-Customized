@@ -33,7 +33,7 @@ The expanded brand row renders `sidebar.brand.mark` and `sidebar.brand.name` as 
 
 ### Collapse behavior
 
-During a live collapse, the expanded content fades out at its current width, the upper controls share one fade and leftward translation into the 56px rail, and the layout's column slide ends the motion. A page that starts collapsed renders the rail statically, and reduced-motion mode disables both transitions. The bottom-pinned `sidebar.settings` control shares the fade timing but has no horizontal translation.
+During a desktop collapse, the expanded content fades out at its current width, the upper controls share one fade and leftward translation into the 56px rail, and the layout's column slide ends the motion. A desktop page that starts collapsed renders the rail statically, and reduced-motion mode disables both transitions. The bottom-pinned `sidebar.settings` control shares the fade timing but has no horizontal translation. The [mobile layout](../ui-layout/README.md#use-this-package) hides the closed sidebar entirely and opens it as a navigation overlay.
 
 ### Scrollbars
 
@@ -51,7 +51,7 @@ The shell is pure composition: `SidebarRootComponentProps` composes the layout o
 
 ### Slot discipline
 
-Declaration-aware `slots.inject()` lets a replacing package activate before or after the sidebar. The foot is the `sidebar.settings` seat: the sidebar renders only the bottom-pinned layout slot and shares its column state (`wide`). The `/client` exports are the plugin body (`apply`/`inject`) plus the contract types only; SidebarRoot, the row components, and the tree derivation remain package-internal behind the slot registration.
+Declaration-aware `slots.inject()` lets a replacing package activate before or after the sidebar. The foot renders the single `sidebar.settings` seat and the root-scoped `sidebar.settings.action` list slot, sharing the column state (`wide`) with both. Action contributions appear to the right of Settings when expanded and below it in the collapsed rail; each feature owns its own interaction, including the [mobile access control](../ui-mobile-access/README.md). The `/client` exports are the plugin body (`apply`/`inject`) plus the contract types only; SidebarRoot, the row components, and the tree derivation remain package-internal behind the slot registration.
 
 </details>
 

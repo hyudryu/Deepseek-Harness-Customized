@@ -1772,17 +1772,18 @@ export const CLIENT_SLOT_API: readonly ClientSlotEntry[] = [
       'useSessionPendingInteraction: UseSessionPendingInteraction',
       'useWorkspaces: SnapshotSelectorHook<WorkspaceSnapshot>',
     ],
-    keyDomain: 'open: any string the owner dispatches (no compile-time key set), none are taken yet',
+    keyDomain: 'open: any string the owner dispatches (no compile-time key set), already taken: authenticator',
     hookContext: '',
     slotInject: '',
     declaredBy: 'an entry in \'settings.plugins.tab\' (client-ui-settings-plugins), so it exists while that entry is mounted',
     occupants: [
+      'client-ui-authenticator AuthenticatorCard key \'authenticator\'',
       'client-ui-settings-plugins BashCard',
       'client-ui-settings-plugins AgentLoopCard',
       'client-ui-settings-plugins SubagentModelSelectionCard',
       'client-ui-settings-plugins WebSearchCard',
     ],
-    replaceRisk: 'none',
+    replaceRisk: 'shadows-shipped-ui',
     example: 'return {\n  inject: [\'slots\'],\n  apply(ctx) {\n    ctx.slots.inject(\'settings.plugin.item\', () => ctx.slots.register(\n      { name: \'settings.plugin.item\', key: \'<one key the owner dispatches>\' },\n      () => React.createElement(\'div\', null, \'hello\'),\n    ))\n  },\n}',
     source: 'packages/client/ui-settings-plugins/src/client/slot-contract.ts:19',
   },
@@ -2069,8 +2070,8 @@ export const CLIENT_SLOT_API: readonly ClientSlotEntry[] = [
     key: 'sidebar.footer.action',
     kind: 'list',
     scope: 'root',
-    summary: 'Optional actions beside Settings at the sidebar foot.',
-    doc: 'Optional actions beside Settings at the sidebar foot. Declared by this\npackage\'s \'sidebar\' entry; each action receives only the column state.',
+    summary: 'Optional actions above Settings at the sidebar foot.',
+    doc: 'Optional actions above Settings at the sidebar foot. Declared by this\npackage\'s \'sidebar\' entry; each action receives only the column state.',
     registerOptions: [
       {
         name: 'id',
@@ -2092,7 +2093,7 @@ export const CLIENT_SLOT_API: readonly ClientSlotEntry[] = [
       },
     ],
     ownerProps: [
-      '/** Owner share of an action rendered beside Settings at the sidebar foot. */\nexport interface SidebarFooterActionOwnerProps {\n  /** Whether the sidebar renders wide content (false = 56px rail). */\n  wide: boolean\n}',
+      '/** Owner share of sidebar footer actions and Settings-adjacent icons. */\nexport interface SidebarFooterActionOwnerProps {\n  /** Whether the sidebar renders wide content (false = 56px rail). */\n  wide: boolean\n}',
     ],
     ownerPropsReferences: [],
     standardProps: [
@@ -2110,7 +2111,7 @@ export const CLIENT_SLOT_API: readonly ClientSlotEntry[] = [
     ],
     replaceRisk: 'none',
     example: 'return {\n  inject: [\'slots\'],\n  apply(ctx) {\n    ctx.slots.inject(\'sidebar.footer.action\', () => ctx.slots.register(\n      { name: \'sidebar.footer.action\', id: \'my-entry\', order: 100, label: \'My entry\' },\n      () => React.createElement(\'div\', null, \'hello\'),\n    ))\n  },\n}',
-    source: 'packages/client/ui-sidebar/src/client/contract/slots.ts:52',
+    source: 'packages/client/ui-sidebar/src/client/contract/slots.ts:54',
   },
   {
     key: 'sidebar.settings',
@@ -2139,6 +2140,53 @@ export const CLIENT_SLOT_API: readonly ClientSlotEntry[] = [
     replaceRisk: 'shadows-shipped-ui',
     example: 'return {\n  inject: [\'slots\'],\n  apply(ctx) {\n    ctx.slots.inject(\'sidebar.settings\', () => ctx.slots.register(\n      { name: \'sidebar.settings\' },\n      () => React.createElement(\'div\', null, \'hello\'),\n    ))\n  },\n}',
     source: 'packages/client/ui-sidebar/src/client/contract/slots.ts:47',
+  },
+  {
+    key: 'sidebar.settings.action',
+    kind: 'list',
+    scope: 'root',
+    summary: 'Optional icon actions immediately beside the Settings trigger.',
+    doc: 'Optional icon actions immediately beside the Settings trigger.',
+    registerOptions: [
+      {
+        name: 'id',
+        requirement: 'required',
+        type: 'string',
+        doc: 'Your cell key. Use an id of your own: a fresh id is added beside the shipped entries, while reusing a shipped id puts you in THAT cell and replaces it. Owners that filter by id address you by it.',
+      },
+      {
+        name: 'order',
+        requirement: 'optional',
+        type: 'number',
+        doc: 'Position among the entries, ascending (default 0).',
+      },
+      {
+        name: 'label',
+        requirement: 'optional',
+        type: 'string | (() => string)',
+        doc: 'Display text where the owner projects one (nav rows, tabs). A thunk is re-read on every projection, so localized text follows the active locale without re-registering.',
+      },
+    ],
+    ownerProps: [
+      '/** Owner share of sidebar footer actions and Settings-adjacent icons. */\nexport interface SidebarFooterActionOwnerProps {\n  /** Whether the sidebar renders wide content (false = 56px rail). */\n  wide: boolean\n}',
+    ],
+    ownerPropsReferences: [],
+    standardProps: [
+      'useWorkspaces: SnapshotSelectorHook<WorkspaceSnapshot>',
+      'useSessions: UseSessions',
+      'useSessionPendingInteraction: UseSessionPendingInteraction',
+      'useWorkspaces: SnapshotSelectorHook<WorkspaceSnapshot>',
+    ],
+    keyDomain: '',
+    hookContext: '',
+    slotInject: '',
+    declaredBy: 'an entry in \'sidebar\' (client-ui-sidebar), so it exists while that entry is mounted',
+    occupants: [
+      'client-ui-mobile-access MobileAccess id \'mobile-access\'',
+    ],
+    replaceRisk: 'none',
+    example: 'return {\n  inject: [\'slots\'],\n  apply(ctx) {\n    ctx.slots.inject(\'sidebar.settings.action\', () => ctx.slots.register(\n      { name: \'sidebar.settings.action\', id: \'my-entry\', order: 100, label: \'My entry\' },\n      () => React.createElement(\'div\', null, \'hello\'),\n    ))\n  },\n}',
+    source: 'packages/client/ui-sidebar/src/client/contract/slots.ts:49',
   },
   {
     key: 'sidebar.workspaces',

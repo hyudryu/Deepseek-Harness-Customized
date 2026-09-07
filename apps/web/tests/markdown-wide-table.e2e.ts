@@ -19,6 +19,8 @@
 // Session API and seeded cold; a stray stream would fail loud with
 // NO_ADAPTER.
 import { fileURLToPath } from 'node:url'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import type { Browser, Page } from 'playwright'
 import { chromium } from 'playwright'
 import { afterAll, beforeAll, describe, expect, it, onTestFailed } from 'vitest'
@@ -286,6 +288,65 @@ describe('web e2e: markdown tables fill the column, wide ones break out and scro
     await browser?.close()
     await scaffold?.close()
   })
+
+  it('opens a populated session with one touch and keeps the phone transcript full width', async () => {
+    const context = await browser.newContext({
+      viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true, locale: 'en-US',
+    })
+    const phone = await context.newPage()
+    const errors = watchConsole(phone)
+    onTestFailed(() => saveFailureShot(phone, 'web-e2e-phone-populated'))
+    try {
+      await phone.goto(scaffold.authenticatedUrl, { waitUntil: 'load' })
+      const menu = phone.getByRole('button', { name: 'Open sidebar', exact: true })
+      await menu.waitFor({ timeout: 30_000 })
+      await menu.tap()
+      await phone.locator('[role="treeitem"]').first().tap()
+      const row = phone.getByRole('treeitem').filter({ hasText: 'Markdown wide tables' })
+      await row.tap()
+      await phone.getByText(TAIL_MARKER, { exact: true }).waitFor({ timeout: 15_000 })
+      expect(await phone.getByText(TAIL_MARKER, { exact: true }).evaluate(el => Number.parseFloat(getComputedStyle(el).fontSize))).toBe(13)
+      await menu.waitFor()
+      // Reselecting the current row must also dismiss the sidebar.
+      await menu.tap()
+      await row.tap()
+      await menu.waitFor()
+      const phoneReadings: string[] = []
+      for (const width of [320, 375, 390, 430]) {
+        await phone.setViewportSize({ width, height: 844 })
+        await expect.poll(() => phone.locator('[class*="centerCol"]').evaluate(el => el.getBoundingClientRect().width)).toBe(width)
+        const geometry = await phone.evaluate(() => {
+          const center = document.querySelector<HTMLElement>('[class*="centerCol"]')!
+          const scroll = document.querySelector<HTMLElement>('[data-conversation-scroll]')!
+          window.scrollTo(1000, 0)
+          return {
+            documentOverflow: document.documentElement.scrollWidth - document.documentElement.clientWidth,
+            centerLeft: center.getBoundingClientRect().left,
+            transcriptOverflow: scroll.scrollWidth - scroll.clientWidth,
+            windowScroll: window.scrollX,
+          }
+        })
+        expect(geometry, `phone ${String(width)}`).toEqual({ documentOverflow: 0, centerLeft: 0, transcriptOverflow: 0, windowScroll: 0 })
+        phoneReadings.push(`${String(width)}px: full-width conversation, document overflow ${String(geometry.documentOverflow)}px, transcript overflow ${String(geometry.transcriptOverflow)}px`)
+        const wide = phone.locator('[class*="tableScroll"]', { hasText: WIDE_MARKER })
+        expect(await wide.evaluate(el => el.scrollWidth - el.clientWidth)).toBeGreaterThan(0)
+        await menu.tap()
+        expect(await phone.locator('[class*="centerCol"]').evaluate(el => el.getBoundingClientRect().width)).toBe(width)
+        await phone.getByRole('button', { name: 'Close sidebar', exact: true }).tap({ position: { x: width - 8, y: 100 } })
+        await menu.waitFor()
+      }
+      expect(phoneReadings.join('\n')).toMatchInlineSnapshot(`
+        "320px: full-width conversation, document overflow 0px, transcript overflow 0px
+        375px: full-width conversation, document overflow 0px, transcript overflow 0px
+        390px: full-width conversation, document overflow 0px, transcript overflow 0px
+        430px: full-width conversation, document overflow 0px, transcript overflow 0px"
+      `)
+      await phone.screenshot({ path: join(tmpdir(), 'dsh-mobile-populated-phone.png') })
+      expect(errors.pageErrors).toEqual([])
+    } finally {
+      await context.close()
+    }
+  }, 120_000)
 
   /**
    * Resize to a viewport and read the tables once layout settles (the frame

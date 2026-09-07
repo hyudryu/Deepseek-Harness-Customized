@@ -234,3 +234,15 @@
   clip: rect(0 0 0 0);
   white-space: nowrap;
 }
+
+@media (max-width: 600px) {
+  .panel { flex-direction: column; width: calc(100vw - 16px); max-width: calc(100vw - 16px); height: calc(100dvh - 16px); border-radius: 16px; }
+  .nav { width: 100%; padding: 16px 12px 0; gap: 12px; }
+  .navList { flex-direction: row; overflow-x: auto; padding-bottom: 8px; }
+  .navCell { flex: none; min-height: 44px; }
+  .content { min-height: 0; }
+  .options { padding: 0 16px 16px; }
+  .close { width: 44px; height: 44px; }
+  .header { height: 52px; padding-top: 4px; }
+  .options input, .options textarea, .options select { font-size: 16px; }
+}

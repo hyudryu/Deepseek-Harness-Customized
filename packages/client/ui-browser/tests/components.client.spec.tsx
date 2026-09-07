@@ -18,6 +18,10 @@ function snapshots() {
   let pending: ((result: IteratorResult<BrowserSnapshot>) => void) | undefined
   const queue: BrowserSnapshot[] = []
   let done = false
+  const dispose = vi.fn(async () => {
+    done = true
+    pending?.({ done: true, value: undefined })
+  })
   const stream: BrowserStreamHandle = {
     [Symbol.asyncIterator]: () => ({
       next: async () => {
@@ -27,13 +31,11 @@ function snapshots() {
         return new Promise((resolve) => { pending = resolve })
       },
     }),
-    dispose: vi.fn(async () => {
-      done = true
-      pending?.({ done: true, value: undefined })
-    }),
+    dispose,
   }
   return {
     stream,
+    dispose,
     push(value: BrowserSnapshot) {
       if (pending) {
         const resolve = pending
@@ -112,9 +114,9 @@ it('renders replacement frames and actions, stops the browser, and releases its 
     ]
   `)
   fireEvent.click(screen.getByRole('button', { name: en.stop }))
-  await waitFor(() => expect(fixture.props.stop).toHaveBeenCalledTimes(1))
+  await waitFor(() => { expect(fixture.props.stop).toHaveBeenCalledTimes(1) })
   fixture.unmount()
-  expect(fixture.stream.dispose).toHaveBeenCalledTimes(1)
+  expect(fixture.dispose).toHaveBeenCalledTimes(1)
 })
 
 it('rejects a failed remote open without revealing the browser panel', async () => {
@@ -151,7 +153,7 @@ it('keeps failed navigation visible and preserves the address for retry', async 
   const input = screen.getByPlaceholderText(en.openUrlPlaceholder)
   fireEvent.change(input, { target: { value: 'https://example.test/' } })
   fireEvent.click(screen.getByRole('button', { name: en.navigate }))
-  await waitFor(() => expect(screen.getByRole('alert').textContent).toContain('Navigation timed out'))
+  await waitFor(() => { expect(screen.getByRole('alert').textContent).toContain('Navigation timed out') })
   expect(navigate).toHaveBeenCalledWith('https://example.test/')
   expect((input as HTMLInputElement).value).toBe('https://example.test/')
   expect(fixture.props.start).not.toHaveBeenCalled()

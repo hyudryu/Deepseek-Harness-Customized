@@ -51,6 +51,7 @@ function mountShell({ collapsed = false, width = 300 }: { collapsed?: boolean; w
         if (key === 'sidebar.automations') {
           return <div data-testid="automations-seat" data-wide={owner.wide} />
         }
+        if (key === 'sidebar.settings.action') return <div data-testid="settings-action-seat" data-wide={owner.wide} />
         if (key === 'sidebar.settings') {
           settingsOwner = owner
           return <div data-testid="settings-seat" data-wide={owner.wide} />

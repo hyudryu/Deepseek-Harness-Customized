@@ -147,8 +147,10 @@
 
 /* Project leading slot: folder by default, expand arrow on row hover. */
 .projectRow .chevron { display: none; }
-.projectRow:hover .chevron { display: inline-flex; }
-.projectRow:hover .folder { display: none; }
+@media (hover: hover) and (pointer: fine) {
+  .projectRow:hover .chevron { display: inline-flex; }
+  .projectRow:hover .folder { display: none; }
+}
 
 /* Expand arrow (filled triangle): points right closed, rotates to point down open. */
 .arrow {
@@ -237,16 +239,26 @@
   gap: 12px;
 }
 
-.projectRow:hover .rowActions,
-.sessionRow:hover .rowActions,
 .projectRow.menuOpen .rowActions,
 .sessionRow.menuOpen .rowActions {
   display: inline-flex;
 }
 
-.sessionRow:hover .time,
 .sessionRow.menuOpen .time {
   display: none;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .projectRow:hover .rowActions,
+  .sessionRow:hover .rowActions { display: inline-flex; }
+  .sessionRow:hover .time { display: none; }
+}
+
+/* Touch rows keep their controls mounted so hover emulation cannot consume the activation tap. */
+@media (hover: none), (pointer: coarse) {
+  .projectRow, .sessionRow { min-height: 44px; touch-action: manipulation; }
+  .rowActions { display: inline-flex; margin-left: 6px; }
+  .rowActions .iconButton { width: 32px; height: 32px; }
 }
 
 /* An open row menu pins the hover affordances (figma: the row keeps its

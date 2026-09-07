@@ -52,20 +52,20 @@ export function BrowserPanel({ t, stream, start, navigate, stop }: BrowserPanelP
   const viewportRef = useRef<HTMLDivElement | null>(null)
 
   useEffect(() => {
-    let cancelled = false
+    const cancellation = new AbortController()
     const iterator = stream()
     void (async () => {
       try {
         for await (const snap of iterator) {
-          if (cancelled) break
+          if (cancellation.signal.aborted) break
           setSnapshot(snap)
         }
       } catch (cause) {
-        if (!cancelled) setError(cause instanceof Error ? cause.message : String(cause))
+        if (!cancellation.signal.aborted) setError(cause instanceof Error ? cause.message : String(cause))
       }
     })()
     return () => {
-      cancelled = true
+      cancellation.abort()
       void iterator.dispose().catch(() => {
         // The panel has unmounted; disposal failures have no remaining UI recipient.
       })
@@ -123,7 +123,7 @@ export function BrowserPanel({ t, stream, start, navigate, stop }: BrowserPanelP
         <input
           className={css.urlInput}
           value={urlInput}
-          onChange={e => setUrlInput(e.target.value)}
+          onChange={(e) => { setUrlInput(e.target.value) }}
           onKeyDown={onKeyDown}
           placeholder={t('openUrlPlaceholder')}
         />
@@ -139,7 +139,7 @@ export function BrowserPanel({ t, stream, start, navigate, stop }: BrowserPanelP
           ref={viewportRef}
           className={css.viewport}
           onPointerMove={onPointerMove}
-          onPointerLeave={() => setCursor(null)}
+          onPointerLeave={() => { setCursor(null) }}
         >
           {snapshot.frame ? (
             <img className={css.frame} src={snapshot.frame} alt={snapshot.title || snapshot.url} />
@@ -161,7 +161,7 @@ export function BrowserPanel({ t, stream, start, navigate, stop }: BrowserPanelP
       )}
 
       <div className={css.actionsHeader}>
-        <button type="button" className={css.linkButton} onClick={() => setShowActions(v => !v)}>
+        <button type="button" className={css.linkButton} onClick={() => { setShowActions(v => !v) }}>
           {showActions ? t('hideActions') : t('showActions')}
         </button>
         <span className={css.actionCount}>{snapshot.actions.length}</span>
