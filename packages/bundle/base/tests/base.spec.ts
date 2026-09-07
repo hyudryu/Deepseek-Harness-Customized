@@ -102,7 +102,7 @@ describe('session MCP profile startup', () => {
     ['sdk-app', 'sdkAppStartup', 'sdk-jsonrpc-server'],
     ['acp-app', 'acpAppStartup', 'acp'],
   ])('gates %s MCP and its application on accepted startup', (bundle, startup, app) => {
-    const rows = patches(bundle!)
+    const rows = patches(bundle)
     expect(rows.find(row => row.id === 'session-mcp')?.inject).toContain(startup)
     expect(rows.flatMap(row => row.insert ?? []).find(row => row.id === app)?.inject).toContain('sessionMcp')
   })
