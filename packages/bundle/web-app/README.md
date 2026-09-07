@@ -27,6 +27,8 @@ Run `dsh --profile web` and the interface opens in your default browser, ready f
 
 Start the GUI, open your browser, and start talking to the agent. The flags fine-tune the invocation.
 
+Session browser controls are optional. The `dsh-browser-control` bundle mounts its provider, Remote controller, and client controls together; the standard Web profile has no browser controls until that bundle is enabled. This bundle keeps the controller and UI packages installed so optional profile layers can resolve them.
+
 ### Starting the Web GUI
 
 ```sh

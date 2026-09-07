@@ -116,31 +116,33 @@ Live browser facts and control provided by the browser-control plugin.
 /**
  * Read the current replaceable snapshot for one session.
  * @param sessionId - session whose browser is observed.
- * @returns the current browser snapshot, including closed state for an unknown session.
+ * @returns the current browser snapshot, including closed state before its browser is opened.
  */
-snapshot(sessionId: string): BrowserSnapshot
+snapshot(sessionId: SessionId): BrowserSnapshot
 
 /**
- * Be notified on every new snapshot for one session.
+ * Observe replacement snapshots across browser close and reopen transitions.
  * @param sessionId - session whose snapshots are observed.
  * @param listener - snapshot callback.
- * @returns unsubscribe function; a no-op when the session is unknown.
+ * @returns unsubscribe function; the subscription stays active when no browser is open.
  */
-subscribe(sessionId: string, listener: (snapshot: BrowserSnapshot) => void): () => void
+subscribe(sessionId: SessionId, listener: (snapshot: BrowserSnapshot) => void): () => void
 
 /**
  * Ensure an open context and page for one session, navigating to the optional url.
  * @param sessionId - session whose browser is opened.
  * @param url - optional navigation destination.
  */
-open(sessionId: string, url?: string): Promise<void>
+open(sessionId: SessionId, url?: string): Promise<void>
 
 /**
  * Close one session's browser context, if any.
  * @param sessionId - session whose browser is closed.
  */
-close(sessionId: string): Promise<void>
+close(sessionId: SessionId): Promise<void>
 ```
+
+Types: [SessionId](core.zh.md)
 
 Source: [`packages/api/browser-controller/src/index.ts`](../../packages/api/browser-controller/src/index.ts)
 <!-- END GENERATED cordis-surface -->

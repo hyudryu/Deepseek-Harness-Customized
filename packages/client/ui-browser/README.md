@@ -34,7 +34,7 @@ The Web application composition mounts this UI with the [browser controller](../
 <details>
 <summary>Implementation internals — click to expand</summary>
 
-The [client plugin](src/client/index.ts) registers the `browser.toggle` and `browser` slots owned by [ui-layout](../ui-layout/README.md). Remote mutations check their result before updating viewing state. A session-scoped Remote stream delivers replacement snapshots to the panel and is disposed when the session view unmounts.
+The [client plugin](src/client/index.ts) registers the `browser.toggle` and `browser` slots owned by [ui-layout](../ui-layout/README.md). Remote mutations check their result before updating viewing state. A [React-free observable](src/client/browser-state.ts) owns each Session stream; the renderer binds it to the panel's injected `useBrowser` hook. The last subscriber releases the stream and cached frames, and plugin disposal awaits outstanding cleanup. The panel keeps only viewing state and positions the agent cursor inside the contained image, including any letterbox offsets.
 
 </details>
 

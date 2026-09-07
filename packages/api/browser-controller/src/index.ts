@@ -1,5 +1,6 @@
 /** Browser-control Remote owner: live per-session browser state, action log, and screenshot frames. */
 
+import type { SessionId } from '@deepseek-ai/dsh-session'
 import { Context } from '@deepseek-ai/cordis'
 import { Remote, TypertRemoteService } from '@deepseek-ai/dsh-typert-protocol'
 import type {
@@ -18,27 +19,27 @@ export interface BrowserControl {
   /**
    * Read the current replaceable snapshot for one session.
    * @param sessionId - session whose browser is observed.
-   * @returns the current browser snapshot, including closed state for an unknown session.
+   * @returns the current browser snapshot, including closed state before its browser is opened.
    */
-  snapshot(sessionId: string): BrowserSnapshot
+  snapshot(sessionId: SessionId): BrowserSnapshot
   /**
-   * Be notified on every new snapshot for one session.
+   * Observe replacement snapshots across browser close and reopen transitions.
    * @param sessionId - session whose snapshots are observed.
    * @param listener - snapshot callback.
-   * @returns unsubscribe function; a no-op when the session is unknown.
+   * @returns unsubscribe function; the subscription stays active when no browser is open.
    */
-  subscribe(sessionId: string, listener: (snapshot: BrowserSnapshot) => void): () => void
+  subscribe(sessionId: SessionId, listener: (snapshot: BrowserSnapshot) => void): () => void
   /**
    * Ensure an open context and page for one session, navigating to the optional url.
    * @param sessionId - session whose browser is opened.
    * @param url - optional navigation destination.
    */
-  open(sessionId: string, url?: string): Promise<void>
+  open(sessionId: SessionId, url?: string): Promise<void>
   /**
    * Close one session's browser context, if any.
    * @param sessionId - session whose browser is closed.
    */
-  close(sessionId: string): Promise<void>
+  close(sessionId: SessionId): Promise<void>
 }
 
 declare module '@deepseek-ai/cordis' {
@@ -50,18 +51,23 @@ declare module '@deepseek-ai/cordis' {
 
 /** Host service backing the generated `ctx.remote.browser` namespace. */
 export class BrowserController extends TypertRemoteService {
-  static inject = ['typert', 'browserControl']
+  static inject = ['typert', 'browserControl', 'sessions']
 
   /** @param ctx - Host context carrying the injected BrowserControl service. */
   constructor(ctx: Context) {
     super(ctx, 'browserController', { namespace: 'browser' })
+    ctx.on('session/disposed', (session) => {
+      void ctx.browserControl.close(session.id).catch((error: unknown) => {
+        ctx.logger.warn(`session "${session.id}": browser cleanup failed: ${String(error)}`)
+      })
+    })
   }
 
   /**
    * Stream one session's complete browser state followed by replacement frames.
    * @param request - session whose browser is followed.
    * @param signal - generation cancellation owned by the Remote stream carrier.
-   * @returns one opening snapshot followed by live replacement snapshots.
+   * @returns one opening snapshot followed by the latest pending replacement; slow readers skip superseded frames.
    */
   @Remote({ mode: 'stream' })
   watch(request: BrowserWatchRequest, signal: AbortSignal): AsyncIterable<BrowserSnapshot> {
@@ -69,13 +75,21 @@ export class BrowserController extends TypertRemoteService {
   }
 
   /**
-   * Open a browser for one session, optionally navigating to a url.
+   * Open a browser for an existing live session, optionally navigating to a url.
    * @param request - session and optional initial url.
    * @returns an open acknowledgement.
    */
   @Remote('open')
   async open(request: BrowserOpenRequest): Promise<BrowserOpenValue> {
-    await this.browserControl.open(request.sessionId, request.url)
+    const session = this.ctx.sessions.get(request.sessionId)
+    if (session === undefined) {
+      throw new Error(`session "${request.sessionId}" not found`)
+    }
+    await this.ctx.browserControl.open(request.sessionId, request.url)
+    if (this.ctx.sessions.get(request.sessionId) !== session) {
+      await this.ctx.browserControl.close(request.sessionId)
+      throw new Error(`session "${request.sessionId}" was disposed while opening its browser`)
+    }
     return { ok: true }
   }
 
@@ -86,20 +100,16 @@ export class BrowserController extends TypertRemoteService {
    */
   @Remote('close')
   async close(request: BrowserCloseRequest): Promise<BrowserCloseValue> {
-    await this.browserControl.close(request.sessionId)
+    await this.ctx.browserControl.close(request.sessionId)
     return { ok: true }
   }
 
-  private get browserControl(): BrowserControl {
-    return this.ctx.get('browserControl') as BrowserControl
-  }
-
-  private async *follow(sessionId: string, signal: AbortSignal): AsyncIterable<BrowserSnapshot> {
+  private async *follow(sessionId: SessionId, signal: AbortSignal): AsyncIterable<BrowserSnapshot> {
     signal.throwIfAborted()
-    const queue: BrowserSnapshot[] = []
+    let latest: BrowserSnapshot | undefined
     let wake: (() => void) | undefined
-    const unsubscribe = this.browserControl.subscribe(sessionId, (snapshot) => {
-      queue.push(snapshot)
+    const unsubscribe = this.ctx.browserControl.subscribe(sessionId, (snapshot) => {
+      latest = snapshot
       const pending = wake
       wake = undefined
       pending?.()
@@ -107,11 +117,12 @@ export class BrowserController extends TypertRemoteService {
     const onAbort = (): void => { wake?.() }
     signal.addEventListener('abort', onAbort, { once: true })
     try {
-      yield this.browserControl.snapshot(sessionId)
+      yield this.ctx.browserControl.snapshot(sessionId)
       while (!signal.aborted) {
-        if (queue.length > 0) {
-          const snapshot = queue.shift()
-          if (snapshot !== undefined) yield snapshot
+        if (latest !== undefined) {
+          const snapshot = latest
+          latest = undefined
+          yield snapshot
           continue
         }
         await new Promise<void>((resolve) => {

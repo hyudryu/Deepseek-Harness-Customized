@@ -29,6 +29,8 @@ Mount this plugin at the root slot; it then renders the app frame around whateve
 
 The upper-right `browser.toggle` slot renders the selected session's browser icon. The right-side browser panel stays mounted while hidden; collapsing it changes viewing geometry without closing its browser context.
 
+The details resize handle follows the details column's left edge, including when the browser occupies the rightmost column.
+
 ### Theme presentation
 
 The presenter consumes resolved theme snapshots and projects them onto the document: `html { color-scheme }` for native UA chrome, `body[data-ds-dark-theme]` from the active color scheme, the theme's alias tokens and `--dsh-content-font-size` as inline variables on body, and one owned `<meta name="theme-color">` whose content follows the computed body background. Disposing the presenter removes its metadata node with its other global writes.

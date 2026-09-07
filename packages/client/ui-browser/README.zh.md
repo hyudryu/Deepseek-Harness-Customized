@@ -34,7 +34,7 @@ Web 应用组合同时挂载此 UI 和[浏览器控制器](../../api/browser-con
 <details>
 <summary>实现细节——点击展开</summary>
 
-[客户端插件](src/client/index.ts) 注册 [ui-layout](../ui-layout/README.zh.md) 拥有的 `browser.toggle` 和 `browser` 槽位。Remote 修改操作在更新查看状态前检查结果。会话级 Remote 流向面板提供替换快照，并在会话视图卸载时释放。
+[客户端插件](src/client/index.ts) 注册 [ui-layout](../ui-layout/README.zh.md) 拥有的 `browser.toggle` 和 `browser` 槽位。Remote 修改操作在更新查看状态前检查结果。[不依赖 React 的可观察对象](src/client/browser-state.ts) 管理每个 Session 流，渲染器将它绑定到面板注入的 `useBrowser` hook。最后一个订阅方退出时释放流和缓存帧，插件释放时等待所有清理完成。面板只保留查看状态，并将 agent 光标定位到等比容纳的图像内，包括留黑区域带来的偏移。
 
 </details>
 

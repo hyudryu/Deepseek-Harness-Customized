@@ -26,6 +26,10 @@ function positiveInt(value, fallback, name) {
 }
 
 function normalizeConfig(input = {}) {
+  const frameQuality = input.frameQuality === undefined ? DEFAULTS.frameQuality : input.frameQuality
+  if (!Number.isInteger(frameQuality) || frameQuality < 0 || frameQuality > 100) {
+    throw new Error('frameQuality must be an integer between 0 and 100')
+  }
   return {
     headless: input.headless ?? DEFAULTS.headless,
     defaultTimeoutMs: positiveInt(input.defaultTimeoutMs, DEFAULTS.defaultTimeoutMs, 'defaultTimeoutMs'),
@@ -36,7 +40,7 @@ function normalizeConfig(input = {}) {
       ? input.artifactDir
       : DEFAULTS.artifactDir,
     maxActions: positiveInt(input.maxActions, DEFAULTS.maxActions, 'maxActions'),
-    frameQuality: positiveInt(input.frameQuality, DEFAULTS.frameQuality, 'frameQuality'),
+    frameQuality,
   }
 }
 
@@ -323,9 +327,9 @@ export function apply(ctx, rawConfig = {}) {
     await pendingStates.get(key)
     const state = states.get(key)
     if (!state) return
-    states.delete(key)
+    await state.context.close()
+    if (states.get(key) === state) states.delete(key)
     state.open = false
-    await state.context.close().catch(() => {})
   }
 
   ctx.effect(() => {
@@ -334,7 +338,7 @@ export function apply(ctx, rawConfig = {}) {
       await Promise.allSettled([...pendingStates.values()])
       await Promise.all([...states.keys()].map(closeState))
       const instance = browserPromise ? await browserPromise.catch(() => undefined) : undefined
-      if (instance) await instance.close().catch(() => {})
+      if (instance) await instance.close()
     }
   })
 
