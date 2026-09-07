@@ -1,0 +1,60 @@
+- dialog "Settings":
+  - navigation:
+    - text: Settings
+    - button "General":
+      - img
+      - text: General
+    - button "Models":
+      - img
+      - text: Models
+    - button "Plugins":
+      - img
+      - text: Plugins
+    - button "Agent presets":
+      - img
+      - text: Agent presets
+    - button "Usage":
+      - img
+      - text: Usage
+  - button "Open configuration file"
+  - button "Close":
+    - img
+    - text: Close
+  - banner:
+    - heading "Usage stats" [level=2]
+    - paragraph: Token activity across your saved sessions
+    - button "Refresh"
+  - term: Total tokens
+  - definition: 1K
+  - term: Peak daily tokens
+  - definition: 1K
+  - term: Longest session
+  - definition: 0 h 0 m
+  - term: Current streak
+  - definition: 1 d
+  - term: Longest streak
+  - definition: 1 d
+  - region "Token activity":
+    - heading "Token activity" [level=3]
+    - button "Daily" [pressed]
+    - button "Weekly"
+    - button "Cumulative"
+    - text: Sep Oct Nov Dec Jan Feb Mar Apr May Jul Aug Sep Less More
+  - heading "Time range" [level=3]
+  - button "Last 7 days" [pressed]
+  - button "Last 30 days"
+  - region "Daily token trend":
+    - heading "Daily token trend" [level=3]
+    - text: Usage model · fixture
+    - img "Daily token trend": 0 500 1K Sep 1 Sep 4 Sep 7
+    - group: Daily
+  - region "Model usage":
+    - heading "Model usage" [level=3]
+    - img "Model usage"
+    - strong: 1K
+    - text: tokens
+    - list:
+      - listitem:
+        - strong: Usage model · fixture
+        - text: 1K tokens 100%
+  - paragraph: Dates use UTC. Tokens include input and output.

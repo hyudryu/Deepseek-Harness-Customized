@@ -2710,6 +2710,20 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
     ],
   },
   {
+    key: 'usageController',
+    summary: 'Host owner of the historical `usage` Remote namespace.',
+    description: 'Host owner of the historical `usage` Remote namespace.',
+    methods: [
+      {
+        signature: '@Remote async summary(): Promise<UsageSummary>',
+        description: 'Read persisted sessions sequentially without activating agents or taking write ownership.',
+        parameters: [],
+        returns: 'UTC daily model totals and all-time summary statistics.',
+        throws: ['RemoteError when Session persistence is unavailable.'],
+      },
+    ],
+  },
+  {
     key: 'userQuestions',
     summary: '`ctx.userQuestions`: validation plus the scoped answerer waterfall.',
     description: '`ctx.userQuestions`: validation plus the scoped answerer waterfall.',
@@ -6108,6 +6122,14 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   {
     name: 'UpdateTeamTaskRequest',
     declaration: 'export interface UpdateTeamTaskRequest {\n    readonly taskId: TeamTaskId;\n    readonly expectedRevision: number;\n    readonly action: TeamTaskAction;\n    readonly subject?: string;\n    readonly description?: string;\n    readonly blockedBy?: readonly TeamTaskId[];\n    readonly writeScopes?: readonly string[];\n    readonly owner?: string;\n}',
+  },
+  {
+    name: 'UsageDay',
+    declaration: 'export interface UsageDay {\n    readonly date: string;\n    readonly provider: string;\n    readonly model: string;\n    readonly tokens: number;\n}',
+  },
+  {
+    name: 'UsageSummary',
+    declaration: 'export interface UsageSummary {\n    readonly days: readonly UsageDay[];\n    readonly totalTokens: number;\n    readonly peakDailyTokens: number;\n    readonly longestSessionMs: number;\n    readonly sessions: number;\n    readonly missingUsageAttempts: number;\n}',
   },
   {
     name: 'UserMessage',
