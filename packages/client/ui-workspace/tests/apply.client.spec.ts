@@ -196,7 +196,8 @@ describe('ui-workspace apply', () => {
     } as never, () => null)
 
     const items = browser.hooks.workspaceMenuItems.getSnapshot()
-    expect(items).toEqual([{ id: 'plugins', label: 'Plugin Action', onSelect: expect.any(Function) }])
+    const selectMatcher: unknown = expect.any(Function)
+    expect(items).toEqual([{ id: 'plugins', label: 'Plugin Action', onSelect: selectMatcher }])
     items[0]!.onSelect('ws' as never)
     expect(onSelect).toHaveBeenCalledWith('ws')
 

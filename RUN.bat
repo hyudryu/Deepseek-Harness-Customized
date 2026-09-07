@@ -23,6 +23,9 @@ if errorlevel 1 (
   exit /b 9009
 )
 
+echo Checking web port %PORT% before install and build ...
+powershell -NoProfile -Command "try { $owners = @(Get-NetTCPConnection -State Listen -ErrorAction Stop | Where-Object LocalPort -eq ([int]$env:PORT) | Select-Object -ExpandProperty OwningProcess -Unique); if ($owners.Count -gt 0) { throw ('Port is already occupied by pid(s) ' + ($owners -join ', ') + '. If this is an existing dsh session, press Ctrl+C in its console and wait for it to exit, then rerun RUN.bat. Otherwise stop the owning application yourself.') } } catch { $message = 'Cannot start dsh web on port ' + $env:PORT + ': ' + $_.Exception.Message; Write-Host $message; Add-Content -LiteralPath $env:LOG -Value $message -Encoding UTF8; exit 1 }"
+if errorlevel 1 goto :fail
 echo [1/3] pnpm install ...
 powershell -NoProfile -Command "& $env:ComSpec /d /c 'pnpm install' 2>&1 | ForEach-Object { $line = $_.ToString(); Write-Host $line; Add-Content -LiteralPath $env:LOG -Value $line -Encoding UTF8 }; exit $LASTEXITCODE"
 if errorlevel 1 goto :fail

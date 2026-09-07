@@ -489,8 +489,8 @@ const OUTPUT_SCHEMA = {
     overall: { type: 'string' },
     body: { type: 'string' },
     hasQaSection: { type: 'boolean' },
-    qaSectionHeading: { type: ['string', 'null'] },
-    qaSectionContent: { type: ['string', 'null'] },
+    qaSectionHeading: { oneOf: [{ type: 'string' }, { type: 'null' }] },
+    qaSectionContent: { oneOf: [{ type: 'string' }, { type: 'null' }] },
     checks: {
       type: 'array',
       items: {
