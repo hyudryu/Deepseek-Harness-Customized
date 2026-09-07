@@ -1,6 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { apply } from '../index.js'
+import { assertSupportedJsonSchema } from '../../../packages/core/tools/src/json-schema.ts'
 
 function registeredOutputSchema() {
   let registration
@@ -41,4 +42,8 @@ test('QA output schema uses an object-level required array', () => {
   for (const property of schema.required) {
     assert.equal(schema.properties[property].required, undefined)
   }
+})
+
+test('QA output schema is accepted by the harness tool registry', () => {
+  assert.doesNotThrow(() => assertSupportedJsonSchema(registeredOutputSchema()))
 })
