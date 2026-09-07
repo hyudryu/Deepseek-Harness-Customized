@@ -30,6 +30,13 @@ describe('repository link policy', () => {
     ])
   })
 
+  it('excludes legacy translations from the English source policy', () => {
+    const unavailableRepository = ['deepseek-ai', 'deepseek-harness-sdk'].join('/')
+    expect(findUnavailableRepositoryReferences('docs/legacy.zh.md', unavailableRepository)).toEqual([])
+    expect(findUnavailableRepositoryReferences('docs/current.md', unavailableRepository))
+      .toEqual([{ file: 'docs/current.md', line: 1 }])
+  })
+
   it('preserves frozen archived Agent Notes', () => {
     const unavailableRepository = ['deepseek-ai', 'deepseek-harness-sdk'].join('/')
 

@@ -1,8 +1,8 @@
-# Metadata, links, and bilingual pairs
+# Metadata, links, and optional translations
 
 ## Summary
 
-README metadata is a retrieval and template-selection interface, not a miniature report or advertisement. The `kind` field selects exactly one README template that exists in this skill and maps to the document standard; the frontmatter carries no field that a filename convention or an executed gate already owns. Bilingual pages keep equal authority, one-to-one structure, and exact physical line alignment. The `*.i18n.yaml` sidecar records the last-confirmed pair and supports automatic merges. Link syntax must render correctly on GitHub and the documentation site, so repository links stay renderer-valid relative URLs.
+README metadata is a retrieval and template-selection interface, not a miniature report or advertisement. The `kind` field selects exactly one README template that exists in this skill and maps to the document standard; the frontmatter carries no field that a filename convention or an executed gate already owns. English is authoritative in this custom fork; translations and sidecars are optional legacy material. Link syntax must render correctly on GitHub and the documentation site, so repository links stay renderer-valid relative URLs.
 
 ## Table of Contents
 
@@ -25,7 +25,7 @@ kind: "package-reference"
 ---
 ```
 
-`description` and `kind` are required for package README pairs. The page title and package manifest already own the name, while the document job and its reader path express the audience; duplicating either in frontmatter adds no retrieval value. The counterpart path comes from the sibling filename (`README.zh.md`), and the sidecar owns pair state, so README-local `i18n` metadata is redundant. Do not add `tags` until a repository-owned taxonomy and search consumer justify them beyond description and full-text search. Keep keys lowercase and hyphenated unless an existing owner defines another spelling, and do not copy volatile code inventories into frontmatter.
+`description` and `kind` are required for package READMEs. The page title and package manifest already own the name, while the document job and its reader path express the audience; duplicating either in frontmatter adds no retrieval value. README-local `i18n` metadata is unnecessary for English documentation. Do not add `tags` until a repository-owned taxonomy and search consumer justify them beyond description and full-text search. Keep keys lowercase and hyphenated unless an existing owner defines another spelling, and do not copy volatile code inventories into frontmatter.
 
 ## The kind system
 
@@ -61,13 +61,11 @@ The desired internal-link model names a target from the repository root, but a l
 
 ## Bilingual line alignment
 
-Keep English and Simplified Chinese equally authoritative. Match frontmatter key order, headings, blank lines, paragraphs, list items, tables, code fences, link targets, and total physical line count one to one. The English side points every relative link at the `.md` target; the Chinese side points it at the `.zh.md` sibling when that counterpart exists and falls back to the `.md` target otherwise — the pairing gate compares `.md` and `.zh.md` targets as the same document. Translate prose naturally within its corresponding line; do not hard-wrap either language. Keep code blocks byte-identical and reposition first-use terminology annotations without changing line structure.
-
-Line equality is a structural check, not proof of faithful meaning. Review still owns completeness, terminology, natural language, and whether each line expresses the same proposition.
+English documentation does not require Chinese counterparts or matching structure, wording, links, or physical line counts. Follow the [fork language policy](../../../../docs/i18n/README.md).
 
 ## Bilingual consistency records
 
-Keep the `*.i18n.yaml` sidecar for every bilingual pair. `verify-translation-pairing` consumes its Git blob hashes for last-confirmed-text recovery, verifies structure and exact line alignment, supports automatic merging, records generated regions, and seals archives. Re-record it with `pnpm run verify-translation-pairing --write <pair>` after either language changes. Do not copy content hashes into README frontmatter: independent edits would change the same header line and turn otherwise mergeable prose into an owner-file conflict.
+Existing `*.i18n.yaml` files are legacy records. English edits and new documents do not require their creation, refresh, or translation review.
 
 ## Dev Note
 

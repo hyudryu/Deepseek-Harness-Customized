@@ -93,6 +93,9 @@
 
     # Configuration-surface reads and writes over Typert Remote. Each method
     # reports an actionable error when its settings-domain provider is absent.
+    - id: usage-controller
+      name: '@deepseek-ai/dsh-api-usage-controller'
+
     - id: settings-controller
       name: '@deepseek-ai/dsh-api-settings-controller'
 
@@ -199,6 +202,9 @@
 
     - id: ui-settings
       name: '@deepseek-ai/dsh-client-ui-settings'
+
+    - id: ui-settings-usage
+      name: '@deepseek-ai/dsh-client-ui-settings-usage'
 
     - id: ui-settings-general
       name: '@deepseek-ai/dsh-client-ui-settings-general'

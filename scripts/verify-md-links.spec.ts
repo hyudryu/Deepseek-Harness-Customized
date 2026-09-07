@@ -9,6 +9,7 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
+import { isMaintainedMarkdownPath, uniqueRepoFiles } from './repo-files.ts'
 import { anchorCache, documentAnchors, findViolations, githubSlug } from './verify-md-links.ts'
 
 const roots: string[] = []
@@ -104,5 +105,19 @@ describe('findViolations fragments', () => {
   it('still rejects a missing target file, reported as target not anchor', () => {
     const root = layout({ 'a.md': '# A\n\n[ghost](missing.md#anything)\n' })
     expect(violationsIn(root, 'a.md')).toEqual([{ url: 'missing.md#anything', reason: 'target' }])
+  })
+})
+
+describe('English documentation discovery', () => {
+  it('ignores stale translated links while rejecting the same link in English', () => {
+    const root = layout({
+      'docs/current.md': '[Missing](removed.md)\n',
+      'docs/legacy.zh.md': '[Missing](removed.md)\n',
+    })
+    const files = uniqueRepoFiles(root, ['docs/**/*.md'], path => !isMaintainedMarkdownPath(path))
+    const violations = files.flatMap(file => findViolations(file.abs, anchorCache(), root))
+    expect(violations.map(violation => ({ ...violation, file: violation.file.replaceAll('\\', '/') }))).toEqual([
+      { file: 'docs/current.md', line: 1, url: 'removed.md', reason: 'target' },
+    ])
   })
 })

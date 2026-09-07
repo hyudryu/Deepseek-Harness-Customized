@@ -4,6 +4,8 @@ Status: implemented
 
 English | [中文](2026-07-23-translation-prompt-v4-contract.zh.md)
 
+The [English-only fork decision](2026-09-07-english-only-fork-documentation.md) supersedes this record's bilingual maintenance requirements. Its translation mechanics and original rationale remain historical context; they impose no Chinese document, sidecar, or translation-update obligation on this fork.
+
 ## Problem
 
 Automated counterpart generation needs a stable prompt that reproduces the register and corrections established by human-reviewed translations. Injecting a general-purpose instruction document changes that calibrated model input whenever human or agent guidance changes, while an unframed response cannot carry a draft, its self-review, and the corrected document separately. Plain XML-like section tags also collide with valid Markdown that documents those same tags.
