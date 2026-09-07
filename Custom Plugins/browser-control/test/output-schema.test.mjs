@@ -8,6 +8,7 @@ function registeredOutputSchema() {
     effect(callback) {
       callback()
     },
+    provide() {},
     skills: {
       register() {},
     },

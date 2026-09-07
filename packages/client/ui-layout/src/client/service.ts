@@ -27,6 +27,10 @@ export interface ILayout {
   openDetails(): void
   /** Close the details panel. */
   closeDetails(): void
+  /** Open the browser panel (no-op when already open). */
+  openBrowser(): void
+  /** Close the browser panel. */
+  closeBrowser(): void
 }
 
 /** Cross-plugin panel-action face (ctx.layout). */
@@ -57,6 +61,16 @@ export class LayoutController implements ILayout {
   /** Close the details panel. */
   closeDetails(): void {
     this.#require().closeDetails()
+  }
+
+  /** Open the browser panel (no-op when already open). */
+  openBrowser(): void {
+    this.#require().openBrowser()
+  }
+
+  /** Close the browser panel. */
+  closeBrowser(): void {
+    this.#require().closeBrowser()
   }
 
   #require(): PanelActions {

@@ -93,3 +93,54 @@ Use the four detailed references according to the extension being added:
 - [API Gateway](../api-gateway.md) for Host methods, generated Remote contributions, streams, and forwarded events.
 - [Web Client Slots](slots.md) for components, hooks, stores, injection, and placement.
 - [Conversation](conversation.md) for durable event correlation, target snapshots, and Chat or Trajectory view contributions.
+
+## Session browser viewing
+
+The [browser controller](../../packages/api/browser-controller/README.md) forwards `ctx.browserControl` operations and a `BrowserSnapshot` stream to the [browser panel](../../packages/client/ui-browser/README.md). Each snapshot replaces the open state, current page URL and title, action history, and optional screenshot frame. These live browser facts are separate from durable Session history; hiding the panel does not close the session’s browser.
+
+<!-- BEGIN GENERATED cordis-surface (gen-cordis-catalog.ts) — do not edit between markers -->
+
+<a id="cordis-surface"></a>
+
+## Cordis API
+
+Generated from source by `scripts/gen-cordis-catalog.ts` (verified fresh by `pnpm run verify-cordis-catalog` in doc-sync; regenerate with `pnpm run gen-cordis-catalog`) — the language sides differ only in locale-specific paired document paths. Signature blocks use a `ts cordis-catalog` fence and keep the original source JSDoc; dispatch modes are defined in the [primer](../cordis-primer.md#dispatch-modes), and the framework-inherited `ctx` API lives in [cordis-api/inherited.md](../cordis-api/inherited.md).
+
+<a id="ctxbrowsercontrol--browsercontrol"></a>
+
+### `ctx.browserControl` — `BrowserControl`
+
+Live browser facts and control provided by the browser-control plugin.
+
+```ts cordis-catalog
+/**
+ * Read the current replaceable snapshot for one session.
+ * @param sessionId - session whose browser is observed.
+ * @returns the current browser snapshot, including closed state for an unknown session.
+ */
+snapshot(sessionId: string): BrowserSnapshot
+
+/**
+ * Be notified on every new snapshot for one session.
+ * @param sessionId - session whose snapshots are observed.
+ * @param listener - snapshot callback.
+ * @returns unsubscribe function; a no-op when the session is unknown.
+ */
+subscribe(sessionId: string, listener: (snapshot: BrowserSnapshot) => void): () => void
+
+/**
+ * Ensure an open context and page for one session, navigating to the optional url.
+ * @param sessionId - session whose browser is opened.
+ * @param url - optional navigation destination.
+ */
+open(sessionId: string, url?: string): Promise<void>
+
+/**
+ * Close one session's browser context, if any.
+ * @param sessionId - session whose browser is closed.
+ */
+close(sessionId: string): Promise<void>
+```
+
+Source: [`packages/api/browser-controller/src/index.ts`](../../packages/api/browser-controller/src/index.ts)
+<!-- END GENERATED cordis-surface -->

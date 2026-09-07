@@ -55,6 +55,7 @@ export { REGION_BEGIN, REGION_END }
  */
 export const SERVICE_PAGE: Record<string, string> = {
   agentLoop: 'core.md',
+  browserControl: 'web-client.md',
   agentDefaultModel: 'core.md',
   agentPresets: 'core.md',
   agents: 'core.md',
@@ -334,6 +335,7 @@ export const LINK_MAP: Readonly<Record<string, string>> = {
   SessionPage: 'session.md',
   SessionPageRequest: 'session.md',
   SessionPromptRequest: 'session.md',
+  BrowserSnapshot: 'web-client.md',
   SessionPromptValue: 'session.md',
   SessionRenameRequest: 'session.md',
   SessionRenameValue: 'session.md',

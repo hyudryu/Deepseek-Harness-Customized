@@ -10,6 +10,9 @@ const pnpm = process.env.npm_execpath
 if (!pnpm || !existsSync(pnpm)) {
   throw new Error('Run this installer with pnpm run install:custom-plugins.')
 }
+const scriptEntrypoint = /\.[cm]?js$/iu.test(pnpm)
+const installCommand = scriptEntrypoint ? process.execPath : pnpm
+const installArgs = [...(scriptEntrypoint ? [pnpm] : []), 'install', '--ignore-workspace', '--frozen-lockfile']
 
 for (const entry of readdirSync(plugins, { withFileTypes: true }).sort((a, b) => a.name.localeCompare(b.name))) {
   if (!entry.isDirectory()) continue
@@ -19,7 +22,7 @@ for (const entry of readdirSync(plugins, { withFileTypes: true }).sort((a, b) =>
   const manifest = JSON.parse(readFileSync(manifestPath, 'utf8'))
   if (typeof manifest.main !== 'string') throw new Error(`${manifestPath}: custom plugin must declare its main entry.`)
   console.log(`Installing custom plugin: ${manifest.name}`)
-  const installed = spawnSync(process.execPath, [pnpm, 'install', '--ignore-workspace', '--frozen-lockfile'], {
+  const installed = spawnSync(installCommand, installArgs, {
     cwd: directory,
     env: { ...process.env, CI: 'true' },
     stdio: 'inherit',

@@ -93,3 +93,54 @@ Connection 拥有 request correlation、`/api` carrier、trust check、精确 Fe
 - [API Gateway](../api-gateway.zh.md)：Host method、生成的 Remote contribution、stream 与 forwarded event。
 - [Web Client Slots](slots.zh.md)：component、hook、store、injection 与 placement。
 - [Conversation](conversation.zh.md)：持久 event correlation、target snapshot，以及 Chat 或 Trajectory view contribution。
+
+## 会话浏览器查看
+
+[浏览器控制器](../../packages/api/browser-controller/README.zh.md) 向[浏览器面板](../../packages/client/ui-browser/README.zh.md) 转发 `ctx.browserControl` 操作和 `BrowserSnapshot` 流。每个快照替换打开状态、当前页面 URL 与标题、操作历史和可选的截图画面。这些实时浏览器信息与持久化 Session 历史相互独立；隐藏面板不会关闭会话浏览器。
+
+<!-- BEGIN GENERATED cordis-surface (gen-cordis-catalog.ts) — do not edit between markers -->
+
+<a id="cordis-surface"></a>
+
+## Cordis API
+
+Generated from source by `scripts/gen-cordis-catalog.ts` (verified fresh by `pnpm run verify-cordis-catalog` in doc-sync; regenerate with `pnpm run gen-cordis-catalog`) — the language sides differ only in locale-specific paired document paths. Signature blocks use a `ts cordis-catalog` fence and keep the original source JSDoc; dispatch modes are defined in the [primer](../cordis-primer.zh.md#dispatch-modes), and the framework-inherited `ctx` API lives in [cordis-api/inherited.md](../cordis-api/inherited.md).
+
+<a id="ctxbrowsercontrol--browsercontrol"></a>
+
+### `ctx.browserControl` — `BrowserControl`
+
+Live browser facts and control provided by the browser-control plugin.
+
+```ts cordis-catalog
+/**
+ * Read the current replaceable snapshot for one session.
+ * @param sessionId - session whose browser is observed.
+ * @returns the current browser snapshot, including closed state for an unknown session.
+ */
+snapshot(sessionId: string): BrowserSnapshot
+
+/**
+ * Be notified on every new snapshot for one session.
+ * @param sessionId - session whose snapshots are observed.
+ * @param listener - snapshot callback.
+ * @returns unsubscribe function; a no-op when the session is unknown.
+ */
+subscribe(sessionId: string, listener: (snapshot: BrowserSnapshot) => void): () => void
+
+/**
+ * Ensure an open context and page for one session, navigating to the optional url.
+ * @param sessionId - session whose browser is opened.
+ * @param url - optional navigation destination.
+ */
+open(sessionId: string, url?: string): Promise<void>
+
+/**
+ * Close one session's browser context, if any.
+ * @param sessionId - session whose browser is closed.
+ */
+close(sessionId: string): Promise<void>
+```
+
+Source: [`packages/api/browser-controller/src/index.ts`](../../packages/api/browser-controller/src/index.ts)
+<!-- END GENERATED cordis-surface -->

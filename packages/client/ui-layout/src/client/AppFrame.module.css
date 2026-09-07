@@ -42,9 +42,16 @@
   border-left: 0.5px solid var(--dsw-alias-border-l3);
 }
 
+.browserCol {
+  min-width: 0;
+  overflow: hidden;
+  border-left: 0.5px solid var(--dsw-alias-border-l3);
+}
+
 /* The details subtree stays mounted at zero width, so its border must not paint
    a 1px seam. The collapsed sidebar instead retains a bordered compact rail. */
-.frame[data-details-collapsed] .detailsCol {
+.frame[data-details-collapsed] .detailsCol,
+.frame[data-browser-collapsed] .browserCol {
   border-left: none;
 }
 
@@ -107,6 +114,36 @@
   border-color: var(--dsw-alias-border-l3);
 }
 
+.handle[data-side='browser']::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 12px;
+  height: 32px;
+  border-radius: 10px;
+  box-sizing: border-box;
+  background: var(--dsw-alias-button-floating-fill);
+  border: 0.5px solid var(--dsw-alias-border-l2-darkmode-thin);
+  opacity: 0;
+  transition:
+    opacity var(--ds-transition-duration-slow) var(--ds-ease-in-out),
+    background var(--ds-transition-duration-slow) var(--ds-ease-in-out);
+}
+
+.browserCol:hover ~ .handle[data-side='browser']::after,
+.handle[data-side='browser']:hover::after,
+.handle[data-side='browser'][data-dragging='true']::after {
+  opacity: 1;
+}
+
+.handle[data-side='browser']:hover::after,
+.handle[data-side='browser'][data-dragging='true']::after {
+  background: var(--dsw-alias-button-floating-hover);
+  border-color: var(--dsw-alias-border-l3);
+}
+
 .overlayLayer {
   position: absolute;
   inset: 0;
@@ -116,4 +153,10 @@
 
 .overlayLayer > * {
   pointer-events: auto;
+}
+.browserToggle {
+  position: absolute;
+  top: 10px;
+  right: 12px;
+  z-index: 20;
 }

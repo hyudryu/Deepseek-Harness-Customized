@@ -3,6 +3,7 @@ import { spawnSync } from 'node:child_process'
 import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { pathToFileURL } from 'node:url'
 import { describe, expect, it } from 'vitest'
 
 function withCheckout(run: (root: string) => void): void {
@@ -46,11 +47,11 @@ writeFileSync(new URL('./imported', import.meta.url), 'ready')
 `)
 }
 
-function runInstaller(root: string) {
+function runInstaller(root: string, entrypoint = join(root, 'fixture-pnpm.mjs')) {
   const result = spawnSync(process.execPath, [join(root, 'scripts', 'install-custom-plugins.mjs')], {
     // The installer must find its checkout from its own path, even outside the checkout cwd.
     cwd: tmpdir(),
-    env: { ...process.env, npm_execpath: join(root, 'fixture-pnpm.mjs'), FIXTURE_CALLS: join(root, 'calls.jsonl') },
+    env: { ...process.env, npm_execpath: entrypoint, FIXTURE_CALLS: join(root, 'calls.jsonl') },
     encoding: 'utf8',
     timeout: 30_000,
   })
@@ -60,6 +61,24 @@ function runInstaller(root: string) {
 }
 
 describe('standalone custom plugin installer', () => {
+  it('executes native package-manager entrypoints directly', () => {
+    withCheckout((root) => {
+      addPlugin(root, 'native plugin')
+      // Node supplies a real native executable on every test platform. Its install
+      // script adapts the received arguments to the package-manager fixture.
+      writeFileSync(join(root, 'Custom Plugins', 'native plugin', 'install'), `
+process.argv.splice(1, 1, 'fixture-pnpm', 'install')
+await import(${JSON.stringify(pathToFileURL(join(root, 'fixture-pnpm.mjs')).href)})
+`)
+      const result = runInstaller(root, process.execPath)
+      expect(result.status, result.stderr).toBe(0)
+      expect(JSON.parse(readFileSync(join(root, 'calls.jsonl'), 'utf8'))).toEqual({
+        name: 'native plugin', args: ['install', '--ignore-workspace', '--frozen-lockfile'],
+      })
+      expect(readFileSync(join(root, 'Custom Plugins', 'native plugin', 'imported'), 'utf8')).toBe('ready')
+    })
+  })
+
   it('installs locked dependencies and imports each plugin from checkout paths containing spaces', () => {
     withCheckout((root) => {
       addPlugin(root, 'a first plugin')
@@ -70,7 +89,7 @@ describe('standalone custom plugin installer', () => {
       const result = runInstaller(root)
 
       expect(result.status, result.stderr).toBe(0)
-      expect(readFileSync(join(root, 'calls.jsonl'), 'utf8').trim().split('\n').map(line => JSON.parse(line))).toEqual([
+      expect(readFileSync(join(root, 'calls.jsonl'), 'utf8').trim().split('\n').map(line => JSON.parse(line) as unknown)).toEqual([
         { name: 'a first plugin', args: ['install', '--ignore-workspace', '--frozen-lockfile'] },
         { name: 'b second plugin', args: ['install', '--ignore-workspace', '--frozen-lockfile'] },
       ])
