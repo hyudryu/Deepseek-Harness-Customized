@@ -35,7 +35,7 @@ export function createSessionMcp(
       const value = await pending
       signal.throwIfAborted()
       const reply: CallToolResult = { content: [{ type: 'text', text: JSON.stringify(value) }] }
-      // Reserve space for the wire request id, which is bounded at HTTP admission.
+      // Reserve space for the wire request id, whose JSON serialization is bounded at HTTP admission.
       if (Buffer.byteLength(JSON.stringify(reply), 'utf8') + 512 > config.maxResponseBytes) {
         throw new Error('Response exceeds the configured byte limit; request a smaller page.')
       }

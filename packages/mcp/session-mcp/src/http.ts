@@ -62,7 +62,7 @@ function validId(body: unknown): boolean {
   if (typeof body !== 'object' || body === null || Array.isArray(body)) return false
   if (!('id' in body)) return true
   return typeof body.id === 'string'
-    ? Buffer.byteLength(body.id, 'utf8') <= 128
+    ? Buffer.byteLength(JSON.stringify(body.id), 'utf8') <= 128
     : typeof body.id === 'number' && Number.isSafeInteger(body.id)
 }
 

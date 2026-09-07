@@ -213,3 +213,16 @@ it('terminates an already committed response when shared middleware precedes a r
     await new Promise<void>((resolve) => { server.close(() => { resolve() }); server.closeAllConnections() })
   }
 })
+
+it('bounds the serialized RPC id so escaped IDs cannot exceed the response budget', async () => {
+  const { url } = await endpoint({ maxResponseBytes: 4096 }, {
+    listProjects: async () => ({ text: '\\'.repeat(835) }),
+  } as unknown as SessionManagement)
+  const call = (id: string) => fetch(url, { method: 'POST', headers, body: JSON.stringify({
+    jsonrpc: '2.0', id, method: 'tools/call', params: { name: 'list_projects', arguments: {} },
+  }) })
+  expect((await call('\0'.repeat(128))).status).toBe(400)
+  const accepted = await call('\0'.repeat(21))
+  expect(accepted.status).toBe(200)
+  expect(Buffer.byteLength(await accepted.text())).toBeLessThanOrEqual(4096)
+})
