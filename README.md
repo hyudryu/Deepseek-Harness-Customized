@@ -124,6 +124,41 @@ Capabilities include:
 
 </details>
 
+#### 5. `dsh-mcp-servers`
+
+<details>
+<summary><b>MCP servers manager</b> — click to expand</summary>
+
+A plugin that manages MCP servers for the deployment: you add, remove, enable, disable, and test servers from **Settings → Plugins → MCP servers**, and every enabled server is mounted into each agent session on start.
+
+Capabilities include:
+
+- two transports — `stdio` (`command`/`args`/`env`/`cwd`) and streamable HTTP (`scheme`/`host`/`port`/`path`/`headers`);
+- a host-side connection test with a default 15s timeout that counts the server's tools and persists the result back to settings as `lastTest` (state, tool count, tool list, message, timestamp);
+- auto-mounting of every enabled server onto a session as it starts, so that server's tools appear to the agent as `mcp__<serverName>__<toolName>`; a server that fails to mount is logged and skipped rather than blocking the session;
+- an `mcp_servers` tool (`action=list`) that reports which servers are configured, whether each is enabled, and its last connection-test result — never assume a server or its tools are reachable without reading it;
+- a progressively loaded `mcp-servers` skill that governs discovery, test-result interpretation, and the management page;
+- server definitions stored in the `mcp.servers` settings namespace, so they persist in the DSH settings document on disk.
+
+</details>
+
+#### 6. `dsh-project-secrets`
+
+<details>
+<summary><b>Project-scoped secrets note-pad</b> — click to expand</summary>
+
+A plugin that keeps a per-project secrets block — credentials, API keys, tokens, or other values that belong to one project only. It stores the block as a plain-text file in the project directory and surfaces it in the web GUI plus a tool for the agent.
+
+Capabilities include:
+
+- a secrets file scoped to the project's working directory, defaulting to `.dsh/project-secrets` (configurable via `secretsFile`, `maxBytes`, and `root`);
+- a **Project Secrets** item on each project's 3-dots menu that opens a modal to paste/edit the block, backed by HTTP `GET`/`PUT` on `/project-secrets/<workspaceId>`;
+- a `project_secrets` tool (`action: read`/`write`) for the agent, with byte-limit validation and atomic writes (temp file plus rename);
+- a progressively loaded `project-secrets` skill that tells the agent to read first, never echo secrets into the conversation, commits, or logs, write authoritatively, and respect the project boundary;
+- safely handles a missing file as empty.
+
+</details>
+
 ## Developer preview
 
 DeepSeek Harness is in _developer preview_ and iterating rapidly. **THERE WILL BE COMPATIBILITY-BREAKING CHANGES.**
@@ -131,16 +166,6 @@ DeepSeek Harness is in _developer preview_ and iterating rapidly. **THERE WILL B
 Review the [safety notice](SAFETY.md) before running the project.
 
 ## Run
-
-### Run from `npm`
-
-Install `Node.js`, then run:
-
-```sh
-npx @deepseek-ai/dsh web
-```
-
-The command starts the Web UI at `http://127.0.0.1:3080` by default and opens it in the default browser for a local launch. An SSH launch only prints the host URL because the SSH client or editor owns the local forwarded address. Pass `--no-open` to run the server without opening a browser. See [Web UI guide](docs/user/guide/index.md).
 
 ### Run from source
 
