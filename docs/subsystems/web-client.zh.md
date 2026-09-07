@@ -31,6 +31,37 @@ Connection 拥有 request correlation、`/api` carrier、trust check、精确 Fe
 
 内部 `$events` logical stream 是 Connection generation source。它的 opening `ready` frame 携带用于路径显示的 Host home，并在 Host listener 已挂载、任何 controller 开始 baseline read 之前建立 generation。`ctx.remote.$on()` 把 allowlist 内的普通 event 交付给 root Client Context，并把 scoped waterfall event 交付给已解析的 Session Context；waterfall listener 可以返回结果、调用 `next()` 或拒绝。
 
+### 用量
+
+[用量控制器](../../packages/api/usage-controller/README.zh.md) 通过 `ctx.remote.usage.summary()` 提供 `UsageSummary`。其 `UsageDay` 记录包含 UTC 日期、提供方、模型和 token 数。汇总包含保留历史的 token 总量、每日峰值 token 数、最长会话的已完成轮次活动时间、会话数和缺少用量的尝试数。[用量设置插件](../../packages/client/ui-settings-usage/README.zh.md) 投影这些值，不维护第二份计数存储。
+
+<!-- BEGIN GENERATED cordis-surface (gen-cordis-catalog.ts) — do not edit between markers -->
+
+<a id="cordis-surface"></a>
+
+## Cordis API
+
+Generated from source by `scripts/gen-cordis-catalog.ts` (verified fresh by `pnpm run verify-cordis-catalog` in doc-sync; regenerate with `pnpm run gen-cordis-catalog`) — the language sides differ only in locale-specific paired document paths. Signature blocks use a `ts cordis-catalog` fence and keep the original source JSDoc; dispatch modes are defined in the [primer](../cordis-primer.zh.md#dispatch-modes), and the framework-inherited `ctx` API lives in [cordis-api/inherited.md](../cordis-api/inherited.md).
+
+<a id="ctxusagecontroller--usagecontroller"></a>
+
+### `ctx.usageController` — `UsageController`
+
+Host owner of the historical `usage` Remote namespace.
+
+```ts cordis-catalog
+/**
+ * Read persisted sessions sequentially without activating agents or taking write ownership.
+ * @returns UTC daily model totals and all-time summary statistics.
+ * @throws RemoteError when Session persistence is unavailable.
+ * @throws If persistence list, open, read, or close fails; no partial summary is returned.
+ */
+@Remote async summary(): Promise<UsageSummary>
+```
+
+Source: [`packages/api/usage-controller/src/index.ts`](../../packages/api/usage-controller/src/index.ts)
+<!-- END GENERATED cordis-surface -->
+
 ## Client models
 
 每个 API controller 包都拥有配对的 Host face 与 Client face。Host 侧拥有权威 mutation 与 stream 生产；Client 侧基于相同的生成 wire type 维护 identity 稳定、与 React 无关的 model，并公开 observable snapshot 与 command。UI 包消费这些 Client service，不在 component store 中复制 transport state。

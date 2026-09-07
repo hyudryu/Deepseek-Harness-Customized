@@ -111,7 +111,9 @@
     "@deepseek-ai/dsh-workspace": "workspace:^",
     "@deepseek-ai/schemastery": "workspace:^",
     "commander": "^15.0.0",
-    "open": "^11.0.0"
+    "open": "^11.0.0",
+    "@deepseek-ai/dsh-api-usage-controller": "workspace:^",
+    "@deepseek-ai/dsh-client-ui-settings-usage": "workspace:^"
   },
   "peerDependencies": {
     "@deepseek-ai/cordis-plugin-loader": "workspace:^",

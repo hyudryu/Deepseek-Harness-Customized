@@ -30,6 +30,7 @@ kind: "package-group"
 | [`gateway/`](gateway/README.zh.md) | 承载带类型的单次调用、多路复用 stream 与转发的 Host 事件。 | `ctx.typertGateway` / `ctx.remote` |
 | [`session-controller/`](session-controller/README.zh.md) | 拥有 Session 命令、历史 stream、实时控制状态与 Agent/Session 身份策略。 | `ctx.sessionController` / `ctx.remote.session` |
 | [`settings-controller/`](settings-controller/README.zh.md) | 拥有 settings 域各 seam 之上的配置界面读写。 | `ctx.settingsController`、`ctx.credentialsController` / `ctx.remote.settings`、`ctx.remote.credentials` |
+| [`usage-controller/`](usage-controller/README.zh.md) | 从持久化会话读取历史 token 用量。 | `ctx.usageController` / `ctx.remote.usage` |
 | [`workspace-controller/`](workspace-controller/README.zh.md) | 拥有 Workspace 变更与完整 Client Workspace 投影。 | `ctx.workspaceController` / `ctx.remote.workspace` |
 
 Remote 调用沿 Client → Host 方向运行在应用共享的 Connection 之上。API Gateway 拥有 Remote 传输，各 controller 包分别拥有 Session、配置界面与 Workspace 行为。流式下载等不适合 Remote 调用的响应由功能包注册精确的 Connection Fetch 路由。
