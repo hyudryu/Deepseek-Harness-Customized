@@ -1,7 +1,7 @@
 /** Browser-control Remote owner: live per-session browser state, action log, and screenshot frames. */
 
-import type { SessionId } from '@deepseek-ai/dsh-session'
 import { Context } from '@deepseek-ai/cordis'
+import type { SessionId } from '@deepseek-ai/dsh-session'
 import { Remote, TypertRemoteService } from '@deepseek-ai/dsh-typert-protocol'
 import type {
   BrowserCloseRequest,
@@ -33,11 +33,13 @@ export interface BrowserControl {
    * Ensure an open context and page for one session, navigating to the optional url.
    * @param sessionId - session whose browser is opened.
    * @param url - optional navigation destination.
+   * @throws Navigation failures; the remaining open context is published and can be closed.
    */
   open(sessionId: SessionId, url?: string): Promise<void>
   /**
-   * Close one session's browser context, if any.
+   * Close one session's browser context, if any; retain any still-open context if cleanup fails.
    * @param sessionId - session whose browser is closed.
+   * @throws Context cleanup failures; callers may retry.
    */
   close(sessionId: SessionId): Promise<void>
 }

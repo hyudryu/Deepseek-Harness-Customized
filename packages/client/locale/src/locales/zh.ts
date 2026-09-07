@@ -1,5 +1,7 @@
 /** zh base dictionary for the common namespace: cross-feature standard words. */
 export const zh = {
+  'sidebar.open': '打开侧边栏',
+  'sidebar.close': '关闭侧边栏',
   'ok': '确定',
   'cancel': '取消',
   'close': '关闭',

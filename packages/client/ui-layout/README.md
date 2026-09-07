@@ -25,7 +25,9 @@ This package provides the shell layout of the Web GUI: a four-column AppFrame wi
 <a id="use-this-package"></a>
 ## Use this package
 
-Mount this plugin at the root slot; it then renders the app frame around whatever occupies the sidebar, conversation, details, and browser columns. Users resize the sidebar by dragging its invisible hit strip and the details panel by dragging its floating pill; when the window narrows, details shrinks and auto-closes before the browser. A closed sidebar retains a 56px control rail; details closes to zero width.
+Mount this plugin at the root slot; it then renders the app frame around whatever occupies the sidebar, conversation, details, and browser columns. Users resize the sidebar by dragging its invisible hit strip and the details panel by dragging its floating pill; when the window narrows, details shrinks and auto-closes before the browser. On desktop widths a closed sidebar retains a 56px control rail; details closes to zero width.
+
+At widths up to 600px, the conversation uses the full frame width without a permanent rail. The upper-left menu opens the sidebar over the conversation; its backdrop dismisses it. `ctx.layout.closeSidebar()` closes navigation idempotently and preserves the preferred desktop width when called on a narrow screen. Explicitly opened details and browser panels overlay the conversation below the top controls. The mobile frame uses compact content spacing and text while preserving the user's font preference, 16px text inputs, and browser zoom. Wide content such as tables retains its own horizontal scrolling without widening the application.
 
 The upper-right `browser.toggle` slot renders the selected session's browser icon. The right-side browser panel stays mounted while hidden; collapsing it changes viewing geometry without closing its browser context.
 

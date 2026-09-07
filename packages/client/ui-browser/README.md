@@ -24,7 +24,7 @@ The upper-right browser icon starts the selected session's browser and expands i
 <a id="use-this-package"></a>
 ## Use this package
 
-The Web application composition mounts this UI with the [browser controller](../../api/browser-controller/README.md). Select a session, use the upper-right icon, and enter an address in the panel to navigate. The same icon collapses the panel; the panel's Stop browser action closes the browser context.
+The optional `Custom Plugins/browser-control` bundle mounts its provider, this UI, and the [browser controller](../../api/browser-controller/README.md). Select a session, use the upper-right icon, and enter an address in the panel to navigate. The same icon collapses the panel; the panel's Stop browser action closes the browser context.
 
 -----
 
@@ -34,7 +34,7 @@ The Web application composition mounts this UI with the [browser controller](../
 <details>
 <summary>Implementation internals — click to expand</summary>
 
-The [client plugin](src/client/index.ts) registers the `browser.toggle` and `browser` slots owned by [ui-layout](../ui-layout/README.md). Remote mutations check their result before updating viewing state. A [React-free observable](src/client/browser-state.ts) owns each Session stream; the renderer binds it to the panel's injected `useBrowser` hook. The last subscriber releases the stream and cached frames, and plugin disposal awaits outstanding cleanup. The panel keeps only viewing state and positions the agent cursor inside the contained image, including any letterbox offsets.
+The [client plugin](src/client/index.ts) registers the `browser.toggle` and `browser` slots owned by [ui-layout](../ui-layout/README.md). Remote mutations check their result before updating viewing state. A [React-free observable](src/client/browser-state.ts) owns each Session stream; the renderer binds it to the panel's injected `useBrowser` hook. The last subscriber releases the stream and cached frames, and plugin disposal awaits outstanding cleanup. The panel keeps only viewing state and positions the agent cursor inside the contained image, including any letterbox offsets. Snapshot references remain stable between publications. The default Web bundle mounts neither the controller nor this UI.
 
 </details>
 

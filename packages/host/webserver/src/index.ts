@@ -157,6 +157,51 @@ export class WebServer extends Service {
   }
 
   /**
+   * Serve the existing routes on another interface at the primary port.
+   * @param address - concrete local interface address to bind.
+   * @param accepts - listener-specific request policy, applied before dispatch.
+   * @returns disposer closing this listener and all of its HTTP and upgrade sockets.
+   */
+  async listenOn(address: string, accepts: (request: IncomingMessage) => boolean): Promise<() => Promise<void>> {
+    const sockets = new Set<Duplex>()
+    const server = createServer((request, response) => {
+      if (!accepts(request)) {
+        response.writeHead(403)
+        response.end('forbidden')
+        return
+      }
+      this.server.emit('request', request, response)
+    })
+    server.on('connection', (socket) => {
+      sockets.add(socket)
+      socket.once('close', () => { sockets.delete(socket) })
+    })
+    server.on('upgrade', (request, socket, head) => {
+      if (!accepts(request)) {
+        socket.destroy()
+        return
+      }
+      this.server.emit('upgrade', request, socket, head)
+    })
+    await new Promise<void>((resolve, reject) => {
+      server.once('error', reject)
+      server.listen(this.port, address, () => {
+        server.off('error', reject)
+        server.on('error', (error) =>{  this.ctx.logger.error(error) })
+        resolve()
+      })
+    })
+    return async () => {
+      const closed = new Promise<void>((resolve) => { server.close(() => { resolve() }) })
+      const socketClosed = [...sockets].map(socket => new Promise<void>((resolve) => {
+        socket.once('close', () => { resolve() })
+        socket.destroy()
+      }))
+      await Promise.all([closed, ...socketClosed])
+    }
+  }
+
+  /**
    * Register a named route. Duplicate (kind, path) throws — route patterns are
    * a composition-level contract, so a collision is a misconfiguration.
    * @param route - kind, path, and the owning handler.

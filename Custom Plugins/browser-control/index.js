@@ -336,9 +336,11 @@ export function apply(ctx, rawConfig = {}) {
     return async () => {
       subscribers.clear()
       await Promise.allSettled([...pendingStates.values()])
-      await Promise.all([...states.keys()].map(closeState))
+      const results = await Promise.allSettled([...states.keys()].map(closeState))
       const instance = browserPromise ? await browserPromise.catch(() => undefined) : undefined
-      if (instance) await instance.close()
+      if (instance) results.push(...await Promise.allSettled([instance.close()]))
+      const failure = results.find(result => result.status === 'rejected')
+      if (failure) throw failure.reason
     }
   })
 
@@ -370,7 +372,12 @@ export function apply(ctx, rawConfig = {}) {
     async open(sessionId, url) {
       const state = await getState(sessionId)
       if (typeof url === 'string' && url.trim() !== '') {
-        await state.page.goto(url, { waitUntil: 'domcontentloaded', timeout: config.navigationTimeoutMs })
+        try {
+          await state.page.goto(url, { waitUntil: 'domcontentloaded', timeout: config.navigationTimeoutMs })
+        } catch (error) {
+          await refreshAndNotify(state)
+          throw error
+        }
       }
       state.open = true
       await refreshAndNotify(state)

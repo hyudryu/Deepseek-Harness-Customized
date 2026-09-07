@@ -149,6 +149,7 @@ export function AppFrame({
   // (or the default when the wide preference is closed) and the center
   // absorbs the squeeze.
   const narrow = viewport < SIDEBAR_AUTO_COLLAPSE
+  const mobile = viewport <= 600
   useEffect(() => { actions.setNarrow(narrow) }, [actions, narrow])
   const sidebarCollapsed = narrow ? !panels.narrowExpanded : panels.sidebar === 0
   const sidebarPreference = sidebarCollapsed
@@ -188,10 +189,14 @@ export function AppFrame({
       className={css.frame}
       style={{ gridTemplateColumns: `${cols.sidebar}px minmax(0, 1fr) ${cols.details}px ${cols.browser}px` }}
       data-sidebar-collapsed={sidebarCollapsed || undefined}
-      data-details-collapsed={cols.details === 0 || undefined}
-      data-browser-collapsed={cols.browser === 0 || undefined}
+      data-details-collapsed={(mobile ? detailsSession === undefined || panels.details === 0 : cols.details === 0) || undefined}
+      data-browser-collapsed={(mobile ? panels.browser === 0 : cols.browser === 0) || undefined}
       data-dragging={dragging || undefined}
     >
+      {mobile && sidebarCollapsed && <button type="button" className={css.mobileMenu} aria-label={t('sidebar.open')} onClick={() => { actions.toggleSidebar() }}>
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16" /></svg>
+      </button>}
+      {mobile && !sidebarCollapsed && <button type="button" className={css.mobileBackdrop} aria-label={t('sidebar.close')} onClick={() => { actions.closeSidebar() }} />}
       <DocumentTitle
         productTitle={productTitle}
         {...documentTitle === undefined ? {} : { title: documentTitle }}
@@ -204,7 +209,7 @@ export function AppFrame({
             renders the rail UI too). */}
         {renderSlot('sidebar', {
           collapsed: sidebarCollapsed,
-          width: cols.sidebar,
+          width: mobile ? Math.min(320, viewport - 40) : cols.sidebar,
         })}
       </div>
       <>
@@ -225,7 +230,7 @@ export function AppFrame({
         {renderSlot('shell.overlay', {})}
       </div>
       <div className={css.browserToggle}>
-        <SessionProvider>{renderSlot('browser.toggle', { expanded: cols.browser > 0 })}</SessionProvider>
+        <SessionProvider>{renderSlot('browser.toggle', { expanded: mobile ? panels.browser > 0 : cols.browser > 0 })}</SessionProvider>
       </div>
       {/* The collapsed rail is fixed-width: no resize handle while closed. */}
       {!sidebarCollapsed && <DragHandle side="sidebar" left={cols.sidebar} onStart={onSidebarStart} onDrag={onSidebarDrag} onEnd={onDragEnd} />}

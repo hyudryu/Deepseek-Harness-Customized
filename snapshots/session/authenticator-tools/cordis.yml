@@ -1,0 +1,21 @@
+# Compose the real authenticated account plugin through the shipped headless profile.
+- insert:
+    - id: authenticator-web-server
+      name: '@deepseek-ai/dsh-host-webserver'
+      config:
+        host: 127.0.0.1
+        port: 0
+    - id: authenticator-connection
+      name: '@deepseek-ai/dsh-client-connection'
+    - id: authenticator
+      name: '@deepseek-ai/dsh-host-authenticator'
+
+# Exclude machine-local skill catalogs from this account-only scenario.
+- id: skill
+  disabled: true
+- id: skill-filesystem
+  disabled: true
+- id: skill-badge
+  disabled: true
+- id: tool-skill
+  disabled: true

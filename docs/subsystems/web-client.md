@@ -35,33 +35,6 @@ The internal `$events` logical stream is the Connection generation source. Its o
 
 The [usage controller](../../packages/api/usage-controller/README.md) exposes `UsageSummary` through `ctx.remote.usage.summary()`. Its `UsageDay` rows contain a UTC date, provider, model, and token count. The summary carries retained-history token totals, peak daily tokens, the longest session's completed-turn activity, session count, and missing-usage attempt count. The [Usage settings plugin](../../packages/client/ui-settings-usage/README.md) projects those values without maintaining a second accounting store.
 
-<!-- BEGIN GENERATED cordis-surface (gen-cordis-catalog.ts) — do not edit between markers -->
-
-<a id="cordis-surface"></a>
-
-## Cordis API
-
-Generated from source by `scripts/gen-cordis-catalog.ts` (verified fresh by `pnpm run verify-cordis-catalog` in doc-sync; regenerate with `pnpm run gen-cordis-catalog`) — the language sides differ only in locale-specific paired document paths. Signature blocks use a `ts cordis-catalog` fence and keep the original source JSDoc; dispatch modes are defined in the [primer](../cordis-primer.md#dispatch-modes), and the framework-inherited `ctx` API lives in [cordis-api/inherited.md](../cordis-api/inherited.md).
-
-<a id="ctxusagecontroller--usagecontroller"></a>
-
-### `ctx.usageController` — `UsageController`
-
-Host owner of the historical `usage` Remote namespace.
-
-```ts cordis-catalog
-/**
- * Read persisted sessions sequentially without activating agents or taking write ownership.
- * @returns UTC daily model totals and all-time summary statistics.
- * @throws RemoteError when Session persistence is unavailable.
- * @throws If persistence list, open, read, or close fails; no partial summary is returned.
- */
-@Remote async summary(): Promise<UsageSummary>
-```
-
-Source: [`packages/api/usage-controller/src/index.ts`](../../packages/api/usage-controller/src/index.ts)
-<!-- END GENERATED cordis-surface -->
-
 ## Client models
 
 Each API controller package owns a paired Host and Client face. The Host side owns authoritative mutation and stream production. The Client side owns an identity-stable, React-free model over the same generated wire types and exposes observable snapshots plus commands. UI packages consume these Client services and do not reproduce transport state in component stores.
@@ -163,12 +136,14 @@ subscribe(sessionId: SessionId, listener: (snapshot: BrowserSnapshot) => void): 
  * Ensure an open context and page for one session, navigating to the optional url.
  * @param sessionId - session whose browser is opened.
  * @param url - optional navigation destination.
+ * @throws Navigation failures; the remaining open context is published and can be closed.
  */
 open(sessionId: SessionId, url?: string): Promise<void>
 
 /**
- * Close one session's browser context, if any.
+ * Close one session's browser context, if any; retain any still-open context if cleanup fails.
  * @param sessionId - session whose browser is closed.
+ * @throws Context cleanup failures; callers may retry.
  */
 close(sessionId: SessionId): Promise<void>
 ```
@@ -176,4 +151,22 @@ close(sessionId: SessionId): Promise<void>
 Types: [SessionId](core.md)
 
 Source: [`packages/api/browser-controller/src/index.ts`](../../packages/api/browser-controller/src/index.ts)
+
+<a id="ctxusagecontroller--usagecontroller"></a>
+
+### `ctx.usageController` — `UsageController`
+
+Host owner of the historical `usage` Remote namespace.
+
+```ts cordis-catalog
+/**
+ * Read persisted sessions sequentially without activating agents or taking write ownership.
+ * @returns UTC daily model totals and all-time summary statistics.
+ * @throws RemoteError when Session persistence is unavailable.
+ * @throws If persistence list, open, read, or close fails; no partial summary is returned.
+ */
+@Remote async summary(): Promise<UsageSummary>
+```
+
+Source: [`packages/api/usage-controller/src/index.ts`](../../packages/api/usage-controller/src/index.ts)
 <!-- END GENERATED cordis-surface -->

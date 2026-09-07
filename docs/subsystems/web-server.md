@@ -68,6 +68,14 @@ The browser HTTP carrier service. Activation listens immediately. Route registra
 
 ```ts cordis-catalog
 /**
+ * Serve the existing routes on another interface at the primary port.
+ * @param address - concrete local interface address to bind.
+ * @param accepts - listener-specific request policy, applied before dispatch.
+ * @returns disposer closing this listener and all of its HTTP and upgrade sockets.
+ */
+async listenOn(address: string, accepts: (request: IncomingMessage) => boolean): Promise<() => Promise<void>>
+
+/**
  * Register a named route. Duplicate (kind, path) throws — route patterns are
  * a composition-level contract, so a collision is a misconfiguration.
  * @param route - kind, path, and the owning handler.

@@ -614,11 +614,13 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
         signature: 'open(sessionId: SessionId, url?: string): Promise<void>',
         description: 'Ensure an open context and page for one session, navigating to the optional url.',
         parameters: [{ name: 'sessionId', description: 'session whose browser is opened.' }, { name: 'url', description: 'optional navigation destination.' }],
+        throws: ['Navigation failures; the remaining open context is published and can be closed.'],
       },
       {
         signature: 'close(sessionId: SessionId): Promise<void>',
-        description: 'Close one session\'s browser context, if any.',
+        description: 'Close one session\'s browser context, if any; retain any still-open context if cleanup fails.',
         parameters: [{ name: 'sessionId', description: 'session whose browser is closed.' }],
+        throws: ['Context cleanup failures; callers may retry.'],
       },
     ],
   },
@@ -2821,6 +2823,12 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
     summary: 'The browser HTTP carrier service.',
     description: 'The browser HTTP carrier service. Activation listens immediately. Route registration order does not affect requests because configured named routes must be distinct, and the fallback handler answers anything not yet claimed during startup with 404 until its owner registers. A listen failure rejects initialization, and the boot process reports the failed fiber.',
     methods: [
+      {
+        signature: 'async listenOn(address: string, accepts: (request: IncomingMessage) => boolean): Promise<() => Promise<void>>',
+        description: 'Serve the existing routes on another interface at the primary port.',
+        parameters: [{ name: 'address', description: 'concrete local interface address to bind.' }, { name: 'accepts', description: 'listener-specific request policy, applied before dispatch.' }],
+        returns: 'disposer closing this listener and all of its HTTP and upgrade sockets.',
+      },
       {
         signature: 'register(route: WebRoute): () => void',
         description: 'Register a named route. Duplicate (kind, path) throws — route patterns are a composition-level contract, so a collision is a misconfiguration.',

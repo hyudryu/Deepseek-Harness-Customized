@@ -34,6 +34,12 @@
   --dsh-composer-dock-inset: 8px;
 }
 
+@media (max-width: 600px) {
+  .root { --dsh-chat-content-width: 100%; --dsh-composer-side-clearance: 8px; }
+  .root .header { padding: 4px 44px 0; }
+  .root .scrollBody { overflow-x: hidden; overscroll-behavior-x: none; scrollbar-gutter: auto; }
+}
+
 .header {
   position: relative;
   flex: none;

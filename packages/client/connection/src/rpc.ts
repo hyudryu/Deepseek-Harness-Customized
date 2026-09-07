@@ -77,6 +77,8 @@ export type RpcMessage = ClientRequest | ServerResponse
 
 /** HTTP request facts consumed by browser trust and authentication. */
 export interface ConnectionTrustRequest {
+  /** Physical receiving interface, when supplied by node:http. */
+  readonly socket?: { readonly localAddress?: string | undefined } | undefined
   /** Request headers supplied by either the Fetch or node:http representation. */
   readonly headers: Headers | Readonly<Record<string, string | readonly string[] | undefined>>
 }
@@ -163,6 +165,13 @@ export interface HostConnectionRpc {
 
 /** Host `ctx.connection` shape consumed by transport-independent adapters. */
 export interface HostConnectionHandle {
+  /**
+   * Trust an additional listener authority only on its receiving interface.
+   * @param authority - canonical host and port served by the listener.
+   * @param localAddress - exact receiving IP address.
+   * @returns disposer revoking this listener's trust.
+   */
+  registerListeningAuthority(authority: string, localAddress: string): () => void
   /** Generic RPC channel registry. */
   readonly rpc: HostConnectionRpc
   /** Exact Fetch routes for streaming or browser-native responses. */

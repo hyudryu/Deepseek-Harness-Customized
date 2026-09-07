@@ -8,7 +8,8 @@
  */
 
 import { describe, expect, it } from 'vitest'
-import { collectSlotEntries, oversizedSlotReports, resolveSlotEntries, validateSlotContracts } from './gen-client-catalog.ts'
+import ts from 'typescript'
+import { collectSlotEntries, oversizedSlotReports, renderClientCatalog, resolveSlotEntries, validateSlotContracts } from './gen-client-catalog.ts'
 import type { SlotDeclaration, SlotRegistration, TypeDeclaration } from './slot-walk.ts'
 
 /** A declaration with every field the catalog needs, overridable per case. */
@@ -193,6 +194,26 @@ describe('the per-slot report budget', () => {
   it('passes a slot whose report stays within the budget', () => {
     const entries = resolveSlotEntries([declaration({ ownerType: 'DemoOwnerProps' })], [], OWNER_TYPES, new Map())
     expect(oversizedSlotReports(entries)).toEqual([])
+  })
+})
+
+describe('generated TypeScript literals', () => {
+  it.each(['\r\n', '\r'])('emits parseable owner declarations from %j source newlines', (newline) => {
+    const text = "/** An owner's path. */\nexport interface DemoOwnerProps {\n  path: 'C:\\\\example'\n}"
+    const types = new Map(OWNER_TYPES)
+    types.set('DemoOwnerProps', { ...OWNER_TYPES.get('DemoOwnerProps')!, text: text.replaceAll('\n', newline) })
+    const entries = resolveSlotEntries([declaration({ ownerType: 'DemoOwnerProps' })], [], types, new Map())
+    const source = renderClientCatalog(entries)
+    const compiled = ts.transpileModule(source, { reportDiagnostics: true })
+    expect(compiled.diagnostics).toEqual([])
+    expect(source).not.toContain('\r')
+    const literals: string[] = []
+    const visit = (node: ts.Node): void => {
+      if (ts.isStringLiteral(node)) literals.push(node.text)
+      ts.forEachChild(node, visit)
+    }
+    visit(ts.createSourceFile('slot-catalog.ts', source, ts.ScriptTarget.Latest, true))
+    expect(literals).toContain(text)
   })
 })
 

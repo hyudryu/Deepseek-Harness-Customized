@@ -9,7 +9,7 @@ import {
 } from './rpc.ts'
 import { clientRequestSchema } from './rpc-schema.ts'
 import { bridge } from './http-bridge.ts'
-import { isTrustedApiRequest } from './api-request-trust.ts'
+import { assertTrustedAuthority, isTrustedApiRequest } from './api-request-trust.ts'
 import { API_PATH } from './api-path.ts'
 import type { BrowserAuth } from './browser-auth.ts'
 import type {
@@ -58,6 +58,7 @@ declare module '@deepseek-ai/cordis' {
 
 /** Host Connection service whose channel registrations belong to the caller fiber. */
 export class HostConnectionService extends Service implements HostConnectionHandle {
+  private readonly listeningAuthorities = new Map<object, { authority: string; localAddress: string }>()
   private readonly interceptors = new Map<string, ConnectionRpcInterceptor>()
   private readonly fetchRoutes = new Map<string, RegisteredFetchRoute>()
 
@@ -95,7 +96,10 @@ export class HostConnectionService extends Service implements HostConnectionHand
 
   /** Apply the configured Host/Origin fence, then browser authentication. */
   requestRejection(request: ConnectionTrustRequest): ConnectionRequestRejection {
-    if (!isTrustedApiRequest(request, this.trustedHosts)) return 403
+    const trustedHosts = [...this.trustedHosts, ...[...this.listeningAuthorities.values()]
+      .filter(entry => entry.localAddress === request.socket?.localAddress)
+      .map(entry => entry.authority)]
+    if (!isTrustedApiRequest(request, trustedHosts)) return 403
     return this.browserAuth.isAuthenticated(request) ? undefined : 401
   }
 
@@ -107,6 +111,14 @@ export class HostConnectionService extends Service implements HostConnectionHand
   /** Add this process's launch token to the clean application URL. */
   authenticatedUrl(baseUrl: string): string {
     return this.browserAuth.authenticatedUrl(baseUrl)
+  }
+
+  /** Register interface-scoped authority trust for an additional listener. */
+  registerListeningAuthority(authority: string, localAddress: string): () => void {
+    assertTrustedAuthority(authority)
+    const registration = {}
+    this.listeningAuthorities.set(registration, { authority, localAddress })
+    return () => { this.listeningAuthorities.delete(registration) }
   }
 
   /**

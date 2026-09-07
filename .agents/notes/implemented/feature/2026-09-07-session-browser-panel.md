@@ -16,6 +16,8 @@ The [controller](../../../../packages/api/browser-controller/README.md) subscrib
 
 The optional browser-control bundle mounts the provider, controller, and UI together. Opening requires a live Session; the stream retains only the latest pending replacement snapshot. A framework-bound observable owns client subscriptions across closed and reopened browser contexts. Failed context closure propagates and retains retryable provider state. Screenshot cursor coordinates account for letterboxing, and each resize handle follows its own panel edge.
 
+Initial navigation failure publishes the opened context so the panel can stop it. The default Web profile has no browser controls without the optional provider, and internal presentation components remain private.
+
 ## Alternatives considered
 
 **Keep the composer control.** The browser is application viewing state, so its toggle belongs with panel controls rather than message input.

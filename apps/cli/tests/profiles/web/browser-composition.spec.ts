@@ -35,12 +35,12 @@ it.each([false, true])('composes the browser provider and both consumers togethe
   expect(mounted.map(row => row.name)).toEqual(enabled ? browserNames : [])
   expect(warnings).toEqual([])
   if (!enabled) return
-  const webDir = resolveBundleDir('dsh', '@deepseek-ai/dsh-web-app', anchor, profileDir)
-  const webAnchor = join(webDir, 'package.json')
-  const manifest = JSON.parse(readFileSync(webAnchor, 'utf8')) as { dependencies: Record<string, string> }
+  const providerDir = resolveBundleDir('dsh', 'dsh-browser-control', anchor, profileDir)
+  const providerAnchor = join(providerDir, 'package.json')
+  const manifest = JSON.parse(readFileSync(providerAnchor, 'utf8')) as { dependencies: Record<string, string> }
   for (const name of browserNames.slice(1)) {
     expect(manifest.dependencies[name], `${name} in installation dependency closure`).toBeDefined()
-    const searchPaths = createRequire(webAnchor).resolve.paths(name) ?? []
-    expect(searchPaths.some(path => existsSync(join(path, name, 'package.json'))), `${name} resolves from installed Web bundle`).toBe(true)
+    const searchPaths = createRequire(providerAnchor).resolve.paths(name) ?? []
+    expect(searchPaths.some(path => existsSync(join(path, name, 'package.json'))), `${name} resolves from installed browser bundle`).toBe(true)
   }
 })

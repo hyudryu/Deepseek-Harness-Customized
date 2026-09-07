@@ -28,6 +28,12 @@
     // not declaration path aliases, keep each package/vendor source compiled
     // under its own tsconfig boundary.
     "paths": {
+      "@deepseek-ai/dsh-client-ui-authenticator": ["./packages/client/ui-authenticator/src/index.ts"],
+      "@deepseek-ai/dsh-client-ui-authenticator/client": ["./packages/client/ui-authenticator/src/client/index.ts"],
+      "@deepseek-ai/dsh-client-ui-mobile-access": ["./packages/client/ui-mobile-access/src/index.ts"],
+      "@deepseek-ai/dsh-client-ui-mobile-access/client": ["./packages/client/ui-mobile-access/src/client/index.ts"],
+      "@deepseek-ai/dsh-host-authenticator": ["./packages/host/authenticator/src/index.ts"],
+      "@deepseek-ai/dsh-host-mobile-access": ["./packages/host/mobile-access/src/index.ts"],
       "@deepseek-ai/cordis": ["./vendor/cordis/src"],
       "@deepseek-ai/cosmokit": ["./vendor/cosmokit/src"],
       "@deepseek-ai/schemastery": ["./vendor/schemastery/src"],

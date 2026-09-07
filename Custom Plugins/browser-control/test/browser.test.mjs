@@ -99,14 +99,14 @@ test('disposal reports close failures and can retry retained resources', async t
   context.closeError = new Error('context failure')
   await assert.rejects(dispose(), /context failure/)
   assert.equal(control.snapshot('session').open, true)
-  assert.equal(browser.instance.close.mock.callCount(), 0)
+  assert.equal(browser.instance.close.mock.callCount(), 1)
   context.closeError = undefined
   browser.failBrowserClose(new Error('browser failure'))
   await assert.rejects(dispose(), /browser failure/)
   assert.equal(control.snapshot('session').open, false)
   browser.failBrowserClose(undefined)
   await dispose()
-  assert.equal(browser.instance.close.mock.callCount(), 2)
+  assert.equal(browser.instance.close.mock.callCount(), 3)
 })
 
 test('the panel and browser tool share a context across navigation, close, and reopen', { timeout: 30000 }, async () => {

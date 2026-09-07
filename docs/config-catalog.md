@@ -844,6 +844,24 @@ export interface Config {
 
 Source: [`packages/hooks/hooks-codex/src/index.ts:44`](../packages/hooks/hooks-codex/src/index.ts)
 
+<a id="deepseek-aidsh-host-authenticator"></a>
+
+## `@deepseek-ai/dsh-host-authenticator`
+
+Requires: `webServer` · `connection` · `settings` · `tools`
+
+```ts config-catalog
+/** Durable account storage configuration. */
+export interface Config {
+  /** Dedicated account file; omission uses the current Harness home. */
+  path?: string
+  /** Explicit Harness home, otherwise DSH_HOME or ~/.dsh. */
+  dshHome?: string
+}
+```
+
+Source: [`packages/host/authenticator/src/index.ts:23`](../packages/host/authenticator/src/index.ts)
+
 <a id="deepseek-aidsh-host-directory-picker-browse"></a>
 
 ## `@deepseek-ai/dsh-host-directory-picker-browse`
@@ -873,6 +891,24 @@ export interface Config {
 ```
 
 Source: [`packages/host/frontend-static/src/index.ts:30`](../packages/host/frontend-static/src/index.ts)
+
+<a id="deepseek-aidsh-host-mobile-access"></a>
+
+## `@deepseek-ai/dsh-host-mobile-access`
+
+Requires: `webServer` · `connection`
+
+```ts config-catalog
+/** Tailscale executable discovery and bounded command execution. */
+export interface Config {
+  /** Official CLI executable, used when the interface name does not identify Tailscale. */
+  tailscaleExecutable: string
+  /** Maximum CLI discovery duration in milliseconds. */
+  discoveryTimeoutMs: number
+}
+```
+
+Source: [`packages/host/mobile-access/src/index.ts:16`](../packages/host/mobile-access/src/index.ts)
 
 <a id="deepseek-aidsh-host-webserver"></a>
 
@@ -3333,6 +3369,7 @@ These load from a `cordis.yml` entry with no `config:` block; they declare no co
 - `@deepseek-ai/dsh-client-ui-agent-preset` ([`packages/client/ui-agent-preset/src/index.ts`](../packages/client/ui-agent-preset/src/index.ts))
 - `@deepseek-ai/dsh-client-ui-approval` ([`packages/client/ui-approval/src/index.ts`](../packages/client/ui-approval/src/index.ts))
 - `@deepseek-ai/dsh-client-ui-attachment` ([`packages/client/ui-attachment/src/index.ts`](../packages/client/ui-attachment/src/index.ts))
+- `@deepseek-ai/dsh-client-ui-authenticator` ([`packages/client/ui-authenticator/src/index.ts`](../packages/client/ui-authenticator/src/index.ts))
 - `@deepseek-ai/dsh-client-ui-brand-official` ([`packages/client/ui-brand-official/src/index.ts`](../packages/client/ui-brand-official/src/index.ts))
 - `@deepseek-ai/dsh-client-ui-browser` ([`packages/client/ui-browser/src/index.ts`](../packages/client/ui-browser/src/index.ts))
 - `@deepseek-ai/dsh-client-ui-chat` ([`packages/client/ui-chat/src/index.ts`](../packages/client/ui-chat/src/index.ts))
@@ -3347,6 +3384,7 @@ These load from a `cordis.yml` entry with no `config:` block; they declare no co
 - `@deepseek-ai/dsh-client-ui-jobs` ([`packages/client/ui-jobs/src/index.ts`](../packages/client/ui-jobs/src/index.ts))
 - `@deepseek-ai/dsh-client-ui-layout` ([`packages/client/ui-layout/src/index.ts`](../packages/client/ui-layout/src/index.ts))
 - `@deepseek-ai/dsh-client-ui-message-feedback` ([`packages/client/ui-message-feedback/src/index.ts`](../packages/client/ui-message-feedback/src/index.ts))
+- `@deepseek-ai/dsh-client-ui-mobile-access` ([`packages/client/ui-mobile-access/src/index.ts`](../packages/client/ui-mobile-access/src/index.ts))
 - `@deepseek-ai/dsh-client-ui-model-selection` ([`packages/client/ui-model-selection/src/index.ts`](../packages/client/ui-model-selection/src/index.ts))
 - `@deepseek-ai/dsh-client-ui-permission-presets` ([`packages/client/ui-permission-presets/src/index.ts`](../packages/client/ui-permission-presets/src/index.ts))
 - `@deepseek-ai/dsh-client-ui-plan` ([`packages/client/ui-plan/src/index.ts`](../packages/client/ui-plan/src/index.ts))

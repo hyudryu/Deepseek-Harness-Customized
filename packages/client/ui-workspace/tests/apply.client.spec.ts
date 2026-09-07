@@ -1,5 +1,5 @@
 import { Context } from '@deepseek-ai/cordis'
-import { describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { SlotRegistry } from '@deepseek-ai/dsh-client-ui-renderer/client'
 import { RemoteError, TestRemote } from '@deepseek-ai/dsh-client-test-runtime'
 import { LocaleRuntime } from '@deepseek-ai/dsh-client-locale/client'
@@ -8,6 +8,9 @@ import type { WorkspaceBrowserInjected, WorkspacePickerInjected } from '@deepsee
 import { WorkspaceBrowser } from '../src/client/rows/WorkspaceBrowser.tsx'
 import { WorkspacePicker } from '../src/client/WorkspacePicker.tsx'
 import { apply as hostApply } from '../src/index.ts'
+
+beforeEach(() => { vi.stubGlobal('matchMedia', vi.fn(() => ({ matches: false }))) })
+afterEach(() => { vi.unstubAllGlobals() })
 
 async function bench() {
   const ctx = new Context()
@@ -20,6 +23,8 @@ async function bench() {
   const rename = vi.fn(async () => ({}))
   const insertSessionBefore = vi.fn(async () => ({}))
   const open = vi.fn()
+  const closeSidebar = vi.fn()
+  ctx.provide('layout', { closeSidebar } as never)
   const clear = vi.fn()
   const search = vi.fn(async () => ({
     ok: true as const,
@@ -71,7 +76,7 @@ async function bench() {
   ctx.provide('locale', locale)
   return {
     ctx, slots: ctx.get('slots') as SlotRegistry, locale, create, rename,
-    insertSessionBefore, open, clear, search, renameSession, binding, fork, pickDirectory,
+    insertSessionBefore, open, closeSidebar, clear, search, renameSession, binding, fork, pickDirectory,
   }
 }
 
@@ -90,7 +95,7 @@ describe('ui-workspace apply', () => {
 
   it('declares the services it drives', () => {
     expect(inject).toEqual([
-      'slots', 'sessions', 'workspaces', 'locale', 'remote', 'remote.directoryPicker',
+      'slots', 'sessions', 'workspaces', 'locale', 'remote', 'remote.directoryPicker', 'layout',
     ])
   })
 
@@ -126,6 +131,7 @@ describe('ui-workspace apply', () => {
     expect(startSession).toHaveBeenLastCalledWith(undefined)
     browser.open('session' as never)
     expect(b.open).toHaveBeenCalledWith('session')
+    expect(b.closeSidebar).not.toHaveBeenCalled()
     const signal = new AbortController().signal
     await expect(browser.searchSessions('match', signal)).resolves.toEqual({
       items: [{ sessionId: 'session', snippet: 'match' }],
@@ -151,6 +157,21 @@ describe('ui-workspace apply', () => {
     const picker = (b.slots.entries('conversation.hero.workspace')[0]!.inject as () => WorkspacePickerInjected)()
     await picker.createWorkspace({ path: '/tmp/project' })
     expect(b.create).toHaveBeenCalledWith({ path: '/tmp/project' })
+  })
+
+  it('opens a session once and dismisses the phone sidebar on every selection tap', async () => {
+    vi.stubGlobal('matchMedia', vi.fn(() => ({ matches: true })))
+    const b = await bench()
+    declare(b.slots, 'sidebar.workspaces')
+    const plugin = b.ctx.plugin({ inject: [...inject], apply })
+    await plugin.await()
+    const browser = (b.slots.entries('sidebar.workspaces')[0]!.inject as () => WorkspaceBrowserInjected)()
+    browser.open('session' as never)
+    expect(b.open).toHaveBeenCalledTimes(1)
+    expect(b.closeSidebar).toHaveBeenCalledTimes(1)
+    browser.open('session' as never)
+    expect(b.closeSidebar).toHaveBeenCalledTimes(2)
+    await plugin.dispose()
   })
 
   it('declares the two directory-flow holes and reports their occupancy per surface', async () => {

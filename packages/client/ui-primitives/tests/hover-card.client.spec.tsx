@@ -52,6 +52,43 @@ function installClipboard(writeText: (text: string) => Promise<void>): () => voi
 }
 
 describe('HoverCard', () => {
+  it('lets the first touch tap activate the anchor without opening a preview', () => {
+    const activate = vi.fn()
+    render(<HoverCard anchor={<button onClick={activate}>Open session</button>} content={<div>touch preview</div>}
+      openDelayMs={0} copyLabel="Copy" copiedLabel="Copied" />)
+    const anchor = screen.getByRole('button', { name: 'Open session' })
+    const event = new MouseEvent('pointerover', { bubbles: true })
+    Object.defineProperty(event, 'pointerType', { value: 'touch' })
+    fireEvent(anchor, event)
+    act(() => { vi.advanceTimersByTime(1000) })
+    expect(screen.queryByText('touch preview')).toBeNull()
+    fireEvent.pointerDown(anchor)
+    fireEvent.pointerUp(anchor)
+    fireEvent.click(anchor)
+    expect(activate).toHaveBeenCalledTimes(1)
+  })
+
+  it('cancels a pending mouse preview when contact switches to touch', () => {
+    const { wrapper } = mount()
+    fireEvent.pointerEnter(wrapper)
+    const event = new MouseEvent('pointerover', { bubbles: true })
+    Object.defineProperty(event, 'pointerType', { value: 'touch' })
+    fireEvent(wrapper, event)
+    act(() => { vi.advanceTimersByTime(1000) })
+    expect(screen.queryByText('card body')).toBeNull()
+  })
+
+  it('dismisses an open mouse preview when contact switches to touch', () => {
+    const { wrapper } = mount()
+    fireEvent.pointerEnter(wrapper)
+    act(() => { vi.advanceTimersByTime(500) })
+    expect(screen.getByText('card body')).toBeTruthy()
+    const event = new MouseEvent('pointerover', { bubbles: true })
+    Object.defineProperty(event, 'pointerType', { value: 'touch' })
+    fireEvent(wrapper, event)
+    expect(screen.queryByText('card body')).toBeNull()
+  })
+
   it('opens after the dwell delay, positioned right of the anchor', () => {
     const { wrapper } = mount()
     fireEvent.pointerEnter(wrapper)

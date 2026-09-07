@@ -11,6 +11,8 @@
   ],
   "license": "MIT",
   "dependencies": {
+    "@deepseek-ai/dsh-api-browser-controller": "link:../../packages/api/browser-controller",
+    "@deepseek-ai/dsh-client-ui-browser": "link:../../packages/client/ui-browser",
     "playwright": "^1.62.0"
   },
   "dsh": {
