@@ -43,6 +43,8 @@
     "tests/settings-chrome.e2e.ts",
     "tests/usage-settings.e2e.ts",
     "tests/models-settings.e2e.ts",
+    "tests/mobile-authenticator.e2e.ts",
+    "tests/browser-optional.e2e.ts",
     "tests/default-model.e2e.ts",
     "tests/github-ready-review.e2e.ts",
     "tests/streaming-fence-highlight.e2e.ts",

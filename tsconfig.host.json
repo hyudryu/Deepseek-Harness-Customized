@@ -34,6 +34,8 @@
     "apps/web/tests/settings-chrome.e2e.ts",
     "apps/web/tests/usage-settings.e2e.ts",
     "apps/web/tests/models-settings.e2e.ts",
+    "apps/web/tests/mobile-authenticator.e2e.ts",
+    "apps/web/tests/browser-optional.e2e.ts",
     "apps/web/tests/onboarding-deepseek-config.e2e.ts",
     "apps/web/tests/onboarding-usable-provider.e2e.ts",
     "apps/web/tests/remote-welcome.e2e.ts",
@@ -122,6 +124,8 @@
     "scripts/client-bundle-purity.spec.ts"
   ],
   "references": [
+    { "path": "./packages/host/authenticator" },
+    { "path": "./packages/host/mobile-access" },
     { "path": "./vendor/cosmokit" },
     { "path": "./vendor/schemastery" },
     { "path": "./vendor/cordis" },
@@ -160,6 +164,7 @@
     { "path": "./packages/api/settings-controller" },
     { "path": "./packages/api/usage-controller" },
     { "path": "./packages/api/workspace-controller/tsconfig.host.json" },
+    { "path": "./packages/api/browser-controller/tsconfig.host.json" },
     { "path": "./packages/typert/loader" },
     { "path": "./packages/session/session-persistence" },
     { "path": "./packages/session/session-format" },

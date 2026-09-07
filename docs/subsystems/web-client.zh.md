@@ -35,33 +35,6 @@ Connection 拥有 request correlation、`/api` carrier、trust check、精确 Fe
 
 [用量控制器](../../packages/api/usage-controller/README.zh.md) 通过 `ctx.remote.usage.summary()` 提供 `UsageSummary`。其 `UsageDay` 记录包含 UTC 日期、提供方、模型和 token 数。汇总包含保留历史的 token 总量、每日峰值 token 数、最长会话的已完成轮次活动时间、会话数和缺少用量的尝试数。[用量设置插件](../../packages/client/ui-settings-usage/README.zh.md) 投影这些值，不维护第二份计数存储。
 
-<!-- BEGIN GENERATED cordis-surface (gen-cordis-catalog.ts) — do not edit between markers -->
-
-<a id="cordis-surface"></a>
-
-## Cordis API
-
-Generated from source by `scripts/gen-cordis-catalog.ts` (verified fresh by `pnpm run verify-cordis-catalog` in doc-sync; regenerate with `pnpm run gen-cordis-catalog`) — the language sides differ only in locale-specific paired document paths. Signature blocks use a `ts cordis-catalog` fence and keep the original source JSDoc; dispatch modes are defined in the [primer](../cordis-primer.zh.md#dispatch-modes), and the framework-inherited `ctx` API lives in [cordis-api/inherited.md](../cordis-api/inherited.md).
-
-<a id="ctxusagecontroller--usagecontroller"></a>
-
-### `ctx.usageController` — `UsageController`
-
-Host owner of the historical `usage` Remote namespace.
-
-```ts cordis-catalog
-/**
- * Read persisted sessions sequentially without activating agents or taking write ownership.
- * @returns UTC daily model totals and all-time summary statistics.
- * @throws RemoteError when Session persistence is unavailable.
- * @throws If persistence list, open, read, or close fails; no partial summary is returned.
- */
-@Remote async summary(): Promise<UsageSummary>
-```
-
-Source: [`packages/api/usage-controller/src/index.ts`](../../packages/api/usage-controller/src/index.ts)
-<!-- END GENERATED cordis-surface -->
-
 ## Client models
 
 每个 API controller 包都拥有配对的 Host face 与 Client face。Host 侧拥有权威 mutation 与 stream 生产；Client 侧基于相同的生成 wire type 维护 identity 稳定、与 React 无关的 model，并公开 observable snapshot 与 command。UI 包消费这些 Client service，不在 component store 中复制 transport state。
@@ -124,3 +97,76 @@ Source: [`packages/api/usage-controller/src/index.ts`](../../packages/api/usage-
 - [API Gateway](../api-gateway.zh.md)：Host method、生成的 Remote contribution、stream 与 forwarded event。
 - [Web Client Slots](slots.zh.md)：component、hook、store、injection 与 placement。
 - [Conversation](conversation.zh.md)：持久 event correlation、target snapshot，以及 Chat 或 Trajectory view contribution。
+
+## 会话浏览器查看
+
+[浏览器控制器](../../packages/api/browser-controller/README.zh.md) 向[浏览器面板](../../packages/client/ui-browser/README.zh.md) 转发 `ctx.browserControl` 操作和 `BrowserSnapshot` 流。每个快照替换打开状态、当前页面 URL 与标题、操作历史和可选的截图画面。这些实时浏览器信息与持久化 Session 历史相互独立；隐藏面板不会关闭会话浏览器。
+
+<!-- BEGIN GENERATED cordis-surface (gen-cordis-catalog.ts) — do not edit between markers -->
+
+<a id="cordis-surface"></a>
+
+## Cordis API
+
+Generated from source by `scripts/gen-cordis-catalog.ts` (verified fresh by `pnpm run verify-cordis-catalog` in doc-sync; regenerate with `pnpm run gen-cordis-catalog`) — the language sides differ only in locale-specific paired document paths. Signature blocks use a `ts cordis-catalog` fence and keep the original source JSDoc; dispatch modes are defined in the [primer](../cordis-primer.zh.md#dispatch-modes), and the framework-inherited `ctx` API lives in [cordis-api/inherited.md](../cordis-api/inherited.md).
+
+<a id="ctxbrowsercontrol--browsercontrol"></a>
+
+### `ctx.browserControl` — `BrowserControl`
+
+Live browser facts and control provided by the browser-control plugin.
+
+```ts cordis-catalog
+/**
+ * Read the current replaceable snapshot for one session.
+ * @param sessionId - session whose browser is observed.
+ * @returns the current browser snapshot, including closed state for an unknown session.
+ */
+snapshot(sessionId: SessionId): BrowserSnapshot
+
+/**
+ * Be notified on every new snapshot for one session.
+ * @param sessionId - session whose snapshots are observed.
+ * @param listener - snapshot callback.
+ * @returns unsubscribe function; a no-op when the session is unknown.
+ */
+subscribe(sessionId: SessionId, listener: (snapshot: BrowserSnapshot) => void): () => void
+
+/**
+ * Ensure an open context and page for one session, navigating to the optional url.
+ * @param sessionId - session whose browser is opened.
+ * @param url - optional navigation destination.
+ * @throws Navigation failures; the remaining open context is published and can be closed.
+ */
+open(sessionId: SessionId, url?: string): Promise<void>
+
+/**
+ * Close one session's browser context, if any; retain any still-open context if cleanup fails.
+ * @param sessionId - session whose browser is closed.
+ * @throws Context cleanup failures; callers may retry.
+ */
+close(sessionId: SessionId): Promise<void>
+```
+
+Types: [SessionId](core.zh.md)
+
+Source: [`packages/api/browser-controller/src/index.ts`](../../packages/api/browser-controller/src/index.ts)
+
+<a id="ctxusagecontroller--usagecontroller"></a>
+
+### `ctx.usageController` — `UsageController`
+
+Host owner of the historical `usage` Remote namespace.
+
+```ts cordis-catalog
+/**
+ * Read persisted sessions sequentially without activating agents or taking write ownership.
+ * @returns UTC daily model totals and all-time summary statistics.
+ * @throws RemoteError when Session persistence is unavailable.
+ * @throws If persistence list, open, read, or close fails; no partial summary is returned.
+ */
+@Remote async summary(): Promise<UsageSummary>
+```
+
+Source: [`packages/api/usage-controller/src/index.ts`](../../packages/api/usage-controller/src/index.ts)
+<!-- END GENERATED cordis-surface -->

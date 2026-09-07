@@ -6,7 +6,7 @@ import { usePointerGrace } from './pointer-grace.ts'
 import css from './HoverCard.module.css'
 
 /**
- * Render an anchor with a hover-triggered preview card.
+ * Render an anchor with a hover-triggered preview card; touch activates only the anchor.
  * @param props.anchor - the hover target (rendered in place inside a wrapper span).
  * @param props.content - card content; the pointer may rest on it, so it is
  * readable and selectable, but it carries no dismissal affordance of its own.
@@ -171,7 +171,14 @@ export function HoverCard({
     <span
       ref={rootRef}
       className={css.root}
-      onPointerEnter={() => {
+      onPointerEnter={(event) => {
+        // Touch contact must activate the anchor directly, without a hover preview.
+        if (event.pointerType === 'touch') {
+          clearTimer()
+          cancelClose()
+          if (open) close()
+          return
+        }
         if (disabled) return
         // Coming back inside during the grace (the gap, or the card itself)
         // keeps the current card rather than restarting the dwell.

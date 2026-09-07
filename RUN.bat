@@ -30,6 +30,11 @@ echo [1/3] pnpm install ...
 powershell -NoProfile -Command "& $env:ComSpec /d /c 'pnpm install' 2>&1 | ForEach-Object { $line = $_.ToString(); Write-Host $line; Add-Content -LiteralPath $env:LOG -Value $line -Encoding UTF8 }; exit $LASTEXITCODE"
 if errorlevel 1 goto :fail
 
+echo Installing and checking custom plugins ...
+rem Standalone custom plugins are not members of the root pnpm workspace.
+powershell -NoProfile -Command "& $env:ComSpec /d /c 'pnpm run install:custom-plugins' 2>&1 | ForEach-Object { $line = $_.ToString(); Write-Host $line; Add-Content -LiteralPath $env:LOG -Value $line -Encoding UTF8 }; exit $LASTEXITCODE"
+if errorlevel 1 goto :fail
+
 echo [2/3] pnpm run build (takes several minutes) ...
 powershell -NoProfile -Command "& $env:ComSpec /d /c 'pnpm run build' 2>&1 | ForEach-Object { $line = $_.ToString(); Write-Host $line; Add-Content -LiteralPath $env:LOG -Value $line -Encoding UTF8 }; exit $LASTEXITCODE"
 if errorlevel 1 goto :fail

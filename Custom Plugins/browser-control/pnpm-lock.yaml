@@ -8,6 +8,12 @@ importers:
 
   .:
     dependencies:
+      '@deepseek-ai/dsh-api-browser-controller':
+        specifier: link:../../packages/api/browser-controller
+        version: link:../../packages/api/browser-controller
+      '@deepseek-ai/dsh-client-ui-browser':
+        specifier: link:../../packages/client/ui-browser
+        version: link:../../packages/client/ui-browser
       playwright:
         specifier: ^1.62.0
         version: 1.62.1

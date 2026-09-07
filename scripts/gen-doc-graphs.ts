@@ -99,6 +99,14 @@ const GROUP_ORDER = [
 
 const SERVICE_ROLES: ServiceRole[] = [
   {
+    key: 'browserControl',
+    pkg: 'api-browser-controller',
+    title: 'Session browser state and control',
+    mode: 'core',
+    consumers: ['api-browser-controller'],
+    note: 'The standalone browser-control plugin owns Playwright contexts; the controller forwards live snapshots and browser operations to the Web client.',
+  },
+  {
     key: 'attachments',
     pkg: 'attachment',
     title: 'Durable binary attachment storage',

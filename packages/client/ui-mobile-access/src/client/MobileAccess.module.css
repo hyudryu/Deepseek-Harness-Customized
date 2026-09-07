@@ -1,0 +1,9 @@
+.trigger { display: inline-flex; align-items: center; justify-content: center; width: 42px; height: 42px; padding: 0; border: none; border-radius: 12px; background: transparent; color: var(--dsw-alias-label-primary); cursor: pointer; }
+.trigger:hover { background: var(--dsw-alias-interactive-bg-hover); }
+.dialog { width: min(420px, calc(100vw - 24px)); max-height: calc(100dvh - 24px); overflow-y: auto; }
+.toggle { display: flex; align-items: center; justify-content: space-between; gap: 16px; min-height: 44px; cursor: pointer; }
+.toggle input { width: 22px; height: 22px; accent-color: var(--dsw-alias-label-primary); }
+.pairing { display: flex; align-items: center; flex-direction: column; gap: 12px; }
+.pairing img { max-width: 100%; height: auto; border-radius: 8px; }
+.pairing code { overflow-wrap: anywhere; }
+.note { opacity: 0.7; font-size: 12px; }

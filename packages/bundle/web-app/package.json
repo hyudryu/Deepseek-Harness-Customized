@@ -112,6 +112,10 @@
     "@deepseek-ai/schemastery": "workspace:^",
     "commander": "^15.0.0",
     "open": "^11.0.0",
+    "@deepseek-ai/dsh-host-mobile-access": "workspace:^",
+    "@deepseek-ai/dsh-host-authenticator": "workspace:^",
+    "@deepseek-ai/dsh-client-ui-mobile-access": "workspace:^",
+    "@deepseek-ai/dsh-client-ui-authenticator": "workspace:^",
     "@deepseek-ai/dsh-api-usage-controller": "workspace:^",
     "@deepseek-ai/dsh-client-ui-settings-usage": "workspace:^"
   },

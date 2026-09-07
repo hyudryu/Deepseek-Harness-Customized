@@ -1,0 +1,58 @@
+{
+    "name":  "@deepseek-ai/dsh-host-authenticator",
+    "version":  "0.1.3-alpha.1",
+    "description":  "Local TOTP account storage, authenticated administration, and MCP tools",
+    "type":  "module",
+    "main":  "lib/index.js",
+    "types":  "lib/types/index.d.ts",
+    "exports":  {
+                    ".":  {
+                              "types":  "./lib/types/index.d.ts",
+                              "default":  "./lib/index.js"
+                          },
+                    "./src/*":  "./src/*",
+                    "./package.json":  "./package.json"
+                },
+    "files":  [
+                  "lib/index.js",
+                  "lib/types/**/*.d.ts"
+              ],
+    "license":  "MIT",
+    "publishConfig":  {
+                          "access":  "public"
+                      },
+    "repository":  {
+                       "type":  "git",
+                       "url":  "git+https://github.com/deepseek-ai/deepseek-harness.git",
+                       "directory":  "packages/host/authenticator"
+                   },
+    "dependencies":  {
+                         "@deepseek-ai/dsh-atomic-write":  "workspace:^",
+                         "@deepseek-ai/dsh-home-paths":  "workspace:^",
+                         "@deepseek-ai/schemastery":  "workspace:^",
+                         "@modelcontextprotocol/sdk":  "^1.30.0",
+                         "otpauth":  "^9.4.1",
+                         "zod":  "^4.4.3",
+                         "@deepseek-ai/dsh-brand":  "workspace:^"
+                     },
+    "peerDependencies":  {
+                             "@deepseek-ai/cordis":  "workspace:^",
+                             "@deepseek-ai/dsh-host-webserver":  "workspace:^",
+                             "@deepseek-ai/dsh-client-connection":  "workspace:^",
+                             "@deepseek-ai/dsh-tools":  "workspace:^",
+                             "@deepseek-ai/dsh-settings":  "workspace:^"
+                         },
+    "devDependencies":  {
+                            "@deepseek-ai/cordis":  "workspace:^",
+                            "@deepseek-ai/dsh-host-webserver":  "workspace:^",
+                            "@deepseek-ai/dsh-client-connection":  "workspace:^",
+                            "@deepseek-ai/dsh-tools":  "workspace:^",
+                            "@deepseek-ai/dsh-settings":  "workspace:^",
+                            "@deepseek-ai/cordis-plugin-loader":  "workspace:^",
+                            "@deepseek-ai/cordis-plugin-include":  "workspace:^",
+                            "@deepseek-ai/dsh-credentials-local":  "workspace:^",
+                            "@deepseek-ai/dsh-system-prompt":  "workspace:^",
+                            "@deepseek-ai/dsh-settings-file":  "workspace:^",
+                            "@deepseek-ai/dsh-llm":  "workspace:^"
+                        }
+}

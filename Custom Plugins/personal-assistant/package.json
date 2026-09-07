@@ -12,6 +12,7 @@
   ],
   "license": "MIT",
   "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.25.2",
     "@strands-agents/sdk": "^1.13.0",
     "openai": "^6.49.0"
   },

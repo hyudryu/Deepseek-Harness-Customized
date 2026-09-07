@@ -1,0 +1,8 @@
+version: 1
+scenario: authenticator-tools
+profile: headless
+composition: authenticator
+recording: authored
+header:
+  class: authenticator
+  pin: true

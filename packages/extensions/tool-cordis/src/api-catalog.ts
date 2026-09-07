@@ -594,6 +594,37 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
     ],
   },
   {
+    key: 'browserControl',
+    summary: 'Live browser facts and control provided by the browser-control plugin.',
+    description: 'Live browser facts and control provided by the browser-control plugin.',
+    methods: [
+      {
+        signature: 'snapshot(sessionId: SessionId): BrowserSnapshot',
+        description: 'Read the current replaceable snapshot for one session.',
+        parameters: [{ name: 'sessionId', description: 'session whose browser is observed.' }],
+        returns: 'the current browser snapshot, including closed state for an unknown session.',
+      },
+      {
+        signature: 'subscribe(sessionId: SessionId, listener: (snapshot: BrowserSnapshot) => void): () => void',
+        description: 'Be notified on every new snapshot for one session.',
+        parameters: [{ name: 'sessionId', description: 'session whose snapshots are observed.' }, { name: 'listener', description: 'snapshot callback.' }],
+        returns: 'unsubscribe function; a no-op when the session is unknown.',
+      },
+      {
+        signature: 'open(sessionId: SessionId, url?: string): Promise<void>',
+        description: 'Ensure an open context and page for one session, navigating to the optional url.',
+        parameters: [{ name: 'sessionId', description: 'session whose browser is opened.' }, { name: 'url', description: 'optional navigation destination.' }],
+        throws: ['Navigation failures; the remaining open context is published and can be closed.'],
+      },
+      {
+        signature: 'close(sessionId: SessionId): Promise<void>',
+        description: 'Close one session\'s browser context, if any; retain any still-open context if cleanup fails.',
+        parameters: [{ name: 'sessionId', description: 'session whose browser is closed.' }],
+        throws: ['Context cleanup failures; callers may retry.'],
+      },
+    ],
+  },
+  {
     key: 'clientModules',
     summary: 'The web plugin table service: incremental `dsh.client` scan + wire composition + bundle route + index injection rows.',
     description: 'The web plugin table service: incremental `dsh.client` scan + wire composition + bundle route + index injection rows. Construction runs the activation scan synchronously — a malformed declaration or missing bundle among the already-loaded entries aggregates into one loud throw (FAILED fiber; the boot activation audit reports it).',
@@ -2793,6 +2824,12 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
     description: 'The browser HTTP carrier service. Activation listens immediately. Route registration order does not affect requests because configured named routes must be distinct, and the fallback handler answers anything not yet claimed during startup with 404 until its owner registers. A listen failure rejects initialization, and the boot process reports the failed fiber.',
     methods: [
       {
+        signature: 'async listenOn(address: string, accepts: (request: IncomingMessage) => boolean): Promise<() => Promise<void>>',
+        description: 'Serve the existing routes on another interface at the primary port.',
+        parameters: [{ name: 'address', description: 'concrete local interface address to bind.' }, { name: 'accepts', description: 'listener-specific request policy, applied before dispatch.' }],
+        returns: 'disposer closing this listener and all of its HTTP and upgrade sockets.',
+      },
+      {
         signature: 'register(route: WebRoute): () => void',
         description: 'Register a named route. Duplicate (kind, path) throws — route patterns are a composition-level contract, so a collision is a misconfiguration.',
         parameters: [{ name: 'route', description: 'kind, path, and the owning handler.' }],
@@ -3726,6 +3763,14 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   {
     name: 'BrandedNumber',
     declaration: 'export type BrandedNumber<B extends string> = number & {\n    readonly [BRAND]: B;\n};',
+  },
+  {
+    name: 'BrowserActionEntry',
+    declaration: 'export interface BrowserActionEntry {\n    readonly id: number;\n    readonly action: string;\n    readonly args: string;\n    readonly ok: boolean;\n    readonly url: string;\n    readonly time: number;\n    readonly viewportWidth?: number;\n    readonly viewportHeight?: number;\n    readonly clickX?: number;\n    readonly clickY?: number;\n}',
+  },
+  {
+    name: 'BrowserSnapshot',
+    declaration: 'export interface BrowserSnapshot {\n    readonly open: boolean;\n    readonly url: string;\n    readonly title: string;\n    readonly actions: readonly BrowserActionEntry[];\n    readonly frame?: string;\n    readonly frameWidth?: number;\n    readonly frameHeight?: number;\n}',
   },
   {
     name: 'ClientArtifactBaseline',

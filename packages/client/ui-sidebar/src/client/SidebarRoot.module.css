@@ -357,3 +357,8 @@
     animation: none;
   }
 }
+
+.settingsRow { display: flex; align-items: center; width: 100%; min-width: 0; }
+.settingsRow .settingsArea { flex: 1; width: auto; }
+.settingsActions { display: flex; flex: none; }
+.collapsed .settingsRow { flex-direction: column; }

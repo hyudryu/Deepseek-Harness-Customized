@@ -1,0 +1,15 @@
+.card { border: 1px solid var(--dsw-alias-border-l3); border-radius: 12px; list-style: none; overflow: hidden; }
+.heading { display: flex; flex-direction: column; gap: 6px; padding: 16px; width: 100%; text-align: left; color: inherit; border: 0; background: transparent; cursor: pointer; }
+.heading span { font-size: 12px; color: var(--dsw-alias-text-l3); }
+.body { padding: 0 16px 16px; }
+.file { display: none; }
+.button { min-height: 36px; border: 1px solid var(--dsw-alias-border-l3); border-radius: 8px; background: transparent; color: inherit; padding: 6px 12px; cursor: pointer; }
+.button:disabled { opacity: .5; cursor: wait; }
+.accounts { list-style: none; margin: 12px 0 0; padding: 0; }
+.account { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; padding: 16px 0; border-top: 1px solid var(--dsw-alias-border-l3); }
+.identity { display: flex; flex-direction: column; gap: 4px; min-width: 100px; flex: 1; overflow-wrap: anywhere; }
+.identity span, .verification small { font-size: 12px; color: var(--dsw-alias-text-l3); }
+.verification { display: flex; flex-direction: column; gap: 4px; }
+.verification output { font: 24px ui-monospace, monospace; letter-spacing: 3px; }
+.confirm { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+@media (max-width: 600px) { .button { min-height: 44px; } .account { gap: 16px; } }
