@@ -33,7 +33,7 @@ Connection 拥有 request correlation、`/api` carrier、trust check、精确 Fe
 
 ### 用量
 
-[用量控制器](../../packages/api/usage-controller/README.zh.md) 通过 `ctx.remote.usage.summary()` 提供 `UsageSummary`。其 `UsageDay` 记录包含 UTC 日期、供应商、模型和 token 数。汇总包含保留历史的 token 总量、每日峰值 token 数、最长会话的已完成轮次活动时间、会话数和缺少用量的尝试数。[用量设置插件](../../packages/client/ui-settings-usage/README.zh.md) 投影这些值，不维护第二份计数存储。
+[用量控制器](../../packages/api/usage-controller/README.zh.md) 通过 `ctx.remote.usage.summary()` 提供 `UsageSummary`。其 `UsageDay` 记录包含 UTC 日期、提供方、模型和 token 数。汇总包含保留历史的 token 总量、每日峰值 token 数、最长会话的已完成轮次活动时间、会话数和缺少用量的尝试数。[用量设置插件](../../packages/client/ui-settings-usage/README.zh.md) 投影这些值，不维护第二份计数存储。
 
 <!-- BEGIN GENERATED cordis-surface (gen-cordis-catalog.ts) — do not edit between markers -->
 
@@ -54,6 +54,7 @@ Host owner of the historical `usage` Remote namespace.
  * Read persisted sessions sequentially without activating agents or taking write ownership.
  * @returns UTC daily model totals and all-time summary statistics.
  * @throws RemoteError when Session persistence is unavailable.
+ * @throws If persistence list, open, read, or close fails; no partial summary is returned.
  */
 @Remote async summary(): Promise<UsageSummary>
 ```

@@ -25,36 +25,37 @@
     - paragraph: Token activity across your saved sessions
     - button "Refresh"
   - term: Total tokens
-  - definition: 1K
+  - definition: 1.6K
   - term: Peak daily tokens
-  - definition: 1K
+  - definition: 1.4K
   - term: Longest session
   - definition: 0 h 0 m
   - term: Current streak
-  - definition: 1 d
+  - definition: 2 d
   - term: Longest streak
-  - definition: 1 d
+  - definition: 2 d
   - region "Token activity":
     - heading "Token activity" [level=3]
     - button "Daily" [pressed]
     - button "Weekly"
     - button "Cumulative"
-    - text: Sep Oct Nov Dec Jan Feb Mar Apr May Jul Aug Sep Less More
+    - text: Sep Oct Nov Dec Jan Feb Mar Apr May Jun Jul Aug Sep Less More
+    - group: Activity data
   - heading "Time range" [level=3]
   - button "Last 7 days" [pressed]
   - button "Last 30 days"
   - region "Daily token trend":
     - heading "Daily token trend" [level=3]
     - text: Usage model · fixture
-    - img "Daily token trend": 0 500 1K Sep 1 Sep 4 Sep 7
+    - img "Daily token trend": 0 700 1.4K Sep 1 Sep 4 Sep 7
     - group: Daily
   - region "Model usage":
     - heading "Model usage" [level=3]
     - img "Model usage"
-    - strong: 1K
+    - strong: 1.6K
     - text: tokens
     - list:
       - listitem:
         - strong: Usage model · fixture
-        - text: 1K tokens 100%
+        - text: 1.6K tokens 100%
   - paragraph: Dates use UTC. Tokens include input and output.

@@ -54,6 +54,7 @@ Host owner of the historical `usage` Remote namespace.
  * Read persisted sessions sequentially without activating agents or taking write ownership.
  * @returns UTC daily model totals and all-time summary statistics.
  * @throws RemoteError when Session persistence is unavailable.
+ * @throws If persistence list, open, read, or close fails; no partial summary is returned.
  */
 @Remote async summary(): Promise<UsageSummary>
 ```

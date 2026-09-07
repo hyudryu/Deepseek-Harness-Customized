@@ -18,8 +18,9 @@ function attempt(log: Session, inputTokens: number, outputTokens: number): void 
 }
 
 describe('historical usage accounting', () => {
-  it('replaces an attempt settlement with its final message and includes disjoint cache buckets', async () => {
+  it('counts failed attempts and final messages separately within the same step', async () => {
     const log = await session()
+    log.append('request/context', { provider: 'test', model: 'first' })
     attempt(log, 10, 2)
     const usage = { inputTokens: 10, outputTokens: 3, cacheReadTokens: 5, cacheWriteTokens: 7, reasoningTokens: 2 }
     log.append('assistant/message', {
@@ -27,8 +28,47 @@ describe('historical usage accounting', () => {
       message: createMessage({ role: 'assistant', content: [], source: { kind: 'model', provider: 'test', model: 'first' } }),
     }, { surfaceOp: 'append' })
     expect(aggregateSessionUsage(log.snapshotEvents()).days).toEqual([
-      { date: new Date().toISOString().slice(0, 10), provider: 'test', model: 'first', tokens: 25 },
+      { date: new Date().toISOString().slice(0, 10), provider: 'test', model: 'first', tokens: 37 },
     ])
+  })
+
+  it('uses exact provider totals and the last usage sample once per settlement', async () => {
+    const log = await session()
+    log.append('assistant/attempt', { turn: 1, step: 1, stream: [
+      { type: 'chunk', time: 0, chunk: { type: 'text-delta', index: 0, text: 'partial' } },
+      { type: 'chunk', time: 0, chunk: { type: 'usage', usage: { inputTokens: 1, outputTokens: 2, totalTokens: 3 } } },
+      { type: 'chunk', time: 1, chunk: { type: 'usage', usage: { inputTokens: 10, outputTokens: 2, totalTokens: 99, reasoningTokens: 50 } } },
+    ] })
+    log.append('assistant/message', {
+      turn: 1, step: 1, stream: [], usage: { inputTokens: 10, outputTokens: 3, totalTokens: 0 },
+      message: createMessage({ role: 'assistant', content: [], source: { kind: 'model', provider: '', model: '' } }),
+    }, { surfaceOp: 'append' })
+    expect(aggregateSessionUsage(log.snapshotEvents()).days[0]?.tokens).toBe(99)
+  })
+
+  it('counts same-step retries without retry markers and preserves missing attempts', async () => {
+    const log = await session()
+    attempt(log, 10, 2)
+    log.append('assistant/attempt', { turn: 1, step: 1, stream: [] })
+    attempt(log, 20, 4)
+    const usage = aggregateSessionUsage(log.snapshotEvents())
+    expect(usage.days[0]?.tokens).toBe(36)
+    expect(usage.missingUsageAttempts).toBe(1)
+  })
+
+  it('inherits the latest route without charging inherited usage or turn duration', async () => {
+    const log = await session()
+    log.append('request/context', { provider: 'old', model: 'old' })
+    log.append('request/context', { provider: 'test', model: 'fork' })
+    log.append('turn/start', { turn: 1 })
+    attempt(log, 100, 200)
+    const inheritedEventCount = log.snapshotEvents().length
+    attempt(log, 10, 2)
+    log.append('turn/end', { turn: 1, reason: { kind: 'completed' } })
+    const usage = aggregateSessionUsage(log.snapshotEvents(), inheritedEventCount)
+    expect(usage.days[0]).toMatchObject({ provider: 'test', model: 'fork', tokens: 12 })
+    expect(usage.activeMs).toBe(0)
+    expect(usage.missingUsageAttempts).toBe(0)
   })
 
   it('counts billed retries separately and leaves missing usage explicit', async () => {

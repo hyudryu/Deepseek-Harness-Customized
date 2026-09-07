@@ -27,6 +27,7 @@ export class UsageController extends TypertRemoteService {
    * Read persisted sessions sequentially without activating agents or taking write ownership.
    * @returns UTC daily model totals and all-time summary statistics.
    * @throws RemoteError when Session persistence is unavailable.
+   * @throws If persistence list, open, read, or close fails; no partial summary is returned.
    */
   @Remote
   async summary(): Promise<UsageSummary> {
@@ -39,7 +40,7 @@ export class UsageController extends TypertRemoteService {
     for (const session of sessions) {
       const handle = await persistence.open(session.header.id, 'read')
       try {
-        const usage = aggregateSessionUsage(await handle.read(handle.inheritedEventCount))
+        const usage = aggregateSessionUsage(await handle.read(), handle.inheritedEventCount)
         longestSessionMs = Math.max(longestSessionMs, usage.activeMs)
         missingUsageAttempts += usage.missingUsageAttempts
         for (const row of usage.days) {

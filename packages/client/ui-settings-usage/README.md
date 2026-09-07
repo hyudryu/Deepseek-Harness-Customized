@@ -34,7 +34,7 @@ Mount this plugin as a Loader entry in a composition serving the Web client. It 
 <details>
 <summary>Implementation internals — click to expand</summary>
 
-The browser plugin contributes a `settings.section` entry with order 40 and reads the [usage controller](../../api/usage-controller/README.md). Chart data is derived from UTC daily rows. Typed locale dictionaries own visible labels, and the existing Settings shell owns navigation.
+The browser plugin contributes a `settings.section` entry with order 40 and reads the [usage controller](../../api/usage-controller/README.md). Chart data is derived from UTC daily rows. An activity-data disclosure exposes exact totals for the selected heatmap mode, and month labels mark UTC month transitions. Model colors remain stable across date ranges; trend dashes and legend swatches distinguish series without relying on color alone. Typed locale dictionaries own visible labels, and the existing Settings shell owns navigation.
 
 **Runtime invariant:** No companion is published because charts and metrics derive from one query response without independently maintained accounting state.
 

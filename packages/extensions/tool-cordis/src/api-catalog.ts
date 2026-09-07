@@ -2719,7 +2719,7 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
         description: 'Read persisted sessions sequentially without activating agents or taking write ownership.',
         parameters: [],
         returns: 'UTC daily model totals and all-time summary statistics.',
-        throws: ['RemoteError when Session persistence is unavailable.'],
+        throws: ['RemoteError when Session persistence is unavailable.', 'If persistence list, open, read, or close fails; no partial summary is returned.'],
       },
     ],
   },

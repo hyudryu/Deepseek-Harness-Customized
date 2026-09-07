@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 /** User-visible loading, refresh, empty state, and range interactions. */
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, expect, it, vi } from 'vitest'
 import { UsageSection } from '../src/client/UsageSection.tsx'
 import type { UsageProps } from '../src/client/UsageSection.tsx'
@@ -51,4 +51,27 @@ it('labels usage whose recorded provider and model are unknown', async () => {
   const load = vi.fn().mockResolvedValue({ ...empty, totalTokens: 12, days: [{ date, provider: '', model: '', tokens: 12 }] })
   render(<UsageSection {...props(load)} />)
   await waitFor(() =>{  expect(screen.getAllByText(`${en.unknownModel} · ${en.unknownProvider}`).length).toBeGreaterThan(0) })
+})
+
+
+it('exposes exact full-year activity values through a disclosure in every selected mode', async () => {
+  const date = new Date(Date.now() - 90 * 86_400_000).toISOString().slice(0, 10)
+  const next = new Date(Date.parse(date) + 86_400_000).toISOString().slice(0, 10)
+  const load = vi.fn().mockResolvedValue({ ...empty, totalTokens: 1244, days: [
+    { date, provider: 'local', model: 'old', tokens: 1234 },
+    { date: next, provider: 'local', model: 'old', tokens: 10 },
+  ] })
+  render(<UsageSection {...props(load)} />)
+  fireEvent.click(await screen.findByText(en.activityData))
+  const table = screen.getByRole('table', { name: en.activityData })
+  expect(within(table).getAllByRole('row')).toHaveLength(365)
+  const row = within(table).getByRole('rowheader', { name: date }).parentElement!
+  expect(within(row).getByRole('cell').textContent).toBe('1,234')
+  fireEvent.click(screen.getByRole('button', { name: en.cumulative }))
+  const nextRow = within(table).getByRole('rowheader', { name: next }).parentElement!
+  expect(within(nextRow).getByRole('cell').textContent).toBe('1,244')
+  expect(within(table).getByText(`${en.activity}: ${en.cumulative}`)).toBeTruthy()
+  fireEvent.click(screen.getByRole('button', { name: en.weekly }))
+  expect(within(table).getByText(`${en.activity}: ${en.weekly}`)).toBeTruthy()
+  expect(load).toHaveBeenCalledTimes(1)
 })
