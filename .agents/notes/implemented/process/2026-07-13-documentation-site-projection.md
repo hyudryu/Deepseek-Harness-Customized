@@ -4,6 +4,8 @@ Status: implemented
 
 English | [中文](2026-07-13-documentation-site-projection.zh.md)
 
+The [English-only fork decision](2026-09-07-english-only-fork-documentation.md) supersedes this record's bilingual maintenance requirements. Its translation mechanics and original rationale remain historical context; they impose no Chinese document, sidecar, or translation-update obligation on this fork.
+
 ## Problem
 
 The repository needs a navigable documentation website without turning the website directory into a second documentation source. Copying package guides, architecture pages, or generated catalogs into a site-specific tree allows the two copies to drift, while pointing VitePress directly at the repository root couples public URLs and navigation to the internal file layout. Repository-relative links also need different destinations on the website: published pages stay inside the site, but source files and unpublished contributor documents belong on GitHub.

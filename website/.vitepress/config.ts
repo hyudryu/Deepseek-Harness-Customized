@@ -59,8 +59,8 @@ interface GuideModules {
 const guideModules = {
   root: {
     guide: localeCollections.root[0],
-    develop: { label: '开发', collection: localeCollections.root[1] },
-    reference: { label: '参考', collection: localeCollections.root[2] },
+    develop: { label: 'Development', collection: localeCollections.root[1] },
+    reference: { label: 'Reference', collection: localeCollections.root[2] },
   },
   en: {
     guide: localeCollections.en[0],
@@ -158,33 +158,6 @@ function escapeVueInterpolation(html: string): string {
 const sharedTheme: Pick<DefaultTheme.Config, 'search' | 'socialLinks' | 'editLink'> = {
   search: {
     provider: 'local',
-    options: {
-      locales: {
-        root: {
-          translations: {
-            button: {
-              buttonText: '搜索文档',
-              buttonAriaLabel: '搜索文档',
-            },
-            modal: {
-              displayDetails: '显示详细列表',
-              resetButtonTitle: '清除搜索',
-              backButtonTitle: '关闭搜索',
-              noResultsText: '未找到相关结果',
-              footer: {
-                selectText: '选择',
-                selectKeyAriaLabel: '回车键',
-                navigateText: '切换',
-                navigateUpKeyAriaLabel: '上方向键',
-                navigateDownKeyAriaLabel: '下方向键',
-                closeText: '关闭',
-                closeKeyAriaLabel: 'Esc 键',
-              },
-            },
-          },
-        },
-      },
-    },
   },
   socialLinks: [
     { icon: 'github', link: 'https://github.com/deepseek-ai/deepseek-harness' },
@@ -196,7 +169,7 @@ const sharedTheme: Pick<DefaultTheme.Config, 'search' | 'socialLinks' | 'editLin
       if (typeof editSource !== 'string') throw new Error('Projected documentation page has no editSource frontmatter.')
       return `https://github.com/deepseek-ai/deepseek-harness/edit/master/${editSource}`
     },
-    text: '在 GitHub 上编辑此页',
+    text: 'Edit this page on GitHub',
   },
 }
 
@@ -206,7 +179,7 @@ const base = process.env.DOCS_BASE ?? '/'
 /** Site identity shared by the VitePress configuration and the llms.txt index. */
 const siteIdentity = {
   title: 'DeepSeek Harness',
-  description: '用于构建 Agent Harness 的插件化 SDK',
+  description: 'A plugin-based SDK for building agent harnesses',
 }
 
 /**
@@ -229,6 +202,7 @@ const wordmark = readFileSync(resolve(import.meta.dirname, '../public/wordmark.s
  * stay behind a query only Firefox answers.
  */
 const siteStyle = `
+.VPNavBarTranslations, .VPNavScreenTranslations { display: none !important; }
 .dsh-lockup { display: inline-flex; align-items: center; gap: 8px; min-width: 0; }
 .dsh-wordmark { display: block; height: 22px; width: auto; color: var(--vp-c-text-1); }
 .dsh-tag {
@@ -313,12 +287,12 @@ export default withMermaid({
   outDir: '.dist',
   locales: {
     root: {
-      label: '简体中文',
-      lang: 'zh-CN',
+      label: 'English',
+      lang: 'en-US',
       themeConfig: {
-        siteTitle: siteTitle('技术预览'),
+        siteTitle: siteTitle('Technical preview'),
         nav: [
-          { text: '入门', link: landingLink('root', guideModules.root.guide), activeMatch: '^/guide/' },
+          { text: 'Guide', link: landingLink('root', guideModules.root.guide), activeMatch: '^/guide/' },
           ...moduleNav('root'),
         ],
         sidebar: {
@@ -326,15 +300,8 @@ export default withMermaid({
           '/develop/': sidebar('root', 'zh-develop'),
           '/reference/': sidebar('root', 'zh-reference'),
         },
-        outline: { label: '本页目录' },
-        docFooter: { prev: '上一篇', next: '下一篇' },
-        darkModeSwitchLabel: '外观',
-        lightModeSwitchTitle: '切换到浅色主题',
-        darkModeSwitchTitle: '切换到深色主题',
-        sidebarMenuLabel: '菜单',
-        returnToTopLabel: '返回顶部',
-        langMenuLabel: '切换语言',
-        skipToContentLabel: '跳至内容',
+        outline: { label: 'On this page' },
+        docFooter: { prev: 'Previous', next: 'Next' },
       },
     },
     en: {

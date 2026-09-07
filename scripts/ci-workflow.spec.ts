@@ -816,7 +816,7 @@ describe('Documentation site publication', () => {
 })
 
 describe('Git hooks', () => {
-  it('leaves frozen Agent Note sidecars to the archive verifier', () => {
+  it('does not require translation records for commits or merges', () => {
     const lefthook = loadWorkflow('lefthook.yml')
 
     for (const hookName of ['pre-commit', 'pre-merge-commit']) {
@@ -828,7 +828,7 @@ describe('Git hooks', () => {
         (job: unknown) => isRecord(job) && job.name === 'translation pairing (staged records)',
       )
 
-      expect(pairing).toMatchObject({ exclude: ['.agents/notes/archived/**'] })
+      expect(pairing).toBeUndefined()
     }
   })
 })
