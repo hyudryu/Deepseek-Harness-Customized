@@ -1,11 +1,10 @@
 /** Shipped Web profile assembly mounts browser controls only with the optional provider bundle. */
 import { afterEach, expect, it } from 'vitest'
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, unlinkSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, unlinkSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
-import { createRequire } from 'node:module'
+import { join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { composeEntries, initProfile, loadProfile, PROFILES_DIR, resolveBundleDir } from '@deepseek-ai/dsh-app-boot'
+import { composeEntries, initProfile, loadProfile, PROFILES_DIR } from '@deepseek-ai/dsh-app-boot'
 
 const anchor = fileURLToPath(new URL('../../../package.json', import.meta.url))
 const provider = fileURLToPath(new URL('../../../../../Custom Plugins/browser-control/', import.meta.url))
@@ -35,12 +34,11 @@ it.each([false, true])('composes the browser provider and both consumers togethe
   expect(mounted.map(row => row.name)).toEqual(enabled ? browserNames : [])
   expect(warnings).toEqual([])
   if (!enabled) return
-  const providerDir = resolveBundleDir('dsh', 'dsh-browser-control', anchor, profileDir)
-  const providerAnchor = join(providerDir, 'package.json')
-  const manifest = JSON.parse(readFileSync(providerAnchor, 'utf8')) as { dependencies: Record<string, string> }
+  const manifest = JSON.parse(readFileSync(join(provider, 'package.json'), 'utf8')) as { dependencies: Record<string, string> }
   for (const name of browserNames.slice(1)) {
-    expect(manifest.dependencies[name], `${name} in installation dependency closure`).toBeDefined()
-    const searchPaths = createRequire(providerAnchor).resolve.paths(name) ?? []
-    expect(searchPaths.some(path => existsSync(join(path, name, 'package.json'))), `${name} resolves from installed browser bundle`).toBe(true)
+    const dependency = manifest.dependencies[name]!
+    expect(dependency, `${name} in optional bundle dependencies`).toMatch(/^link:/)
+    const linked = JSON.parse(readFileSync(join(resolve(provider, dependency.slice(5)), 'package.json'), 'utf8')) as { name: string }
+    expect(linked.name).toBe(name)
   }
 })

@@ -5,7 +5,7 @@
  * injected session verbs; the component holds only transient viewing state.
  */
 import { useLayoutEffect, useRef, useState } from 'react'
-import type { PropsLocale, PropsRuntime, SlotInjectFace } from '@deepseek-ai/dsh-client-ui-slots'
+import type { PropsLocale, PropsRuntime, InjectFace } from '@deepseek-ai/dsh-client-ui-slots'
 import type { BrowserActionEntry } from '@deepseek-ai/dsh-api-browser-controller/types'
 import type { BrowserInjected } from './index.ts'
 import css from './BrowserPanel.module.css'
@@ -13,7 +13,7 @@ import css from './BrowserPanel.module.css'
 export type BrowserPanelProps =
   & PropsRuntime<'browser'>
   & PropsLocale<'browser'>
-  & SlotInjectFace<BrowserInjected>
+  & InjectFace<BrowserInjected>
 
 /** Screen-space cursor position over the viewport; fromUser distinguishes the agent vs the pointer. */
 interface CursorState { x: number; y: number; fromUser: boolean }

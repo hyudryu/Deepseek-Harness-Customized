@@ -96,7 +96,7 @@ jobs:
         run: node "Custom Plugins/browser-control/node_modules/playwright/cli.js" install --with-deps chromium
 
       - name: Test custom browser control
-        run: node --test "Custom Plugins/browser-control/test/browser.test.mjs"
+        run: node --test "Custom Plugins/browser-control/test/*.test.mjs"
 
       - name: Run static gates
         env:
