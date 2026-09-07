@@ -24,7 +24,7 @@ The upper-right browser icon starts the selected session's browser and expands i
 <a id="use-this-package"></a>
 ## Use this package
 
-The Web application composition mounts this UI with the [browser controller](../../api/browser-controller/README.md). Select a session, use the upper-right icon, and enter an address in the panel to navigate. The same icon collapses the panel; the panel's Stop browser action closes the browser context.
+The optional `Custom Plugins/browser-control` bundle mounts its provider, this UI, and the [browser controller](../../api/browser-controller/README.md). Select a session, use the upper-right icon, and enter an address in the panel to navigate. The same icon collapses the panel; the panel's Stop browser action closes the browser context.
 
 -----
 
@@ -34,7 +34,7 @@ The Web application composition mounts this UI with the [browser controller](../
 <details>
 <summary>Implementation internals — click to expand</summary>
 
-The [client plugin](src/client/index.ts) registers the `browser.toggle` and `browser` slots owned by [ui-layout](../ui-layout/README.md). Remote mutations check their result before updating viewing state. A session-scoped Remote stream delivers replacement snapshots to the panel and is disposed when the session view unmounts.
+The [client plugin](src/client/index.ts) registers the `browser.toggle` and `browser` slots owned by [ui-layout](../ui-layout/README.md). Remote mutations check their result before updating viewing state. A session-scoped observable adapts Remote snapshots through the inject `hooks` compartment. The renderer binds `useBrowser`; its first subscription opens the stream and its final unsubscribe disposes it. Snapshot references remain stable between publications. The default Web bundle mounts neither the controller nor this UI.
 
 </details>
 

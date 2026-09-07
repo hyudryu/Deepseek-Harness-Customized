@@ -1,6 +1,7 @@
 /** Browser-control Remote owner: live per-session browser state, action log, and screenshot frames. */
 
 import { Context } from '@deepseek-ai/cordis'
+import type { SessionId } from '@deepseek-ai/dsh-session'
 import { Remote, TypertRemoteService } from '@deepseek-ai/dsh-typert-protocol'
 import type {
   BrowserCloseRequest,
@@ -20,25 +21,27 @@ export interface BrowserControl {
    * @param sessionId - session whose browser is observed.
    * @returns the current browser snapshot, including closed state for an unknown session.
    */
-  snapshot(sessionId: string): BrowserSnapshot
+  snapshot(sessionId: SessionId): BrowserSnapshot
   /**
    * Be notified on every new snapshot for one session.
    * @param sessionId - session whose snapshots are observed.
    * @param listener - snapshot callback.
    * @returns unsubscribe function; a no-op when the session is unknown.
    */
-  subscribe(sessionId: string, listener: (snapshot: BrowserSnapshot) => void): () => void
+  subscribe(sessionId: SessionId, listener: (snapshot: BrowserSnapshot) => void): () => void
   /**
    * Ensure an open context and page for one session, navigating to the optional url.
    * @param sessionId - session whose browser is opened.
    * @param url - optional navigation destination.
+   * @throws Navigation failures; the remaining open context is published and can be closed.
    */
-  open(sessionId: string, url?: string): Promise<void>
+  open(sessionId: SessionId, url?: string): Promise<void>
   /**
-   * Close one session's browser context, if any.
+   * Close one session's browser context, if any; retain any still-open context if cleanup fails.
    * @param sessionId - session whose browser is closed.
+   * @throws Context cleanup failures; callers may retry.
    */
-  close(sessionId: string): Promise<void>
+  close(sessionId: SessionId): Promise<void>
 }
 
 declare module '@deepseek-ai/cordis' {
@@ -94,7 +97,7 @@ export class BrowserController extends TypertRemoteService {
     return this.ctx.get('browserControl') as BrowserControl
   }
 
-  private async *follow(sessionId: string, signal: AbortSignal): AsyncIterable<BrowserSnapshot> {
+  private async *follow(sessionId: SessionId, signal: AbortSignal): AsyncIterable<BrowserSnapshot> {
     signal.throwIfAborted()
     const queue: BrowserSnapshot[] = []
     let wake: (() => void) | undefined

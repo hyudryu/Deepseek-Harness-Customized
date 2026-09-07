@@ -4,12 +4,12 @@ import { execFileSync } from 'node:child_process'
 import { existsSync, lstatSync, readFileSync, readlinkSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { pathToFileURL } from 'node:url'
+import { isArchivedAgentNotePath, isMaintainedMarkdownPath } from './repo-files.ts'
 
 const root = resolve(import.meta.dirname, '..')
 const unavailableOwner = ['deepseek', 'ai'].join('-')
 const unavailableRepositoryName = ['deepseek', 'harness', 'sdk'].join('-')
 const unavailableRepository = `${unavailableOwner}/${unavailableRepositoryName}`
-const archivedAgentNotePrefix = '.agents/notes/archived/'
 
 const namedReferenceCharacters: Readonly<Record<string, string>> = {
   hyphen: '-',
@@ -43,10 +43,10 @@ export interface UnavailableRepositoryReference {
  * Locate unavailable-repository references in one active text file.
  * @param file - Repository-relative path used in diagnostics.
  * @param source - Text to inspect.
- * @returns every matching source line, excluding frozen archived Agent Notes.
+ * @returns every matching source line, excluding legacy Markdown and frozen archived Agent Notes.
  */
 export function findUnavailableRepositoryReferences(file: string, source: string): UnavailableRepositoryReference[] {
-  if (file.startsWith(archivedAgentNotePrefix)) return []
+  if (isArchivedAgentNotePath(file) || (file.endsWith('.md') && !isMaintainedMarkdownPath(file))) return []
 
   const references: UnavailableRepositoryReference[] = []
   for (const [index, line] of source.split('\n').entries()) {

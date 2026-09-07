@@ -24,7 +24,7 @@ kind: "package-reference"
 <a id="use-this-package"></a>
 ## 使用本包
 
-Web 应用组合同时挂载此 UI 和[浏览器控制器](../../api/browser-controller/README.zh.md)。选择会话，点击右上角图标，然后在面板中输入地址进行导航。同一图标可收起面板；面板中的停止浏览器操作会关闭浏览器上下文。
+可选的 `Custom Plugins/browser-control` 包同时挂载提供方、此 UI 和[浏览器控制器](../../api/browser-controller/README.zh.md)。选择会话，点击右上角图标，然后在面板中输入地址进行导航。同一图标可收起面板；面板中的停止浏览器操作会关闭浏览器上下文。
 
 -----
 
@@ -34,7 +34,7 @@ Web 应用组合同时挂载此 UI 和[浏览器控制器](../../api/browser-con
 <details>
 <summary>实现细节——点击展开</summary>
 
-[客户端插件](src/client/index.ts) 注册 [ui-layout](../ui-layout/README.zh.md) 拥有的 `browser.toggle` 和 `browser` 槽位。Remote 修改操作在更新查看状态前检查结果。会话级 Remote 流向面板提供替换快照，并在会话视图卸载时释放。
+[客户端插件](src/client/index.ts) 注册 [ui-layout](../ui-layout/README.zh.md) 拥有的 `browser.toggle` 和 `browser` 槽位。Remote 修改操作在更新查看状态前检查结果。会话级可观察数据源通过 inject 的 `hooks` 区域提供 Remote 快照。渲染器绑定 `useBrowser`；首次订阅打开流，最后一次取消订阅释放流。两次发布之间的快照引用保持稳定。默认 Web 包不挂载控制器或此 UI。
 
 </details>
 

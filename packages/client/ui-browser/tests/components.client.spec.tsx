@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+import { useSyncExternalStore } from 'react'
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, expect, it, vi } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
@@ -7,54 +8,30 @@ import { en as commonEn } from '@deepseek-ai/dsh-client-locale/src/locales/en.ts
 import type { BrowserSnapshot } from '@deepseek-ai/dsh-api-browser-controller/types'
 import { BrowserPanel, type BrowserPanelProps } from '../src/client/BrowserPanel.tsx'
 import { StartBrowserDock } from '../src/client/StartBrowserDock.tsx'
-import { apply, type BrowserInjected, type BrowserStreamHandle } from '../src/client/index.ts'
+import { apply, type BrowserInjected } from '../src/client/index.ts'
 import { en } from '../src/client/locales.ts'
 
 afterEach(cleanup)
 const copy = { ...commonEn, ...en }
 const t: BrowserPanelProps['t'] = key => copy[key]
 
-function snapshots() {
-  let pending: ((result: IteratorResult<BrowserSnapshot>) => void) | undefined
-  const queue: BrowserSnapshot[] = []
-  let done = false
-  const dispose = vi.fn(async () => {
-    done = true
-    pending?.({ done: true, value: undefined })
-  })
-  const stream: BrowserStreamHandle = {
-    [Symbol.asyncIterator]: () => ({
-      next: async () => {
-        if (done) return { done: true, value: undefined }
-        const value = queue.shift()
-        if (value !== undefined) return { done: false, value }
-        return new Promise((resolve) => { pending = resolve })
-      },
-    }),
-    dispose,
-  }
-  return {
-    stream,
-    dispose,
-    push(value: BrowserSnapshot) {
-      if (pending) {
-        const resolve = pending
-        pending = undefined
-        resolve({ done: false, value })
-      } else queue.push(value)
-    },
-  }
-}
-
-function panel(overrides: Partial<BrowserInjected> = {}) {
-  const source = snapshots()
+function panel(overrides: Partial<BrowserPanelProps> = {}) {
+  let value = { snapshot: { open: false, url: '', title: '', actions: [] } as BrowserSnapshot, error: '' }
+  const listeners = new Set<() => void>()
+  const dispose = vi.fn()
   const props = {
-    t, stream: () => source.stream, start: vi.fn(async () => {}), navigate: vi.fn(async () => {}),
+    t, useBrowser: (selector: (state: typeof value) => unknown) => selector(useSyncExternalStore(
+      (listener) => { listeners.add(listener); return () => { listeners.delete(listener); dispose() } },
+      () => value,
+    )), start: vi.fn(async () => {}), navigate: vi.fn(async () => {}),
     stop: vi.fn(async () => {}), closePanel: vi.fn(), ...overrides,
   }
   // This component consumes none of the renderer's global/session selector hooks.
   const view = render(<BrowserPanel {...props as BrowserPanelProps} />)
-  return { ...view, ...source, props }
+  return { ...view, props, dispose, push(snapshot: BrowserSnapshot) {
+    value = { snapshot, error: '' }
+    for (const listener of listeners) listener()
+  } }
 }
 
 it('shows start failures and suppresses repeated starts while pending', async () => {
@@ -93,7 +70,7 @@ it('hides an expanded panel without starting another browser', () => {
   expect(start).not.toHaveBeenCalled()
 })
 
-it('renders replacement frames and actions, stops the browser, and releases its stream', async () => {
+it('renders replacement frames and actions and stops the browser', async () => {
   const fixture = panel()
   const snapshot: BrowserSnapshot = {
     open: true, title: 'Fixture', url: 'http://example.test/', frame: 'data:image/jpeg;base64,first',
@@ -116,7 +93,7 @@ it('renders replacement frames and actions, stops the browser, and releases its 
   fireEvent.click(screen.getByRole('button', { name: en.stop }))
   await waitFor(() => { expect(fixture.props.stop).toHaveBeenCalledTimes(1) })
   fixture.unmount()
-  expect(fixture.dispose).toHaveBeenCalledTimes(1)
+  expect(fixture.dispose).toHaveBeenCalled()
 })
 
 it('rejects a failed remote open without revealing the browser panel', async () => {

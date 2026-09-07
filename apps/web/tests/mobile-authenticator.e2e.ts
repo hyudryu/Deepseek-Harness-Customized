@@ -99,6 +99,7 @@ it('boots both shipped client artifacts and imports/deletes an account through a
   await dialog.getByRole('button', { name: 'Close', exact: true }).click()
   await page.getByRole('button', { name: 'Collapse sidebar', exact: true }).click()
   await connectFreshWorkspace(page, scaffold.workspaceCwd)
+  expect(await page.getByRole('button', { name: 'Start Browser', exact: true }).count()).toBe(0)
   const composer = page.locator('[data-composer-input][contenteditable="true"]')
   await expect.poll(async () => {
     const bounds = await composer.boundingBox()

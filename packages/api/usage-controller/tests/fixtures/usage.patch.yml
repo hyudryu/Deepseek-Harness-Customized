@@ -1,0 +1,20 @@
+- id: headless-startup
+  disabled: true
+- id: headless-runner
+  disabled: true
+- id: agent-loop
+  config:
+    agents:
+      - id: main
+        provider: cli-mock
+        model: cli-mock
+        cwd: !!js process.cwd()
+- id: session-persistence-jsonl
+  config:
+    root: './.sessions'
+    compression: none
+- insert:
+    - id: cli-mock-llm
+      name: '../../../../test-support/loader-smoke/tests/fixtures/cli-mock-llm.ts'
+    - id: usage-controller
+      name: '@deepseek-ai/dsh-api-usage-controller'

@@ -3,15 +3,18 @@ import { useEffect, useRef, useState } from 'react'
 import type { PropsLocale } from '@deepseek-ai/dsh-client-ui-slots'
 import type {} from './index.ts'
 import { readAuthenticatorQr } from './qr.ts'
-import { AuthenticatorRequestError, parseAccounts, parseDeleted, parseImported, type Account } from './wire.ts'
+import { AuthenticatorRequestError, type Account } from './wire.ts'
+import type { createAuthenticatorActions } from './actions.ts'
 import css from './AuthenticatorCard.module.css'
+
+type AuthenticatorCardProps = PropsLocale<'authenticator'> & ReturnType<typeof createAuthenticatorActions>
 
 /**
  * Render account management without exposing provisioning secrets.
  * @param props - localized configuration copy.
  * @returns a collapsible plugin card.
  */
-export function AuthenticatorCard({ t }: PropsLocale<'authenticator'>) {
+export function AuthenticatorCard({ t, loadAccounts, importAccount, deleteAccount }: AuthenticatorCardProps) {
   const [expanded, setExpanded] = useState(false)
   const [accounts, setAccounts] = useState<Account[]>([])
   const [loading, setLoading] = useState(true)
@@ -32,9 +35,7 @@ export function AuthenticatorCard({ t }: PropsLocale<'authenticator'>) {
     const clock = setInterval(() => { setNow(Date.now()) }, 1000)
     const refresh = async () => {
       try {
-        const response = await fetch('/authenticator', { credentials: 'same-origin', cache: 'no-store', signal: abort.signal })
-        if (!response.ok) throw new Error('request-failed')
-        const result = parseAccounts(await response.json())
+        const result = await loadAccounts(abort.signal)
         if (!abort.signal.aborted) { setAccounts(result); setNow(Date.now()); setLoading(false); setPollError(false) }
       } catch {
         // Aborted polls belong to the collapsed or replaced card; only active failures render.
@@ -45,28 +46,20 @@ export function AuthenticatorCard({ t }: PropsLocale<'authenticator'>) {
     }
     void refresh()
     return () => { abort.abort(); clearTimeout(timer); clearInterval(clock) }
-  }, [expanded, revision, t])
+  }, [expanded, revision, loadAccounts])
 
-  const mutate = async (path: string, body: Record<string, string>) => {
-    const response = await fetch(path, { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
-    if (!response.ok) throw new AuthenticatorRequestError(await response.json())
-    const value: unknown = await response.json()
-    if (path === '/authenticator/import') parseImported(value)
-    else parseDeleted(value)
-    setRevision(value => value + 1)
-  }
   const importFile = async (file: File) => {
     setPending(true); setError(''); setNotice('')
     let uri: string
     try { uri = await readAuthenticatorQr(file) }
     catch { setError(t('invalidQr')); setPending(false); return }
-    try { await mutate('/authenticator/import', { uri }); setNotice(t('imported')) }
+    try { await importAccount(uri); setRevision(value => value + 1); setNotice(t('imported')) }
     catch (error) { setError(t(error instanceof AuthenticatorRequestError ? error.localeKey : 'failed')) }
     finally { setPending(false) }
   }
   const remove = async (id: string) => {
     setPending(true); setError(''); setNotice('')
-    try { await mutate('/authenticator/delete', { id }); setConfirmId(undefined); setNotice(t('deleted')) }
+    try { await deleteAccount(id); setRevision(value => value + 1); setConfirmId(undefined); setNotice(t('deleted')) }
     catch (error) { setError(t(error instanceof AuthenticatorRequestError ? error.localeKey : 'failed')) }
     finally { setPending(false) }
   }

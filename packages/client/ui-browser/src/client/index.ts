@@ -9,8 +9,8 @@
  */
 import type { Context as ClientContext } from '@deepseek-ai/cordis'
 import type { SessionId } from '@deepseek-ai/dsh-session/types'
-import type { BrowserSnapshot } from '@deepseek-ai/dsh-api-browser-controller/types'
-import type { ClientRemote } from '@deepseek-ai/dsh-api-gateway/client'
+import { createBrowserSource } from './source.ts'
+import type { BrowserSource } from './source.ts'
 // Type-only: pulls the generated Remote API and ctx.remote merge (remote.browser).
 import type {} from '@deepseek-ai/dsh-api-remotes/client'
 // Type-only: pulls the layout panel actions (ctx.layout.openBrowser/closeBrowser).
@@ -25,8 +25,6 @@ import { BrowserPanel } from './BrowserPanel.tsx'
 import { StartBrowserDock } from './StartBrowserDock.tsx'
 import { en, NS, zh, type BrowserKey } from './locales.ts'
 
-export { BrowserPanel } from './BrowserPanel.tsx'
-export { StartBrowserDock } from './StartBrowserDock.tsx'
 export type { BrowserPanelProps } from './BrowserPanel.tsx'
 export type { BrowserKey } from './locales.ts'
 
@@ -39,8 +37,8 @@ declare module '@deepseek-ai/dsh-client-ui-slots' {
 
 /** The session-scoped verbs the BrowserPanel consumes. */
 export interface BrowserInjected {
-  /** Open the reconnecting browser state stream for this session. */
-  stream: () => BrowserStreamHandle
+  /** Renderer-bound live browser state. */
+  hooks: { browser: BrowserSource }
   /** Ensure an open browser for this session, navigating to the optional url. */
   start: (url?: string) => Promise<void>
   /** Navigate an open browser to a url. */
@@ -51,33 +49,8 @@ export interface BrowserInjected {
   closePanel: () => void
 }
 
-/** A reconnecting stream of browser snapshots with an explicit close verb. */
-export interface BrowserStreamHandle extends AsyncIterable<BrowserSnapshot> {
-  /** Permanently stop and release the underlying stream. */
-  dispose(): Promise<void>
-}
-
 /** Required services for the browser panel, remote mutations, layout, and copy. */
 export const inject = ['slots', 'remote', 'remote.browser', 'layout', 'locale']
-
-/** Open one reconnecting stream of browser snapshots that the panel can iterate. */
-function openBrowserStream(remote: ClientRemote, sessionId: SessionId): BrowserStreamHandle {
-  const raw = remote.$stream<BrowserSnapshot>({
-    name: 'Browser state stream',
-    open: signal => remote.browser.watch({ sessionId }, signal),
-    ended: accepted => new Error(
-      accepted
-        ? 'Browser state stream ended'
-        : 'Browser state stream closed before its opening snapshot',
-    ),
-  })
-  return {
-    [Symbol.asyncIterator]: () => (async function* () {
-      for await (const item of raw) yield item.value
-    })(),
-    dispose: () => raw.dispose(),
-  }
-}
 
 /**
  * Client plugin body: register the dictionaries, the top-right browser toggle,
@@ -111,7 +84,7 @@ export function apply(ctx: ClientContext): void {
       name: 'browser',
       locale: NS,
       inject: (sessionId: SessionId): BrowserInjected => ({
-        stream: () => openBrowserStream(ctx.remote, sessionId),
+        hooks: { browser: createBrowserSource(ctx.remote, sessionId) },
         start: (url?: string) => startSessionBrowser(sessionId, url),
         navigate: url => startSessionBrowser(sessionId, url),
         stop: async () => {

@@ -194,3 +194,27 @@ it('waits for activation during disposal and rejects a queued toggle', async () 
   expect((await second).status).toBe(503)
   await expect(call(`http://127.0.0.2:${String(ctx.webServer.port)}/`)).rejects.toThrow()
 })
+
+it('accepts canonical default-port Host and Origin without binding a shared port', async () => {
+  const ctx = await boot()
+  const port = ctx.webServer.port
+  const desktop = `http://127.0.0.1:${String(port)}`
+  const cookie = (await call(ctx.connection.authenticatedUrl(desktop))).cookie
+  const reportedPort = vi.spyOn(ctx.webServer, 'port', 'get').mockReturnValueOnce(80)
+  try {
+    const result = await call(desktop + '/mobile-access', cookie, 'POST', '{"enabled":true}')
+    expect(result.status).toBe(200)
+    const launch = new URL((JSON.parse(result.body) as { url: string }).url)
+    expect(launch.host).toBe('127.0.0.2')
+    // Only the advertised port is mocked; both listeners bind the original ephemeral port.
+    launch.port = String(port)
+    const headers = { host: '127.0.0.2', origin: 'http://127.0.0.2' }
+    const paired = await call(launch.href, '', 'GET', undefined, headers)
+    expect(paired.status).toBe(303)
+    expect(paired.cookie).not.toBe('')
+    const mobile = `http://127.0.0.2:${String(port)}`
+    expect((await call(mobile + '/asset.js', paired.cookie, 'GET', undefined, headers)).status).toBe(200)
+    expect((await call(mobile + '/asset.js', paired.cookie, 'GET', undefined, { ...headers, origin: 'http://127.0.0.2:81' })).status).toBe(403)
+    expect((await call(mobile + '/asset.js', paired.cookie, 'GET', undefined, { ...headers, host: '127.0.0.2:81' })).status).toBe(403)
+  } finally { reportedPort.mockRestore() }
+})

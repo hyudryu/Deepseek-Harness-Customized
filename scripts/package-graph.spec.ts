@@ -1,8 +1,8 @@
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
-import { renderModuleGraph } from './gen-module-graph.ts'
+import { renderModuleGraph, writeModuleGraph } from './gen-module-graph.ts'
 import { collectPackageGraph } from './package-graph.ts'
 
 const roots: string[] = []
@@ -52,6 +52,16 @@ describe('collectPackageGraph', () => {
 })
 
 describe('renderModuleGraph', () => {
+  it('generates an English graph without Chinese files or pairing records', () => {
+    const root = fixture({ consumer: ['provider'], provider: [] })
+    mkdirSync(join(root, 'docs'))
+    expect(writeModuleGraph(root)).toEqual(['docs/module-graph.md'])
+    expect(readFileSync(join(root, 'docs/module-graph.md'), 'utf8')).toContain('pkg_consumer --> pkg_provider')
+    expect(existsSync(join(root, 'docs/module-graph.zh.md'))).toBe(false)
+    expect(existsSync(join(root, 'docs/module-graph.i18n.yaml'))).toBe(false)
+    expect(writeModuleGraph(root)).toEqual([])
+  })
+
   it('renders the same peer edge in both generated languages', () => {
     const packages = [
       { short: 'provider', name: '@deepseek-ai/dsh-provider', group: 'core', rel: 'packages/core/provider', deps: [] },

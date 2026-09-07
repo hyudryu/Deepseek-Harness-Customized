@@ -52,13 +52,14 @@ export function apply(ctx: Context, config: Config): void {
     if (active !== undefined) return
     if (!loopback(ctx.webServer.host)) throw new Error('Mobile access requires the desktop server to bind to loopback')
     const address = await tailscaleAddress(config)
-    const authority = `${address}:${String(ctx.webServer.port)}`
+    const origin = new URL(`http://${address}:${String(ctx.webServer.port)}`).origin
+    const authority = new URL(origin).host
     const untrust = ctx.connection.registerListeningAuthority(authority, address)
     let close: () => Promise<void>
     try {
       close = await ctx.webServer.listenOn(address, (request: IncomingMessage) => {
         if (request.headers.host !== authority || request.headers['sec-fetch-site'] === 'cross-site') return false
-        if (request.headers.origin !== undefined && request.headers.origin !== `http://${authority}`) return false
+        if (request.headers.origin !== undefined && request.headers.origin !== origin) return false
         // Only the root token exchange may precede cookie authentication.
         if (request.url === '/' || request.url?.startsWith('/?') === true) return true
         return ctx.connection.requestRejection(request) === undefined
@@ -68,7 +69,7 @@ export function apply(ctx: Context, config: Config): void {
       throw error
     }
     active = {
-      url: ctx.connection.authenticatedUrl(`http://${authority}`),
+      url: ctx.connection.authenticatedUrl(origin),
       close: async () => { untrust(); await close() },
     }
   }

@@ -4,16 +4,15 @@
  * declaration; `public-api` entries preserve a class's body-stripped public
  * declaration. Blocks and entries have a one-to-one relationship; comparison
  * ignores whitespace and non-JSDoc comments but preserves declaration
- * structure and every original JSDoc comment. Byte-identical `.zh.md` blocks
- * reuse the manifest-backed check of their unsuffixed sibling.
+ * structure and every original JSDoc comment. Legacy Chinese documents are
+ * outside this fork's source-equivalence checks.
  */
 
 import { globSync, readFileSync, existsSync } from 'node:fs'
 import { resolve, sep } from 'node:path'
 import ts from 'typescript'
 import { markdownFences } from './markdown.ts'
-import { partitionPairedMarkdownDerivatives } from './paired-markdown-derivatives.ts'
-import { isArchivedAgentNotePath } from './repo-files.ts'
+import { isMaintainedMarkdownPath } from './repo-files.ts'
 
 const root = resolve(import.meta.dirname, '..')
 
@@ -280,15 +279,10 @@ const docSet = new Set<string>()
 for (const pattern of MARKDOWN_GLOBS) {
   for (const match of globSync(pattern, { cwd: root })) {
     const normalized = match.split(sep).join('/')
-    if (!isArchivedAgentNotePath(normalized)) docSet.add(normalized)
+    if (isMaintainedMarkdownPath(normalized)) docSet.add(normalized)
   }
 }
-const extractedBlocks: EquivBlock[] = [...docSet].sort().flatMap(extractEquivBlocks)
-const { primary: blocks, derivatives } = partitionPairedMarkdownDerivatives(
-  extractedBlocks,
-  block => block.doc,
-  block => `${block.projection ?? 'declaration'}\0${block.code}`,
-)
+const blocks: EquivBlock[] = [...docSet].sort().flatMap(extractEquivBlocks)
 
 const errors: string[] = []
 // A manifest entry naming a doc that does not exist (or is outside the scanned
@@ -366,11 +360,11 @@ for (const e of entries) {
 }
 
 if (errors.length === 0) {
-  console.log(`verify-type-equiv: ${verified} type-equiv block(s) match source structure and JSDoc (1:1 with manifest); ${derivatives.length} paired derivative(s).`)
+  console.log(`verify-type-equiv: ${verified} type-equiv block(s) match source structure and JSDoc (1:1 with manifest).`)
   process.exit(0)
 }
 
 console.error('verify-type-equiv: type-equiv verification failed:')
 for (const e of errors) console.error(`  ${e}`)
-console.error(`\n(checked ${blocks.length} primary block(s) across ${new Set(blocks.map(b => b.doc)).size} doc(s), ${derivatives.length} paired derivative(s); manifest at scripts/type-equiv.manifest.json)`)
+console.error(`\n(checked ${blocks.length} primary block(s) across ${new Set(blocks.map(b => b.doc)).size} doc(s); manifest at scripts/type-equiv.manifest.json)`)
 process.exit(1)

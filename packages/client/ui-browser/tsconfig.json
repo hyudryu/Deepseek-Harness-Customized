@@ -11,7 +11,8 @@
     "src/client/index.ts",
     "src/client/BrowserPanel.tsx",
     "src/client/StartBrowserDock.tsx",
-    "src/client/locales.ts"
+    "src/client/locales.ts",
+    "src/client/source.ts"
   ],
   "references": [
     { "path": "../../../vendor/cordis" },

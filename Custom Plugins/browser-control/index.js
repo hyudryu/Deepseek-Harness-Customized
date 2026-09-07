@@ -26,6 +26,10 @@ function positiveInt(value, fallback, name) {
 }
 
 function normalizeConfig(input = {}) {
+  const frameQuality = input.frameQuality === undefined ? DEFAULTS.frameQuality : input.frameQuality
+  if (!Number.isInteger(frameQuality) || frameQuality < 0 || frameQuality > 100) {
+    throw new Error('frameQuality must be an integer between 0 and 100')
+  }
   return {
     headless: input.headless ?? DEFAULTS.headless,
     defaultTimeoutMs: positiveInt(input.defaultTimeoutMs, DEFAULTS.defaultTimeoutMs, 'defaultTimeoutMs'),
@@ -36,7 +40,7 @@ function normalizeConfig(input = {}) {
       ? input.artifactDir
       : DEFAULTS.artifactDir,
     maxActions: positiveInt(input.maxActions, DEFAULTS.maxActions, 'maxActions'),
-    frameQuality: positiveInt(input.frameQuality, DEFAULTS.frameQuality, 'frameQuality'),
+    frameQuality,
   }
 }
 
@@ -323,18 +327,18 @@ export function apply(ctx, rawConfig = {}) {
     await pendingStates.get(key)
     const state = states.get(key)
     if (!state) return
-    states.delete(key)
+    await state.context.close()
     state.open = false
-    await state.context.close().catch(() => {})
+    if (states.get(key) === state) states.delete(key)
   }
 
   ctx.effect(() => {
     return async () => {
       subscribers.clear()
       await Promise.allSettled([...pendingStates.values()])
-      await Promise.all([...states.keys()].map(closeState))
+      await Promise.allSettled([...states.keys()].map(closeState))
       const instance = browserPromise ? await browserPromise.catch(() => undefined) : undefined
-      if (instance) await instance.close().catch(() => {})
+      if (instance) await instance.close().catch(() => { /* disposal attempts every remaining browser resource */ })
     }
   })
 
@@ -366,7 +370,12 @@ export function apply(ctx, rawConfig = {}) {
     async open(sessionId, url) {
       const state = await getState(sessionId)
       if (typeof url === 'string' && url.trim() !== '') {
-        await state.page.goto(url, { waitUntil: 'domcontentloaded', timeout: config.navigationTimeoutMs })
+        try {
+          await state.page.goto(url, { waitUntil: 'domcontentloaded', timeout: config.navigationTimeoutMs })
+        } catch (error) {
+          await refreshAndNotify(state)
+          throw error
+        }
       }
       state.open = true
       await refreshAndNotify(state)

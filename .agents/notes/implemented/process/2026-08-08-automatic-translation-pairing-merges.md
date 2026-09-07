@@ -4,6 +4,8 @@ Status: implemented
 
 English | [中文](2026-08-08-automatic-translation-pairing-merges.zh.md)
 
+The [English-only fork decision](2026-09-07-english-only-fork-documentation.md) supersedes this record's bilingual maintenance requirements. Its translation mechanics and original rationale remain historical context; they impose no Chinese document, sidecar, or translation-update obligation on this fork.
+
 ## Problem
 
 A bilingual consistency record contains the two owner files' exact blob hashes. Two branches that independently update different parts of the same confirmed pair therefore conflict on both hash lines even when Git cleanly composes both Markdown owners. Selecting either side leaves stale hashes, while regenerating the record by hand repeats a deterministic operation and prevents an otherwise automatic merge.

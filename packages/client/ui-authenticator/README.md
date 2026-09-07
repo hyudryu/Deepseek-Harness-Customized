@@ -34,7 +34,7 @@ Open the Authenticator MCP card, choose Import QR code, and select a PNG, JPEG, 
 <details>
 <summary>Implementation internals — click to expand</summary>
 
-The [client plugin](src/client/index.ts) contributes the keyed `authenticator` card to `settings.plugin.item`. Account reads use authenticated requests while the card is expanded. The host owns account persistence and code generation; the browser retains no provisioning image or secret after import.
+The [client plugin](src/client/index.ts) contributes the keyed `authenticator` card to `settings.plugin.item`. Its slot injects account read, import, and deletion callbacks; the presentation component owns expansion, polling, and status messages without calling browser transport. The callbacks validate authenticated responses before the card displays them. Account reads run only while the card is expanded. The host owns account persistence and code generation; the browser retains no provisioning image or secret after import.
 
 </details>
 

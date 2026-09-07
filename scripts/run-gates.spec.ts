@@ -193,12 +193,21 @@ describe('gate graph validation', () => {
     })
   })
 
+  it('keeps optional translation checks out of documentation and CI aggregates', () => {
+    for (const mode of ['doc-sync', 'doc-quick', 'ci-primary', 'ci-static'] as const) {
+      const ids = withPnpmEntrypoint(() => gatesForMode(mode).map(subject => subject.id))
+      expect(ids).not.toContain('translation-pairing')
+      expect(ids).not.toContain('translation-prompt')
+      expect(ids).toContain('markdown-links')
+    }
+  })
+
   it('schedules the longest documentation leaves before short checks', () => {
     const ids = withPnpmEntrypoint(() => gatesForMode('doc-sync').map(subject => subject.id))
 
-    expect(ids.slice(0, 10)).toEqual([
+    expect(ids.slice(0, 9)).toEqual([
       'doc-typecheck', 'docs-site-build', 'doc-graphs', 'markdown-links', 'type-equivalence',
-      'cordis-catalog', 'cordis-inspect-catalog', 'mermaid', 'scoped-events', 'translation-pairing',
+      'cordis-catalog', 'cordis-inspect-catalog', 'mermaid', 'scoped-events',
     ])
   })
 

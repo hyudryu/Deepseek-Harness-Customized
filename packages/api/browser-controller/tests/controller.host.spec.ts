@@ -61,3 +61,19 @@ it('waits for browser cleanup before acknowledging close', async () => {
     await ctx.fiber.dispose()
   }
 })
+
+it('propagates context cleanup failure without a close acknowledgement', async () => {
+  const ctx = new Context()
+  ctx.provide('browserControl', {
+    snapshot: () => closed,
+    subscribe: () => () => {},
+    open: async () => {},
+    close: async () => { throw new Error('context cleanup failed') },
+  } satisfies BrowserControl)
+  const controller = new BrowserController(ctx)
+  try {
+    await expect(controller.close({ sessionId: SessionId('browser-test') })).rejects.toThrow('context cleanup failed')
+  } finally {
+    await ctx.fiber.dispose()
+  }
+})

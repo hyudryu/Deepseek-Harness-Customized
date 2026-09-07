@@ -9,7 +9,7 @@ English | [中文](README.zh.md)
 
 ## Summary
 
-This controller lets the Web client open a session browser, navigate it, and follow its page frames and action history. Browser operations use the same per-session browser owned by the browser-control plugin. A close acknowledgement means the browser context has finished closing.
+This controller lets the Web client open a session browser, navigate it, and follow its page frames and action history. Browser operations use the same per-session browser owned by the browser-control plugin. Session identifiers retain the branded `SessionId` type across service calls. A close acknowledgement means the browser context has finished closing; cleanup failure rejects and preserves any still-open context for a retry. Initial navigation failure rejects while publishing the remaining open browser so the client can close it.
 
 ## Table of Contents
 

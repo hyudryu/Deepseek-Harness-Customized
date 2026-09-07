@@ -27,6 +27,15 @@ export function isArchivedAgentNotePath(path: string): boolean {
 }
 
 /**
+ * Whether a path belongs to the fork's maintained English Markdown corpus.
+ * @param path - Repository-relative path using either platform separator.
+ * @returns False for legacy translations, frozen Agent Notes, and other file types.
+ */
+export function isMaintainedMarkdownPath(path: string): boolean {
+  return path.endsWith('.md') && !path.endsWith('.zh.md') && !isArchivedAgentNotePath(path)
+}
+
+/**
  * Expand repository-relative globs and deduplicate symlinked files.
  * @param root - absolute repository root.
  * @param patterns - repository-relative glob patterns, processed in order.

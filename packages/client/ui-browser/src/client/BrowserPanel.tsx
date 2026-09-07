@@ -4,16 +4,16 @@
  * follows the user's pointer over the viewport. All data arrives through the
  * injected session verbs; the component holds only transient viewing state.
  */
-import { useEffect, useRef, useState } from 'react'
-import type { PropsLocale, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
-import type { BrowserSnapshot, BrowserActionEntry } from '@deepseek-ai/dsh-api-browser-controller/types'
+import { useRef, useState } from 'react'
+import type { InjectFace, PropsLocale, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
+import type { BrowserActionEntry } from '@deepseek-ai/dsh-api-browser-controller/types'
 import type { BrowserInjected } from './index.ts'
 import css from './BrowserPanel.module.css'
 
 export type BrowserPanelProps =
   & PropsRuntime<'browser'>
   & PropsLocale<'browser'>
-  & BrowserInjected
+  & InjectFace<BrowserInjected>
 
 /** Screen-space cursor position over the viewport; fromUser distinguishes the agent vs the pointer. */
 interface CursorState { x: number; y: number; fromUser: boolean }
@@ -42,36 +42,14 @@ function ActionRow({ entry, t }: { entry: BrowserActionEntry; t: BrowserPanelPro
 }
 
 /** The browser panel occupant of the layout's 'browser' column. */
-export function BrowserPanel({ t, stream, start, navigate, stop }: BrowserPanelProps) {
-  const [snapshot, setSnapshot] = useState<BrowserSnapshot>({ open: false, url: '', title: '', actions: [] })
+export function BrowserPanel({ t, useBrowser, start, navigate, stop }: BrowserPanelProps) {
+  const { snapshot, error: streamError } = useBrowser(value => value)
   const [urlInput, setUrlInput] = useState('')
   const [cursor, setCursor] = useState<CursorState | null>(null)
   const [showActions, setShowActions] = useState(false)
   const [error, setError] = useState('')
   const [pending, setPending] = useState(false)
   const viewportRef = useRef<HTMLDivElement | null>(null)
-
-  useEffect(() => {
-    const cancellation = new AbortController()
-    const iterator = stream()
-    void (async () => {
-      try {
-        for await (const snap of iterator) {
-          if (cancellation.signal.aborted) break
-          setSnapshot(snap)
-        }
-      } catch (cause) {
-        if (!cancellation.signal.aborted) setError(cause instanceof Error ? cause.message : String(cause))
-      }
-    })()
-    return () => {
-      cancellation.abort()
-      void iterator.dispose().catch(() => {
-        // The panel has unmounted; disposal failures have no remaining UI recipient.
-      })
-    }
-    // The injected stream is stable for the session; run once per panel mount.
-  }, [stream])
 
   const clickTarget = latestClick(snapshot.actions)
   const agentCursor = (() => {
@@ -132,7 +110,7 @@ export function BrowserPanel({ t, stream, start, navigate, stop }: BrowserPanelP
         </button>
         {snapshot.open && <button type="button" className={css.button} disabled={pending} onClick={() => void run(stop)}>{t('stop')}</button>}
       </div>
-      {error !== '' && <div role="alert" className={css.error}>{error}</div>}
+      {(error || streamError) !== '' && <div role="alert" className={css.error}>{error || streamError}</div>}
 
       {snapshot.open ? (
         <div

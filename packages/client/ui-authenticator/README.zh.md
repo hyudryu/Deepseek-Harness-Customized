@@ -36,6 +36,8 @@ kind: "package-reference"
 
 [客户端插件](src/client/index.ts) 向 `settings.plugin.item` 注册键为 `authenticator` 的卡片。卡片展开时通过经过身份验证的请求读取账户。主机负责账户持久化和验证码生成；导入后浏览器不保留配置图片或密钥。
 
+插槽注册方注入读取、导入和删除账户的回调，并验证经过身份验证的响应。展示组件管理展开状态、轮询和状态消息，不调用浏览器传输。
+
 </details>
 
 -----
