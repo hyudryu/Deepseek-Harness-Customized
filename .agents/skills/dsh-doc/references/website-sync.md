@@ -16,7 +16,7 @@ The documentation website is a tested projection of repository Markdown, never a
 
 ## Manifest ownership
 
-Read [docs/AGENTS.md](../../../../docs/AGENTS.md) and the current `DocsPage` type and entries in [website/docs.ts](../../../../website/docs.ts) before changing the manifest; do not rely on a remembered field set. Read [website/.vitepress/config.ts](../../../../website/.vitepress/config.ts) before adding a new section, sidebar collection, locale, or top-level navigation item. For an edited bilingual source, follow the lightweight routine path in [docs/AGENTS.md](../../../../docs/AGENTS.md#writing-rules) and the [pairing contract](../../../../docs/i18n/README.md); never invoke the extended translation skill automatically.
+Read [docs/AGENTS.md](../../../../docs/AGENTS.md) and the current `DocsPage` type and entries in [website/docs.ts](../../../../website/docs.ts) before changing the manifest; do not rely on a remembered field set. Read [website/.vitepress/config.ts](../../../../website/.vitepress/config.ts) before adding a new section, sidebar collection, locale, or top-level navigation item. Maintain the English source under [docs/AGENTS.md](../../../../docs/AGENTS.md#writing-rules) and the [fork language policy](../../../../docs/i18n/README.md). Translation is not a publication prerequisite.
 
 Never edit or commit `website/.generated/`, `website/.cache/`, or `website/.dist/`. Except for `website/AGENTS.md`, never add Markdown under `website/`; locale and route directories such as `website/zh-CN/`, `website/en/`, and `website/api/` are invalid source layouts. Keep generated catalogs under `docs/`, freshness-gate them there, and publish them through the manifest.
 
@@ -34,7 +34,7 @@ Keep the manifest an explicit public allowlist. Do not publish RFCs, postmortems
 
 Set every `DocsPage` field deliberately. The canonical field set and the `DocsSidebar` union live in [website/docs.ts](../../../../website/docs.ts) — read them there rather than copying values into prose; sections are owned by the `sections` record in that file, with no separate order list in the VitePress config.
 
-- `source`: repository-relative canonical Markdown path. For a complete bilingual pair, add the English `.md` path through `pairedPages()`; it derives the sibling `.zh.md`, the content locales, and counterpart aliases.
+- `source`: repository-relative canonical Markdown path. Add the English `.md` source; do not require a Chinese sibling.
 - `route`: public VitePress path including the `.md` suffix.
 - `label`: sidebar label, not necessarily the document H1.
 - `sidebar`: reuse an existing `DocsSidebar` collection unless the information architecture genuinely needs another one.
@@ -42,7 +42,7 @@ Set every `DocsPage` field deliberately. The canonical field set and the `DocsSi
 - `order`: stable order within the section.
 - `sourceAliases`: optional additional repository paths that should resolve to this page when links are projected. It does not create another public route.
 
-Use `mirroredPages()` only for a source that intentionally falls back to the same available language in both route trees. Convert that entry to `pairedPages()` when its counterpart is added. The site route trees are independent of the source layout: `foo.zh.md` projects to the root route and `foo.md` projects to the matching `/en/` route.
+The site projects English sources into the root and `/en/` compatibility route trees. Read the current manifest helpers before adding routes; no Chinese source is required.
 
 ## Preserve link behavior
 
@@ -52,7 +52,7 @@ Write normal repository-relative Markdown links in canonical docs. The projector
 - An existing target outside the manifest becomes a GitHub source link, including supported line suffixes.
 - An image is the exception: its file is copied into the generated tree and referenced from there, so the site serves it regardless of repository visibility. It must be a regular file inside the repository.
 - External URLs, site-absolute URLs, email links, and fragment-only links remain unchanged.
-- A missing repository-relative target fails projection instead of silently producing a broken link.
+- A missing repository-relative target fails projection. A legacy self-translation link may resolve through an explicit counterpart-route alias to the same English source without a Chinese file.
 - Cross-page fragments use the English GitHub heading id as their canonical id. If an authored heading emits a different VitePress id, place an explicit `<a id="..."></a>` immediately before it; add generated aliases in the owning generator.
 
 Do not write website-specific routes into canonical Markdown just to satisfy VitePress. Use `sourceAliases` for directory-style repository links that should resolve to a mapped index page.

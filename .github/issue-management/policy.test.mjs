@@ -215,6 +215,10 @@ test('allows optional metadata in every open Status', () => {
   }
 })
 
+test('accepts an English-only Issue title', () => {
+  assert.deepEqual(validateIssue({ ...legalIssue, title: 'Fix session recovery' }), [])
+})
+
 test('rejects metadata prefixes in an Issue title', () => {
   const errors = validateIssue({ ...legalIssue, title: '[Bug] 修复恢复错误' })
   assert.ok(errors.includes('Issue 标题不得带 Type、Priority、Status、area 或 Owner 前缀'))

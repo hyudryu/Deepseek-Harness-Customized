@@ -1,6 +1,6 @@
 # DeepSeek Harness
 
-English | [中文](README.zh.md)
+This personal fork maintains documentation in English only. Existing translations are legacy material and may be outdated; updates do not require translated counterparts. See the [documentation language policy](docs/i18n/README.md).
 
 DeepSeek Harness (`dsh`) is an open-source agent harness developed by [DeepSeek AI](https://deepseek.com).
 

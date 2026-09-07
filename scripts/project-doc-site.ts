@@ -148,6 +148,8 @@ function githubTarget(
 
 /**
  * Rewrite repository-relative links without reserializing Markdown.
+ * Declared self-translation aliases may target an absent legacy translation;
+ * other relative targets must exist in the repository.
  *
  * @param source Markdown text from the canonical file.
  * @param options Source, route, manifest, and repository context.
@@ -163,7 +165,19 @@ export function rewriteMarkdown(source: string, options: RewriteMarkdownOptions)
     if (isExternalOrAbsoluteMarkdownUrl(node.url)) return
     const { path, suffix } = splitMarkdownUrlTarget(node.url)
     if (path === '') return
-    const { absPath, line } = resolveRepositoryTarget(sourceAbs, path, options.repoRoot)
+    const candidate = resolve(dirname(sourceAbs), decodePath(path))
+    const candidatePath = repoPath(candidate, options.repoRoot)
+    const aliasLocale = options.locale === 'root' ? 'en' : 'root'
+    const aliasPage = published.get(candidatePath)?.get(aliasLocale)
+    // Legacy self-translation aliases resolve to this English source even when
+    // the optional translated file is absent. Other targets still need files.
+    const optionalTranslation = node.type !== 'image'
+      && !options.sourcePath.endsWith('.zh.md')
+      && candidatePath === counterpartSource(options.sourcePath)
+      && aliasPage?.source === options.sourcePath
+    const { absPath, line } = optionalTranslation
+      ? { absPath: candidate, line: undefined }
+      : resolveRepositoryTarget(sourceAbs, path, options.repoRoot)
     const targetPath = repoPath(absPath, options.repoRoot)
     const isLanguageSwitcher = targetPath === counterpartSource(options.sourcePath)
     const targetLocale: DocsLocale = isLanguageSwitcher
