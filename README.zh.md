@@ -124,6 +124,41 @@ vision-router:
 
 </details>
 
+#### 5. `dsh-mcp-servers`
+
+<details>
+<summary><b>MCP 服务器管理器</b> — 点击展开</summary>
+
+一个负责管理部署中 MCP 服务器的插件：你可以在 **设置 → 插件 → MCP servers** 中添加、删除、启用、禁用和测试服务器，且每个已启用的服务器都会在会话启动时挂载到各个 agent 会话中。
+
+能力包括：
+
+- 两种传输方式——`stdio`（`command`/`args`/`env`/`cwd`）与流式 HTTP（`scheme`/`host`/`port`/`path`/`headers`）；
+- 默认 15 秒超时的宿主端连接测试，会统计服务器的工具数量，并将结果以 `lastTest`（状态、工具数量、工具列表、消息、时间戳）写回设置；
+- 在会话启动时自动挂载每个已启用的服务器，使该服务器的工具以 `mcp__<serverName>__<toolName>` 形式提供给 agent；挂载失败的服务器会被记录并跳过，而不是阻塞会话；
+- 一个 `mcp_servers` 工具（`action=list`），用于报告已配置的服务器、各自是否启用及其上次连接测试结果——在未查看该结果前，绝不假定服务器或其工具可用；
+- 一个按需逐步加载的 `mcp-servers` skill，用于指导发现、测试结果解读与管理的页面；
+- 服务器定义存储在 `mcp.servers` 设置命名空间中，因此会持久化到磁盘上的 DSH 设置文档中。
+
+</details>
+
+#### 6. `dsh-project-secrets`
+
+<details>
+<summary><b>项目级密钥记事本</b> — 点击展开</summary>
+
+一个为每个项目维护密钥块（凭据、API 密钥、令牌或其他仅属于该项目的值）的插件。它将密钥块以纯文本文件形式存储在项目目录中，并在 Web GUI 以及提供给 agent 的工具中呈现。
+
+能力包括：
+
+- 一个限定于项目工作目录的密钥文件，默认 `.dsh/project-secrets`（可通过 `secretsFile`、`maxBytes` 与 `root` 配置）；
+- 各项目三点菜单上的 **Project Secrets** 项，用于打开弹窗粘贴/编辑密钥块，由 `/project-secrets/<workspaceId>` 上的 HTTP `GET`/`PUT` 支撑；
+- 一个供 agent 使用的 `project_secrets` 工具（`action: read`/`write`），带字节数限制校验与原子写入（临时文件加重命名）；
+- 一个按需逐步加载的 `project-secrets` skill，指示 agent 先读取、绝不将密钥回显到对话、提交或日志中、权威地写入并尊重项目边界；
+- 将文件缺失安全地视为空。
+
+</details>
+
 ## 开发者预览
 
 DeepSeek Harness 处于 _开发者预览_ 阶段，正在快速迭代。**未来将出现破坏兼容性的变更。**
@@ -133,16 +168,6 @@ DeepSeek Harness 处于 _开发者预览_ 阶段，正在快速迭代。**未来
 <a id="run"></a>
 
 ## 运行
-
-### 通过 `npm` 运行
-
-安装 `Node.js`，然后运行：
-
-```sh
-npx @deepseek-ai/dsh web
-```
-
-该命令默认会在 `http://127.0.0.1:3080` 启动 Web UI，本机启动时还会用默认浏览器打开页面。通过 SSH 启动时只打印宿主机 URL，因为本地转发地址由 SSH 客户端或编辑器持有。传入 `--no-open` 可仅运行服务器而不打开浏览器。详见 [Web UI 指南](docs/user/guide/index.zh.md)。
 
 <a id="run-from-source"></a>
 
