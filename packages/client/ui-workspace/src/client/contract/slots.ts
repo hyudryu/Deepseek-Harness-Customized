@@ -57,6 +57,11 @@ declare module '@deepseek-ai/dsh-client-ui-slots' {
     'conversation.hero.workspace.directoryFlow': { kind: 'single'; scope: 'root'; owner: DirectoryFlowOwnerProps }
     /** Directory-flow hole under the sidebar browsing region (declared by the WorkspaceBrowser entry). */
     'sidebar.workspaces.directoryFlow': { kind: 'single'; scope: 'root'; owner: DirectoryFlowOwnerProps }
+    /**
+     * Feature-plugin contributions to a workspace row's ellipsis menu (declared
+     * by the WorkspaceBrowser entry): merged before the built-in Rename/Delete.
+     */
+    'sidebar.workspaces.actions': { kind: 'list'; scope: 'root' }
   }
 }
 
@@ -83,6 +88,17 @@ export type DirectoryPickingInjected = {
 export type DirectoryPickingHooks = PropsHooks<DirectoryPickingInjected['hooks']>
 
 /**
+ * One feature-contributed workspace row menu item. `id`/`label` come from the
+ * registration (the label is resolved at read time, so it follows the active
+ * locale); `onSelect` comes from the entry's inject face.
+ */
+export type WorkspaceMenuItem = {
+  readonly id: string
+  readonly label: string
+  readonly onSelect: (workspaceId: WorkspaceId) => void
+}
+
+/**
  * Browser-private injected share (arrives via the register inject factory).
  * Data reads use the global framework hooks; these are the Host actions the
  * browsing region drives.
@@ -96,6 +112,11 @@ export type WorkspaceBrowserInjected = {
      * saw. Select the field the surface needs (`info => info.home`).
      */
     hostInfo: HostObservable<RemoteHostFacts>
+    /**
+     * Feature-contributed workspace row menu items, merged before the built-in
+     * Rename/Delete and sorted by their registration `order`.
+     */
+    workspaceMenuItems: HostObservable<readonly WorkspaceMenuItem[]>
   }
   /**
    * Start a New Session in a Workspace: reuse-or-create its blank session and

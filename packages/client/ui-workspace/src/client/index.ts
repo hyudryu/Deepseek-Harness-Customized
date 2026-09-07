@@ -11,8 +11,9 @@
 import type { Context } from '@deepseek-ai/cordis'
 import type { RemoteHostFacts } from '@deepseek-ai/dsh-api-remotes/client'
 import type { ISessions } from '@deepseek-ai/dsh-api-session-controller/client'
-import type { IWorkspaces, WorkspaceSnapshot } from '@deepseek-ai/dsh-api-workspace-controller/client'
+import type { IWorkspaces, WorkspaceId, WorkspaceSnapshot } from '@deepseek-ai/dsh-api-workspace-controller/client'
 import type { HostObservable, SnapshotSelectorHook } from '@deepseek-ai/dsh-client-ui-slots'
+import { resolveSlotLabel } from '@deepseek-ai/dsh-client-ui-slots'
 // Type-only: pulls the Controller service merges.
 import type {} from '@deepseek-ai/dsh-api-session-controller/client'
 import type {} from '@deepseek-ai/dsh-api-workspace-controller/client'
@@ -22,7 +23,7 @@ import type {} from '@deepseek-ai/dsh-client-locale/client'
 import type {} from '@deepseek-ai/dsh-client-ui-renderer/client'
 // Type-only: pulls the Session root standard-hook merge.
 import type {} from '@deepseek-ai/dsh-client-ui-session/client'
-import type { WorkspaceBrowserInjected, WorkspacePickerInjected } from './contract/slots.ts'
+import type { WorkspaceBrowserInjected, WorkspaceMenuItem, WorkspacePickerInjected } from './contract/slots.ts'
 import { UiWorkspaceService } from './navigation.ts'
 import { createWorkspaceViewStore } from './stores.ts'
 import { WorkspaceBrowser } from './rows/WorkspaceBrowser.tsx'
@@ -94,6 +95,44 @@ export function apply(ctx: Context): void {
     getSnapshot: () => ctx.remote.$host,
     subscribe: listener => ctx.on('connection/reset', listener),
   }
+  // Feature-contributed workspace row ellipsis-menu items (the
+  // `sidebar.workspaces.actions` list slot): merged before the built-in
+  // Rename/Delete, sorted by registration `order`, and re-read on both ledger
+  // and locale changes (labels are resolved through the active locale).
+  let menuItemsVersion = -1
+  let menuItemsRevision = -1
+  let menuItems: readonly WorkspaceMenuItem[] = []
+  const workspaceMenuItemsSource: HostObservable<readonly WorkspaceMenuItem[]> = {
+    getSnapshot: () => {
+      const version = ctx.slots.getVersion('sidebar.workspaces.actions')
+      const revision = ctx.locale.getSnapshot().revision
+      if (version !== menuItemsVersion || revision !== menuItemsRevision) {
+        menuItemsVersion = version
+        menuItemsRevision = revision
+        menuItems = ctx.slots.entries('sidebar.workspaces.actions')
+          .slice()
+          .sort((a, b) => (a.options.order ?? 0) - (b.options.order ?? 0))
+          .map(entry => ({
+            /* v8 ignore next -- list-slot registration requires id */
+            id: entry.options.id ?? '',
+            label: resolveSlotLabel(entry.options.label) ?? '',
+            onSelect: (workspaceId) => {
+              const injected = entry.inject?.() as { onSelect?: (workspaceId: WorkspaceId) => void } | undefined
+              injected?.onSelect?.(workspaceId)
+            },
+          }))
+      }
+      return menuItems
+    },
+    subscribe: (listener) => {
+      const offLedger = ctx.slots.subscribe('sidebar.workspaces.actions', listener)
+      const offLocale = ctx.locale.subscribe(listener)
+      return () => {
+        offLedger()
+        offLocale()
+      }
+    },
+  }
   const pickerFlowSource = flowSource('conversation.hero.workspace.directoryFlow')
   const browserInjected = (): WorkspaceBrowserInjected => ({
     // Explicit group actions keep their target; unscoped New Session inherits
@@ -127,7 +166,7 @@ export function apply(ctx: Context): void {
       await workspaces.insertSessionBefore(workspaceId, sessionId, beforeSessionId)
     },
     createWorkspace: input => workspaces.create(input),
-    hooks: { directoryFlow: browserFlowSource, hostInfo },
+    hooks: { directoryFlow: browserFlowSource, hostInfo, workspaceMenuItems: workspaceMenuItemsSource },
   })
   const pickerInjected = (): WorkspacePickerInjected => ({
     createWorkspace: input => workspaces.create(input),
@@ -138,7 +177,10 @@ export function apply(ctx: Context): void {
   ctx.slots.inject('sidebar.workspaces', () => ctx.slots.register(
     {
       name: 'sidebar.workspaces',
-      children: { 'sidebar.workspaces.directoryFlow': { kind: 'single', scope: 'root' } },
+      children: {
+        'sidebar.workspaces.directoryFlow': { kind: 'single', scope: 'root' },
+        'sidebar.workspaces.actions': { kind: 'list', scope: 'root' },
+      },
       store: createWorkspaceViewStore(),
       inject: browserInjected,
       locale: NS,

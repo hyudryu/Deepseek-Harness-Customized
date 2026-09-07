@@ -179,6 +179,38 @@ describe('ui-workspace apply', () => {
     unsubscribe()
   })
 
+  it('reads workspace menu items from the actions slot and reacts to ledger and locale changes', async () => {
+    const b = await bench()
+    declare(b.slots, 'sidebar.workspaces')
+    await b.ctx.plugin({ inject: [...inject], apply }).await()
+    const browser = (b.slots.entries('sidebar.workspaces')[0]!.inject as () => WorkspaceBrowserInjected)()
+    expect(browser.hooks.workspaceMenuItems.getSnapshot()).toEqual([])
+
+    const onSelect = vi.fn()
+    const dispose = b.slots.register({
+      name: 'sidebar.workspaces.actions',
+      id: 'plugins',
+      order: 2,
+      label: () => 'Plugin Action',
+      inject: () => ({ onSelect }),
+    } as never, () => null)
+
+    const items = browser.hooks.workspaceMenuItems.getSnapshot()
+    expect(items).toEqual([{ id: 'plugins', label: 'Plugin Action', onSelect: expect.any(Function) }])
+    items[0]!.onSelect('ws' as never)
+    expect(onSelect).toHaveBeenCalledWith('ws')
+
+    // A later registration joins reactively, ordered by its `order`.
+    const notified = vi.fn()
+    const off = browser.hooks.workspaceMenuItems.subscribe(notified)
+    b.slots.register({ name: 'sidebar.workspaces.actions', id: 'other', order: 1, label: 'Other' } as never, () => null)
+    await Promise.resolve()
+    expect(notified).toHaveBeenCalled()
+    expect(browser.hooks.workspaceMenuItems.getSnapshot().map(item => item.id)).toEqual(['other', 'plugins'])
+    off()
+    dispose()
+  })
+
   it('rejects the browser search callback on a Session Controller business error', async () => {
     const b = await bench()
     b.search.mockImplementationOnce(async () => ({

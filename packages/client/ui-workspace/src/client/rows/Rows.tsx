@@ -15,7 +15,7 @@ import {
 } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { StateDotState } from '@deepseek-ai/dsh-client-ui-primitives'
 import { abbreviateHomePath } from '@deepseek-ai/dsh-util-workspace-path'
-import type { WorkspaceBrowserProps } from '../contract/slots.ts'
+import type { WorkspaceBrowserProps, WorkspaceMenuItem } from '../contract/slots.ts'
 import type { GroupNode, SearchResultNode, SessionNode } from '../tree.ts'
 import css from './Rows.module.css'
 
@@ -109,12 +109,14 @@ function rowHalf(e: { clientY: number; currentTarget: HTMLElement }): 'before' |
  * @param props.t - the browser root's locale seat.
  * @returns the row element.
  */
-export function ProjectRowItem({ group, onToggle, onCreate, actions, drag, home, t }: {
+export function ProjectRowItem({ group, onToggle, onCreate, actions, menuItems = [], drag, home, t }: {
   group: GroupNode
   onToggle: () => void
   onCreate: () => void
   /** Real-Workspace actions; absent for the ungrouped bucket (no menu shown). */
   actions?: { rename: () => void; delete: () => void } | undefined
+  /** Feature-contributed ellipsis-menu items, merged before the built-in Rename/Delete. */
+  menuItems?: readonly WorkspaceMenuItem[] | undefined
   /** Present only for real Workspace rows in the grouped view. */
   drag?: WorkspaceRowDragProps | undefined
   /** Host account home; POSIX home-rooted hover paths display as `~`. */
@@ -126,9 +128,15 @@ export function ProjectRowItem({ group, onToggle, onCreate, actions, drag, home,
   const label = row.workspaceId === undefined ? t('group.ungrouped') : row.label
   const active = group.expanded && group.containsCurrent
   const [menuOpen, setMenuOpen] = useState(false)
-  const workspaceMenuItems = [
+  const builtinWorkspaceMenuItems = [
     { id: 'rename', label: t('rename'), icon: <IconEditOutline16 /> },
     { id: 'delete', label: t('delete.workspace'), icon: <IconTrashOutline16 />, danger: true },
+  ]
+  // Plugin items are displayed by id/label; the Menu dispatches selection by
+  // id through the onSelect handler below, which resolves the plugin item.
+  const workspaceMenuEntries = [
+    ...builtinWorkspaceMenuItems,
+    ...menuItems.map(item => ({ id: item.id, label: item.label })),
   ]
   const ownRow = (
     <div
@@ -160,15 +168,22 @@ export function ProjectRowItem({ group, onToggle, onCreate, actions, drag, home,
           <Menu
             open={menuOpen}
             onClose={() => { setMenuOpen(false) }}
-            items={workspaceMenuItems}
+            items={workspaceMenuEntries}
             onSelect={(id) => {
               setMenuOpen(false)
-              // Unknown ids leave before the dispatch: a future menu row must
-              // not inherit the destructive branch as an else fallback.
-              /* v8 ignore next -- Menu can emit only the rename and delete rows supplied above. */
-              if (id !== 'rename' && id !== 'delete') return
-              if (id === 'rename') actions.rename()
-              else actions.delete()
+              if (id === 'rename') {
+                actions.rename()
+                return
+              }
+              if (id === 'delete') {
+                actions.delete()
+                return
+              }
+              const pluginItem = menuItems.find(item => item.id === id)
+              /* v8 ignore next -- Menu emits only the built-in and plugin rows supplied above. */
+              if (pluginItem === undefined) return
+              if (row.workspaceId === undefined) return
+              pluginItem.onSelect(row.workspaceId)
             }}
             portal
             closeOnPointerLeave

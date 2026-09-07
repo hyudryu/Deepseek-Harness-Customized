@@ -333,6 +333,32 @@ describe('workspace browser rows', () => {
     expect(screen.queryByRole('menu')).toBeNull()
   })
 
+  it('renders a plugin menu item and calls its onSelect with the workspace id', () => {
+    const onSelect = vi.fn()
+    const onToggle = vi.fn()
+    const group: GroupNode = {
+      key: 'project', workspaceId: wid('project'), cwd: '/projects/project', createdAt: 0, label: 'Project',
+      sessionCount: 0, expanded: false, containsCurrent: false, sessions: [],
+    }
+    render(<ProjectRowItem
+      group={group} onToggle={onToggle} onCreate={vi.fn()}
+      actions={{ rename: vi.fn(), delete: vi.fn() }}
+      menuItems={[{ id: 'plugin-action', label: 'Plugin Action', onSelect }]} t={t}
+    />)
+    fireEvent.click(screen.getByRole('button', { name: '工作区“Project”的操作' }))
+    // The built-in rows and the plugin row coexist in the same menu.
+    expect(screen.getByRole('menuitem', { name: '重命名' })).toBeTruthy()
+    expect(screen.getByRole('menuitem', { name: '删除工作区' })).toBeTruthy()
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Plugin Action' }))
+    expect(onSelect).toHaveBeenCalledWith(wid('project'))
+    expect(screen.queryByRole('menu')).toBeNull()
+    // Unknown ids fall through without opening the destructive branch.
+    fireEvent.click(screen.getByRole('button', { name: '工作区“Project”的操作' }))
+    fireEvent.click(screen.getByRole('menuitem', { name: '删除工作区' }))
+    expect(screen.queryByRole('menu')).toBeNull()
+    expect(onToggle).not.toHaveBeenCalled()
+  })
+
   it('workspace hover card shows its details and copies the full directory path', async () => {
     vi.useFakeTimers()
     const writeText = vi.fn(async () => {})
