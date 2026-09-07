@@ -17,6 +17,13 @@ This fork adds a custom update to DeepSeek Harness plus a set of installable plu
 ### Updates to DeepSeek Harness
 
 <details>
+<summary><b>English-only documentation for this custom fork</b> — click to expand</summary>
+
+Maintain READMEs, documentation, and contributor templates in English without creating Chinese counterparts or translation records. Documentation checks and website publishing accept English sources independently; existing translations remain optional legacy references. Every feature, improvement, and plugin is documented in an expandable entry in this section so users can find this fork's additions and their usage or setup.
+
+</details>
+
+<details>
 <summary><b>ui-workspace: `sidebar.workspaces.actions` slot for feature plugins</b> — click to expand</summary>
 
 Declares a new `sidebar.workspaces.actions` list slot (root scope) on the workspace browser, exposed as a `workspaceMenuItems` hook, so feature plugins can contribute extra items to a workspace row's 3-dots menu. `ProjectRowItem` merges contributed items before the built-in Rename/Delete and dispatches each item's `onSelect(workspaceId)`. Adds tests and keeps `Rows.tsx` at 100% coverage.

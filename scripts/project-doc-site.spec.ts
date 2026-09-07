@@ -778,10 +778,10 @@ describe('llmsTxt', () => {
     }
   })
 
-  it('groups the two locale trees under their own headings', () => {
+  it('labels both route trees as English', () => {
     const text = llmsTxt(site)
-    expect(text.indexOf('## 简体中文')).toBeGreaterThan(-1)
-    expect(text.indexOf('## English')).toBeGreaterThan(text.indexOf('## 简体中文'))
+    expect(text.indexOf('## English (root routes)')).toBeGreaterThan(-1)
+    expect(text.indexOf('## English (/en/ compatibility routes)')).toBeGreaterThan(text.indexOf('## English (root routes)'))
   })
 
   it('carries the site identity and the raw-Markdown convention', () => {

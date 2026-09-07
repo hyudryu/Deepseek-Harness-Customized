@@ -814,14 +814,15 @@ describe('worktree-local Lefthook installer', { timeout: 90_000 }, () => {
     expect(readFileSync(legacyHook, 'utf8')).toBe('#!/bin/sh\n# legacy pre-push\n')
   })
 
-  it('installs hooks without the optional translation runtime', async () => {
+  it('rejects missing hook runtime before publishing the hook path', async () => {
     const fixture = createFixture()
     rmSync(join(fixture.main, 'node_modules/tsx'), { recursive: true, force: true })
 
     const result = await runInstaller(fixture, fixture.main)
 
-    expect(result.status, result.stderr).toBe(0)
-    expect(git(fixture, fixture.main, ['config', '--get', 'core.hooksPath'])).toBe(hooksPath(fixture, fixture.main))
+    expect(result.status).toBe(1)
+    expect(result.stderr).toContain('tsx')
+    expect(gitResult(fixture, fixture.main, ['config', '--get', 'core.hooksPath']).status).toBe(1)
     expect(gitResult(fixture, fixture.main, [
       'config', '--get', 'merge.dsh-translation-pairing.driver',
     ]).status).toBe(1)

@@ -145,6 +145,8 @@ Comments and docs state complete contracts and context, not reasoning transcript
 
 Docs accompany every code change: update affected README and JSDoc contracts together. Maintain English-only documentation; translations and pairing records are optional. Follow [docs/AGENTS.md](docs/AGENTS.md) for prose, structure, and budgets; run `dsh-translate-docs` only when explicitly requested.
 
+Every new feature, improvement, or plugin must update the root [README.md](README.md#custom-updates--plugins) in the same PR. Add or update an appropriately titled `<details><summary>` dropdown under **Custom Updates & Plugins**, explaining the custom addition, its user benefit, and relevant usage or setup.
+
 ## Editing these instructions
 
 `CLAUDE.md` symlinks `AGENTS.md` at root and `packages/`; edit the real file. Keep each rule self-contained while linking high-level docs. Condense when clarity survives; raise a `verify-doc-budgets` ceiling when the required content genuinely needs more space.

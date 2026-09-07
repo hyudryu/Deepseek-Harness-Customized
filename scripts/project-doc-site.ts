@@ -555,8 +555,8 @@ export interface LlmsTxtSite {
 
 /** Locale groups llms.txt lists, in the order the site's navigation presents them. */
 const llmsTxtLocales: readonly { heading: string; locale: DocsLocale }[] = [
-  { heading: '简体中文', locale: 'root' },
-  { heading: 'English', locale: 'en' },
+  { heading: 'English (root routes)', locale: 'root' },
+  { heading: 'English (/en/ compatibility routes)', locale: 'en' },
 ]
 
 /**
@@ -567,7 +567,7 @@ const llmsTxtLocales: readonly { heading: string; locale: DocsLocale }[] = [
  * agent-facing entry point itself.
  *
  * @param site Site identity and base path.
- * @returns llms.txt content listing both locale trees.
+ * @returns llms.txt content listing both English route trees.
  */
 export function llmsTxt(site: LlmsTxtSite): string {
   const lines = [
@@ -575,7 +575,7 @@ export function llmsTxt(site: LlmsTxtSite): string {
     '',
     `> ${site.description}`,
     '',
-    '页面 URL 去掉末尾斜杠再加 `.md` 即为该页原始 Markdown(根路径用 `/index.md`);下方列表是各页精确地址。Drop any trailing slash and append `.md` to a page URL for its raw Markdown (the site root is `/index.md`); the list below carries the exact addresses.',
+    'Drop any trailing slash and append `.md` to a page URL for its raw Markdown (the site root is `/index.md`); the list below carries the exact addresses.',
   ]
   for (const { heading, locale } of llmsTxtLocales) {
     lines.push('', `## ${heading}`, '')

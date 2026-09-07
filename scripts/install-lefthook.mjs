@@ -604,6 +604,7 @@ async function main() {
   const lefthook = join(root, 'node_modules', '.bin', isWindows ? 'lefthook.cmd' : 'lefthook')
   if (!existsSync(lefthook)) return
 
+  capture(process.execPath, ['--import', 'tsx/esm', '--eval', ''], { cwd: root })
   assertSupportedGit(root)
   const gitDirectory = stripGitLineTerminator(git(['rev-parse', '--absolute-git-dir'], root).stdout)
   const commonOutput = stripGitLineTerminator(git(['rev-parse', '--git-common-dir'], root).stdout)
