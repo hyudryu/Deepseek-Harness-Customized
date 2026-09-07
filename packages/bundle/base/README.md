@@ -11,6 +11,8 @@ English | [中文](README.zh.md)
 
 Every base-backed `dsh --profile` surface runs on `dsh-base`, so those surfaces share a model connection, the full tool set, durable session history, and workspace safety defaults. The shipped `sdk-minimal` profile deliberately uses a complete standalone tree instead. You rarely touch this bundle directly — shipped base-backed profiles already include it, and a custom base-backed profile names it first. When you need different defaults, change your profile patch or add a later bundle; this package is not a library you import.
 
+The [session MCP server](../../mcp/session-mcp/README.md) starts automatically at `http://127.0.0.1:3080/MCP` and closes with the profile. Web shares its configured HTTP listener; other profiles bind a standalone listener. Set `DSH_SESSION_MCP_PORT` to another port when running concurrent profiles; `0` requests an available port.
+
 ## Table of Contents
 
 - [Use this package](#use-this-package)

@@ -11,6 +11,8 @@ English | [中文](README.zh.md)
 
 Use `dsh --profile sdk-minimal` when an SDK client needs a small, explicit coding-agent runtime. The profile advertises a platform-selected persistent shell and `str_replace_editor`, persists sessions as uncompressed JSONL, and selects the model from the SDK initialization request. It supplies a complete Cordis tree and deliberately excludes `dsh-base`, Web, settings, managed credentials, telemetry, compaction, workspace instructions, skills, jobs, and subagents. Its danger-full-access policy lets the shell and editor modify any path available to the process, so use it only with an isolated workspace.
 
+The [session MCP server](../../mcp/session-mcp/README.md) starts automatically at `http://127.0.0.1:3080/MCP` and closes with the profile. Set `DSH_SESSION_MCP_PORT` to another port when running concurrent profiles; `0` requests an available port. App help exits before the MCP listener starts.
+
 ## Table of Contents
 
 - [Use this package](#use-this-package)

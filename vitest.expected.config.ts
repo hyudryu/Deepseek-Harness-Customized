@@ -7,6 +7,8 @@ import { standardDecoratorPlugin, vitestExecArgv } from './vitest.shared.ts'
 export default defineConfig({
   plugins: [tsconfigPaths({ projects: ['./tsconfig.base.json'] }), standardDecoratorPlugin()],
   test: {
+    // Concurrent profile subprocesses keep MCP enabled on independent OS-assigned ports.
+    env: { DSH_SESSION_MCP_PORT: '0' },
     execArgv: vitestExecArgv,
     setupFiles: ['./scripts/test-proxy-environment.ts', './scripts/test-invariants.ts'],
     include: [

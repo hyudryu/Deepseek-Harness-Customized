@@ -6,6 +6,8 @@ import { vitestExecArgv } from './vitest.shared.ts'
 export default defineConfig({
   plugins: [tsconfigPaths({ projects: ['./tsconfig.base.json'] })],
   test: {
+    // Concurrent profile subprocesses keep MCP enabled on independent OS-assigned ports.
+    env: { DSH_SESSION_MCP_PORT: '0' },
     execArgv: vitestExecArgv,
     include: ['apps/web/stress-tests/**/*.stress.ts'],
     testTimeout: 600_000,

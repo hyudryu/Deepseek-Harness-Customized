@@ -158,6 +158,8 @@ const processBoundTests = [
 export default defineConfig({
   plugins: [pathsPlugin(), standardDecoratorPlugin()],
   test: {
+    // Concurrent profile subprocesses keep MCP enabled on independent OS-assigned ports.
+    env: { DSH_SESSION_MCP_PORT: '0' },
     setupFiles: ['./scripts/test-proxy-environment.ts', './scripts/test-invariants.ts'],
     // .tsx: client component specs (jsdom via per-file @vitest-environment pragma).
     include: testIncludes,

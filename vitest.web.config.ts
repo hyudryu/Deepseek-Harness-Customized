@@ -22,6 +22,8 @@ export default defineConfig({
     standardDecoratorPlugin(),
   ],
   test: {
+    // Concurrent profile subprocesses keep MCP enabled on independent OS-assigned ports.
+    env: { DSH_SESSION_MCP_PORT: '0' },
     execArgv: vitestExecArgv,
     include: [
       'apps/web/tests/**/*.e2e.ts',
