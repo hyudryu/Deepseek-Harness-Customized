@@ -34,6 +34,12 @@ declare module '@deepseek-ai/dsh-client-ui-slots' {
      */
     'sidebar.workspaces': { kind: 'single'; scope: 'root'; owner: SidebarSectionOwnerProps }
     /**
+     * Optional plugin seat rendered directly above the workspace browsing
+     * region. Declared by this package's 'sidebar' entry; a plugin (e.g.
+     * dsh-automations) registers a tab here. Rendered in wide and rail states.
+     */
+    'sidebar.automations': { kind: 'single'; scope: 'root'; owner: SidebarAutomationsOwnerProps }
+    /**
      * The settings seat at the sidebar foot. Declared by this package's
      * 'sidebar' entry; ui-settings registers its trigger row + modal panel.
      * The sidebar passes only its column state — it holds no settings state.
@@ -68,6 +74,12 @@ export interface SidebarSectionOwnerProps {
   wide: boolean
   /** Rail icons request expansion; the browser rides the wide flip for focus. */
   expandSidebar: () => void
+}
+
+/** Owner share of the optional automations seat above the workspace region. */
+export interface SidebarAutomationsOwnerProps {
+  /** Whether the sidebar renders wide content (false = 56px rail). */
+  wide: boolean
 }
 
 /**
@@ -112,6 +124,7 @@ export type SidebarRootComponentProps =
     | 'sidebar.brand.mark'
     | 'sidebar.brand.name'
     | 'sidebar.workspaces'
+    | 'sidebar.automations'
     | 'sidebar.settings'
     | 'sidebar.footer.action'
   >
