@@ -23,6 +23,9 @@ if errorlevel 1 (
   exit /b 9009
 )
 
+echo Checking web port %PORT% before install and build ...
+powershell -NoProfile -Command "try { $owners = @(Get-NetTCPConnection -State Listen -ErrorAction Stop | Where-Object LocalPort -eq ([int]$env:PORT) | Select-Object -ExpandProperty OwningProcess -Unique); if ($owners.Count -gt 0) { throw ('Port is already occupied by pid(s) ' + ($owners -join ', ') + '. If this is an existing dsh session, press Ctrl+C in its console and wait for it to exit, then rerun RUN.bat. Otherwise stop the owning application yourself.') } } catch { $message = 'Cannot start dsh web on port ' + $env:PORT + ': ' + $_.Exception.Message; Write-Host $message; Add-Content -LiteralPath $env:LOG -Value $message -Encoding UTF8; exit 1 }"
+if errorlevel 1 goto :fail
 echo [1/3] pnpm install ...
 powershell -NoProfile -Command "& $env:ComSpec /d /c 'pnpm install' 2>&1 | ForEach-Object { $line = $_.ToString(); Write-Host $line; Add-Content -LiteralPath $env:LOG -Value $line -Encoding UTF8 }; exit $LASTEXITCODE"
 if errorlevel 1 goto :fail
@@ -31,9 +34,6 @@ echo [2/3] pnpm run build (takes several minutes) ...
 powershell -NoProfile -Command "& $env:ComSpec /d /c 'pnpm run build' 2>&1 | ForEach-Object { $line = $_.ToString(); Write-Host $line; Add-Content -LiteralPath $env:LOG -Value $line -Encoding UTF8 }; exit $LASTEXITCODE"
 if errorlevel 1 goto :fail
 
-echo Releasing web port %PORT% before startup ...
-powershell -NoProfile -Command "function Get-Listeners { @(Get-NetTCPConnection -State Listen -ErrorAction Stop | Where-Object LocalPort -eq ([int]$env:PORT)) }; try { $owners = @(Get-Listeners | Select-Object -ExpandProperty OwningProcess -Unique); foreach ($owner in $owners) { if ($owner -le 4) { throw ('Refusing to stop system process ' + $owner) } }; foreach ($owner in $owners) { Write-Host ('Stopping listener on port ' + $env:PORT + ', pid ' + $owner); Stop-Process -Id $owner -Force -ErrorAction Stop }; $deadline = [DateTime]::UtcNow.AddSeconds(10); while (@(Get-Listeners).Count -gt 0) { if ([DateTime]::UtcNow -ge $deadline) { throw 'Port is still occupied after 10 seconds' }; Start-Sleep -Milliseconds 250 } } catch { $message = 'Cannot release web port ' + $env:PORT + ': ' + $_.Exception.Message; Write-Host $message; Add-Content -LiteralPath $env:LOG -Value $message -Encoding UTF8; exit 1 }"
-if errorlevel 1 goto :fail
 echo [3/3] starting dsh web (leave this window open; Ctrl+C to stop) ...
 echo When you see a http://127.0.0.1:%PORT%/?token=... line, open it in your browser.
 call pnpm dsh web
