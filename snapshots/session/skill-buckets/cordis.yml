@@ -1,0 +1,21 @@
+# Bucket discovery augments the shipped headless skill loader.
+
+- insert:
+    - id: skill-catalog-buckets
+      name: '@deepseek-ai/dsh-skill-catalog-buckets'
+      config:
+        pageSize: 2
+
+- id: skill-filesystem
+  config:
+    includeDefaultRoots: false
+    customSkillDirs:
+      - !!js process.cwd() + "/.dsh/skills"
+    watch: false
+
+# Keep the skill-only replay prompt identical across host operating systems.
+- id: tool-pwsh
+  disabled: true
+
+- id: tool-bash
+  disabled: true

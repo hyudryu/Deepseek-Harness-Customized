@@ -3333,6 +3333,14 @@ export const EVENT_API: readonly EventApiEntry[] = [
     parameters: [{ name: 'ns', description: 'the namespace whose resolved value changed.' }, { name: 'next', description: 'the new resolved value.' }, { name: 'prev', description: 'the previous resolved value.' }, { name: 'source', description: 'whether the change entered through `update()` or the provider.' }],
   },
   {
+    name: 'skill/catalog',
+    mode: 'waterfall',
+    signature: '\'skill/catalog\'(this: Scoped<Agent>, payload: { agent: Agent; skills: readonly SkillSummary[] }, next: () => Promise<SkillCatalogPresentation>): Promise<SkillCatalogPresentation>',
+    summary: 'Project a complete model-invocable skill snapshot before durable catalog publication.',
+    description: 'Project a complete model-invocable skill snapshot before durable catalog publication. Scope-filtered dispatch selects listeners visible to the subject agent.',
+    parameters: [{ name: 'payload', description: 'subject agent and complete visible skill metadata.' }, { name: 'next', description: 'delegated presentation, defaulting to the standard full catalog.' }],
+  },
+  {
     name: 'skills/change',
     mode: 'emit',
     signature: '\'skills/change\'(): void',
@@ -5525,8 +5533,16 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export interface SkillCandidate extends SkillSummary {\n    readonly rank: number;\n    readonly locator: unknown;\n    readonly path?: string;\n    readonly metadata?: Readonly<Record<string, unknown>>;\n}',
   },
   {
+    name: 'SkillCatalogPresentation',
+    declaration: 'export interface SkillCatalogPresentation {\n    readonly entries: SkillCatalogSource[\'entries\'];\n    readonly text?: string;\n    readonly revision?: string;\n}',
+  },
+  {
     name: 'SkillCatalogSnapshot',
     declaration: 'export interface SkillCatalogSnapshot {\n    readonly skills: SkillSummary[];\n    readonly complete: boolean;\n}',
+  },
+  {
+    name: 'SkillCatalogSource',
+    declaration: 'export interface SkillCatalogSource {\n    readonly kind: \'skill-catalog\';\n    readonly form: \'catalog\';\n    readonly update?: true;\n    readonly entries: readonly {\n        readonly name: string;\n        readonly description: string;\n    }[];\n    readonly presentationDigest?: string;\n}',
   },
   {
     name: 'SkillDefinition',

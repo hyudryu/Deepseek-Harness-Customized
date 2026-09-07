@@ -169,6 +169,62 @@ async function mintAgentScope(ctx: Context, subject: string | Agent): Promise<{ 
 }
 
 describe('dsh-tool-skill', () => {
+  it('durably refreshes custom catalog presentation identity and restores legacy presentation on disposal', async () => {
+    const ctx = await setup(await tempDir('tool-custom-presentation'))
+    ctx.skills.register({ name: 'aws-example', description: 'AWS example', source: 'runtime', content: 'Instructions' })
+    const agent = agentForCwd('/workspace')
+    let revision = 'first'
+    let text = 'Bucket presentation one'
+    const undo = ctx.on('skill/catalog', async ({ skills }, next) => {
+      const baseline = await next()
+      expect(baseline.entries.map(entry => entry.name)).toEqual(['aws-example'])
+      expect(skills.map(skill => skill.name)).toEqual(['aws-example'])
+      return { entries: [{ name: 'aws', description: 'One AWS skill' }], text, revision }
+    })
+    try {
+      await fireStep(ctx, agent, 1, 1)
+      expect(catalogMessages(agent.session)).toHaveLength(1)
+      const first = catalogMessages(agent.session)[0]!
+      expect(first.data.content).toEqual([{ type: 'text', text }])
+      expect(first.data.source).toMatchObject({ entries: [{ name: 'aws', description: 'One AWS skill' }] })
+      expect((first.data.source as toolSkill.SkillCatalogSource).presentationDigest).toMatch(/^[a-f0-9]{64}$/)
+      await fireStep(ctx, agent, 1, 2)
+      expect(catalogMessages(agent.session)).toHaveLength(1)
+      revision = 'second'
+      await fireStep(ctx, agent, 1, 3)
+      expect(catalogMessages(agent.session)).toHaveLength(2)
+      text = 'Bucket presentation two'
+      await fireStep(ctx, agent, 1, 4)
+      expect(catalogMessages(agent.session)).toHaveLength(3)
+      undo()
+      await fireStep(ctx, agent, 1, 5)
+      const last = catalogMessages(agent.session).at(-1)!
+      expect(last.data.source).toEqual({ kind: 'skill-catalog', form: 'catalog', update: true,
+        entries: [{ name: 'aws-example', description: 'AWS example' }] })
+    } finally { await ctx.fiber.dispose() }
+  })
+
+  it('ignores malformed durable presentation digests instead of suppressing valid guidance', async () => {
+    const ctx = await setup(await tempDir('tool-invalid-presentation'))
+    ctx.skills.register({ name: 'sample', description: 'Sample', source: 'runtime', content: 'Instructions' })
+    const agent = agentForCwd('/workspace')
+    try {
+      agent.session.append('user/message', createUserMessage({
+        content: [{ type: 'text', text: 'External catalog' }],
+        source: { kind: 'skill-catalog', form: 'catalog', entries: [{ name: 'sample', description: 'Sample' }], presentationDigest: 'bad' },
+      }), { surfaceOp: 'append' })
+      await fireStep(ctx, agent, 1, 1)
+      expect(catalogMessages(agent.session)).toHaveLength(2)
+      expect((catalogMessages(agent.session).at(-1)!.data.source as toolSkill.SkillCatalogSource).presentationDigest).toBeUndefined()
+      const malformedProposal = createUserMessage({
+        content: [{ type: 'text', text: 'Malformed proposed presentation' }],
+        source: { kind: 'skill-catalog', form: 'catalog', entries: [{ name: 'sample', description: 'Sample' }], presentationDigest: 'bad' },
+      })
+      const decision = await proposeStep(ctx, agent, [malformedProposal])
+      expect(decision).toEqual({ kind: 'enter', messages: [malformedProposal] })
+    } finally { await ctx.fiber.dispose() }
+  })
+
   it('registers the skill tool schema and removes it on dispose', async () => {
     const ctx = new Context()
     await ctx.plugin(SystemPrompt)

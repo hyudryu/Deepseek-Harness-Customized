@@ -61,6 +61,8 @@ dsh --profile web --no-open --port 8080
 
 每个浏览器会话都从随发行版交付的 preset（默认 `standard`）组合自己的 agent（智能体），而不是共享一套进程级工具集。你可以更改默认 preset，或在 `$DSH_HOME/.agent-presets` 下添加自己的 preset。
 
+Web 组合包启用 [skill 目录分组](../../skill/skill-catalog-buckets/README.zh.md)：agent 先发现简短类别，通过 `skill_catalog` 请求一页摘要，再通过 `skill` 加载完整指令。在配置档案的插件行上配置类别关键词和分页限制。skill 提供方继续使用原有文件，无需云存储。
+
 -----
 
 <a id="understand-the-implementation"></a>

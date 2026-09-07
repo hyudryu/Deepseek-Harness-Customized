@@ -1,0 +1,8 @@
+version: 1
+scenario: skill-buckets
+profile: headless
+composition: skill-buckets
+recording: authored
+header:
+  class: skill-buckets
+  pin: true

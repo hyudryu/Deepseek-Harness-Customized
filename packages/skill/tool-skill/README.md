@@ -27,6 +27,8 @@ Agents can discover and load skills during a session: before the first request t
 
 Mount the plugin alongside the skill registry to give agents a session skill catalog and the `skill` loader tool. It requires `ctx.agents`, `ctx.tools`, and `ctx.skills`.
 
+The full-list catalog is the default presentation. [Skill catalog buckets](../skill-catalog-buckets/README.md) can replace it with brief categories and on-demand summary pages; the `skill` loader and explicit `/name` invocation keep the same behavior.
+
 ### When to choose it
 
 Use it when agents should discover and load skills during a session. Skip it when skill loading is handled by another consumer or not needed at all — without it, providers and the registry still work, but nothing renders a catalog or a tool for the model.
@@ -113,7 +115,7 @@ Read these pages when the package-level contract is not enough. They move from t
 
 If model-invocable skills exist and this exact `skill` tool is visible, the agent receives the catalog template below as a durable user-role message before the first request, with one data-dependent entry per sorted skill. Later membership, description, or visibility changes append a complete replacement using the same `<available_skills>` envelope; deleting every skill appends an empty envelope with an explicit instruction not to use older names. The template's closing sentence is the rule against double-loading: the user-explicit gesture boundary (the pre-step listener below) injects the same `renderSkillContent` output (shared from `@deepseek-ai/dsh-skill`) inline, and the catalog tells the model to follow that block instead of re-loading the skill through the tool; the replacement-catalog template carries the same anti-double-loading rule in both arms, including the emptied catalog.
 
-##### Skill catalog template
+##### Default skill catalog template
 
 ```markdown
 <system-reminder>

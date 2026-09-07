@@ -56,6 +56,7 @@ import * as ToolSchedule from '@deepseek-ai/dsh-schedule'
 import Lsp from '@deepseek-ai/dsh-lsp'
 import * as ToolLsp from '@deepseek-ai/dsh-tool-lsp'
 import * as ToolSkill from '@deepseek-ai/dsh-tool-skill'
+import * as SkillCatalogBuckets from '@deepseek-ai/dsh-skill-catalog-buckets'
 import * as ToolSessionQuery from '@deepseek-ai/dsh-tool-session-query'
 import * as ToolTasks from '@deepseek-ai/dsh-tool-jobs'
 import type TeamService from '@deepseek-ai/dsh-experimental-agent-team'
@@ -437,6 +438,17 @@ const TOOL_PACKAGES: ToolPackage[] = [
         agentsHome: resolve(root, '.tmp/tool-catalog/.agents'),
       })
       await ctx.plugin(ToolSkill)
+    },
+  },
+  {
+    pkg: '@deepseek-ai/dsh-skill-catalog-buckets',
+    dir: 'skill-catalog-buckets',
+    source: 'packages/skill/skill-catalog-buckets/src/index.ts',
+    requires: ['ctx.tools', 'ctx.skills'],
+    writes: ['tool/call', 'tool/result'],
+    async mount(ctx) {
+      await ctx.plugin(SkillRegistry)
+      await ctx.plugin(SkillCatalogBuckets)
     },
   },
   {

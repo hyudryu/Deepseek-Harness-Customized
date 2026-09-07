@@ -2116,6 +2116,36 @@ export interface Config {
 
 Source: [`packages/skill/skill/src/index.ts:280`](../packages/skill/skill/src/index.ts)
 
+<a id="deepseek-aidsh-skill-catalog-buckets"></a>
+
+## `@deepseek-ai/dsh-skill-catalog-buckets`
+
+Requires: `skills` · `tools`
+
+```ts config-catalog
+/** User-configurable discovery categories and output limits. */
+export interface Config {
+  /** Ordered categories; omission uses AWS, MCP, reviews and security. */
+  buckets?: Bucket[]
+  /** Maximum skill summaries per listing page; integer 1 through 100, default 20. */
+  pageSize?: number
+  /** Maximum normalized summary characters including ellipsis; integer 3 through 2000, default 160. */
+  descriptionMaxLength?: number
+}
+
+/** Ordered category definition; the first matching category wins. */
+export interface Bucket {
+  /** Unique kebab-case category name; other is reserved. */
+  name: string
+  /** Human-authored routing summary for the initial catalog. */
+  description: string
+  /** Case-insensitive word phrases matched against skill metadata. */
+  keywords: string[]
+}
+```
+
+Source: [`packages/skill/skill-catalog-buckets/src/index.ts:20`](../packages/skill/skill-catalog-buckets/src/index.ts)
+
 <a id="deepseek-aidsh-skill-filesystem"></a>
 
 ## `@deepseek-ai/dsh-skill-filesystem`
@@ -2893,7 +2923,7 @@ export interface Config {
 }
 ```
 
-Source: [`packages/skill/tool-skill/src/index.ts:61`](../packages/skill/tool-skill/src/index.ts)
+Source: [`packages/skill/tool-skill/src/index.ts:88`](../packages/skill/tool-skill/src/index.ts)
 
 <a id="deepseek-aidsh-tool-str-replace-editor"></a>
 

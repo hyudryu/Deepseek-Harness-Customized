@@ -364,13 +364,13 @@
     },
     {
       "name": "skill",
-      "description": "Load the full instructions for an available skill. Call this with the exact skill name from the session skill catalog before acting on a task that names or clearly matches that skill.",
+      "description": "Load the full instructions for an available skill. Call this with the exact available skill name before acting on a task that names or clearly matches that skill.",
       "parameters": {
         "type": "object",
         "properties": {
           "name": {
             "type": "string",
-            "description": "The exact skill name from the available skills list."
+            "description": "The exact skill name from skill discovery."
           }
         },
         "required": [
