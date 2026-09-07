@@ -10,11 +10,26 @@ export interface SessionUsage {
   readonly missingUsageAttempts: number
 }
 
+function settlementTokens(usage: TokenUsage): number | undefined {
+  const counts = [usage.inputTokens, usage.outputTokens, usage.cacheReadTokens, usage.cacheWriteTokens,
+    usage.reasoningTokens, usage.totalTokens]
+  if (counts.some(count => count !== undefined && (!Number.isSafeInteger(count) || count < 0))) return undefined
+  if (usage.reasoningTokens !== undefined && usage.reasoningTokens > usage.outputTokens) return undefined
+  const knownTokens = usage.inputTokens + usage.outputTokens + (usage.cacheReadTokens ?? 0) + (usage.cacheWriteTokens ?? 0)
+  if (!Number.isSafeInteger(knownTokens)) return undefined
+  if (usage.totalTokens === undefined) return knownTokens
+  if (usage.totalTokens < knownTokens) return undefined
+  if (usage.cacheReadTokens !== undefined && usage.cacheWriteTokens !== undefined && usage.totalTokens !== knownTokens) {
+    return undefined
+  }
+  return usage.totalTokens
+}
+
 /**
  * Count each durable settlement, retaining failed retry usage and inherited routing.
  * @param events - Complete Session events, including the inherited prefix.
  * @param inheritedEventCount - Prefix length used only to recover request routing.
- * @returns Daily model buckets and completed-turn duration.
+ * @returns Daily model buckets, completed-turn duration, and settlements with absent or inconsistent usage.
  */
 export function aggregateSessionUsage(events: readonly SessionEvent[], inheritedEventCount = 0): SessionUsage {
   const days = new Map<string, UsageDay>()
@@ -37,15 +52,14 @@ export function aggregateSessionUsage(events: readonly SessionEvent[], inherited
         if (member.chunk.type === 'usage') usage = member.chunk.usage
       }
     }
-    if (usage === undefined) {
+    const tokens = usage === undefined ? undefined : settlementTokens(usage)
+    if (tokens === undefined) {
       missingUsageAttempts++
       continue
     }
     const { provider, model } = event.type === 'assistant/message' ? event.data.message.source : route
     const date = new Date(event.time).toISOString().slice(0, 10)
     const key = JSON.stringify([date, provider, model])
-    const tokens = usage.totalTokens
-      ?? (usage.inputTokens + usage.outputTokens + (usage.cacheReadTokens ?? 0) + (usage.cacheWriteTokens ?? 0))
     days.set(key, { date, provider, model, tokens: (days.get(key)?.tokens ?? 0) + tokens })
   }
   return { days: [...days.values()], activeMs, missingUsageAttempts }

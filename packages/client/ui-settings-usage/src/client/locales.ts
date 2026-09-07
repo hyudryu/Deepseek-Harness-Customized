@@ -9,7 +9,7 @@ export const en = {
   range: 'Time range', seven: 'Last 7 days', thirty: 'Last 30 days',
   trend: 'Daily token trend', models: 'Model usage', tokens: 'tokens', days: 'd',
   hours: 'h', minutes: 'm', less: 'Less', more: 'More', utc: 'Dates use UTC. Tokens include input and output.',
-  missing: 'Some recorded requests did not report token usage and are excluded.',
+  missing: 'Some recorded requests did not report valid token usage and are excluded.',
   noRange: 'No token usage in this time range.', language: 'en',
   unknownModel: 'Unknown model', unknownProvider: 'Unknown provider',
 } satisfies Record<string, string>
@@ -28,7 +28,7 @@ export const zh = {
   range: '时间范围', seven: '最近 7 天', thirty: '最近 30 天',
   trend: '每日令牌趋势', models: '模型用量', tokens: '令牌', days: '天',
   hours: '小时', minutes: '分钟', less: '少', more: '多', utc: '日期使用 UTC。令牌包含输入和输出。',
-  missing: '部分已记录的请求未报告令牌用量，未计入统计。',
+  missing: '部分已记录的请求未报告有效的令牌用量，未计入统计。',
   noRange: '此时间范围内没有令牌用量。', language: 'zh-CN',
   unknownModel: '未知模型', unknownProvider: '未知提供方',
 } satisfies Record<UsageKey, string>

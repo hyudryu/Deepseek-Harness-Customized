@@ -58,4 +58,4 @@
       - listitem:
         - strong: Usage model · fixture
         - text: 1.6K tokens 100%
-  - paragraph: Dates use UTC. Tokens include input and output.
+  - paragraph: Dates use UTC. Tokens include input and output. Some recorded requests did not report valid token usage and are excluded.

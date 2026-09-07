@@ -26,6 +26,7 @@ it('shows Usage fifth and refreshes charts from persisted sessions', async () =>
       for (const sample of [
         { id: 'usage-dashboard-yesterday', time: instant - 86_400_000, usage: { inputTokens: 800, outputTokens: 200, totalTokens: 1400 } },
         { id: 'usage-dashboard-today', time: instant, usage: { inputTokens: 100, outputTokens: 100 } },
+        { id: 'usage-dashboard-invalid', time: instant, usage: { inputTokens: 10, outputTokens: 3, totalTokens: 0 } },
       ]) {
         const id = SessionId(sample.id)
         const session = scaffold.ctx.sessions.create(id)
@@ -47,6 +48,7 @@ it('shows Usage fifth and refreshes charts from persisted sessions', async () =>
       await dialog.getByRole('button', { name: 'Refresh', exact: true }).click()
       await dialog.getByRole('img', { name: 'Daily token trend', exact: true }).waitFor()
       expect(await dialog.locator('dl').textContent()).toContain('1.6K')
+      await dialog.getByText('Some recorded requests did not report valid token usage and are excluded.').waitFor()
       expect(await dialog.getByRole('region', { name: 'Model usage', exact: true }).textContent()).toContain('Usage model')
       const activity = dialog.getByRole('region', { name: 'Token activity', exact: true })
       const disclosure = activity.locator('summary')

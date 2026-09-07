@@ -24,6 +24,6 @@ export interface UsageSummary {
   /** Largest per-session sum of completed turn durations, excluding idle gaps. */
   readonly longestSessionMs: number
   readonly sessions: number
-  /** Settled attempts with no provider-reported token sample. */
+  /** Settled attempts with absent or inconsistent provider-reported token usage. */
   readonly missingUsageAttempts: number
 }

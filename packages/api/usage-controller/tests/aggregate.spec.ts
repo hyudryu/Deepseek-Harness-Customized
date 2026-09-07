@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
-import { createMessage } from '@deepseek-ai/dsh-llm'
+import { createMessage, type TokenUsage } from '@deepseek-ai/dsh-llm'
 import { RetryId } from '@deepseek-ai/dsh-llm-retry'
 import SessionStore, { type Session } from '@deepseek-ai/dsh-session'
 import { aggregateSessionUsage } from '../src/aggregate.ts'
@@ -37,13 +37,43 @@ describe('historical usage accounting', () => {
     log.append('assistant/attempt', { turn: 1, step: 1, stream: [
       { type: 'chunk', time: 0, chunk: { type: 'text-delta', index: 0, text: 'partial' } },
       { type: 'chunk', time: 0, chunk: { type: 'usage', usage: { inputTokens: 1, outputTokens: 2, totalTokens: 3 } } },
-      { type: 'chunk', time: 1, chunk: { type: 'usage', usage: { inputTokens: 10, outputTokens: 2, totalTokens: 99, reasoningTokens: 50 } } },
+      { type: 'chunk', time: 1, chunk: { type: 'usage', usage: { inputTokens: 10, outputTokens: 2, totalTokens: 99, reasoningTokens: 2 } } },
     ] })
     log.append('assistant/message', {
-      turn: 1, step: 1, stream: [], usage: { inputTokens: 10, outputTokens: 3, totalTokens: 0 },
+      turn: 1, step: 1, stream: [], usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 },
       message: createMessage({ role: 'assistant', content: [], source: { kind: 'model', provider: '', model: '' } }),
     }, { surfaceOp: 'append' })
     expect(aggregateSessionUsage(log.snapshotEvents()).days[0]?.tokens).toBe(99)
+  })
+
+  it.each<{ name: string; usage: TokenUsage; tokens: number }>([
+    { name: 'zero usage', usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 }, tokens: 0 },
+    { name: 'complete cache counters', usage: { inputTokens: 10, outputTokens: 3, cacheReadTokens: 2, cacheWriteTokens: 4, totalTokens: 19 }, tokens: 19 },
+    { name: 'unknown cache reads', usage: { inputTokens: 10, outputTokens: 3, cacheWriteTokens: 4, totalTokens: 99 }, tokens: 99 },
+    { name: 'unknown cache writes', usage: { inputTokens: 10, outputTokens: 3, cacheReadTokens: 2, totalTokens: 99 }, tokens: 99 },
+  ])('accepts consistent exact totals with $name', async ({ usage, tokens }) => {
+    const log = await session()
+    log.append('assistant/attempt', { turn: 1, step: 1, stream: [{ type: 'chunk', time: 0, chunk: { type: 'usage', usage } }] })
+    const result = aggregateSessionUsage(log.snapshotEvents())
+    expect(result.days[0]?.tokens).toBe(tokens)
+    expect(result.missingUsageAttempts).toBe(0)
+  })
+
+  it.each<{ name: string; usage: TokenUsage }>([
+    { name: 'zero total with positive usage', usage: { inputTokens: 10, outputTokens: 3, totalTokens: 0 } },
+    { name: 'total below known cache buckets', usage: { inputTokens: 10, outputTokens: 3, cacheReadTokens: 4, totalTokens: 16 } },
+    { name: 'excess total with complete cache counters', usage: { inputTokens: 10, outputTokens: 3, cacheReadTokens: 2, cacheWriteTokens: 4, totalTokens: 20 } },
+    { name: 'reasoning exceeds output', usage: { inputTokens: 10, outputTokens: 3, reasoningTokens: 4, totalTokens: 99 } },
+    { name: 'negative total', usage: { inputTokens: 0, outputTokens: 0, totalTokens: -1 } },
+    { name: 'fractional total', usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0.5 } },
+    { name: 'unsafe bucket sum', usage: { inputTokens: Number.MAX_SAFE_INTEGER, outputTokens: 1 } },
+  ])('reports $name as missing usage without a bucket', async ({ usage }) => {
+    const log = await session()
+    log.append('assistant/message', {
+      turn: 1, step: 1, stream: [], usage,
+      message: createMessage({ role: 'assistant', content: [], source: { kind: 'model', provider: 'test', model: 'invalid' } }),
+    }, { surfaceOp: 'append' })
+    expect(aggregateSessionUsage(log.snapshotEvents())).toEqual({ days: [], activeMs: 0, missingUsageAttempts: 1 })
   })
 
   it('counts same-step retries without retry markers and preserves missing attempts', async () => {

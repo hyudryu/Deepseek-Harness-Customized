@@ -2,5 +2,5 @@
 # side as of the last confirmed-consistent state. Both languages carry equal authority;
 # after editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write .agents/notes/implemented/feature/2026-09-07-settings-usage-dashboard.md
-2026-09-07-settings-usage-dashboard.md: 7af5ce8184acc1c64f7d5e88c2337b8f2ac18f11
-2026-09-07-settings-usage-dashboard.zh.md: bbef46293181686a78ddcd556bb08d1d8420c47d
+2026-09-07-settings-usage-dashboard.md: 38816809b8fbcc539ee38cb5f1459d8f46656077
+2026-09-07-settings-usage-dashboard.zh.md: 30dbc2b318d12e0cfc6a35b95d27e680e843745f
