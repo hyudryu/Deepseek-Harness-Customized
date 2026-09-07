@@ -1518,9 +1518,6 @@ importers:
       '@deepseek-ai/dsh-agent-presets':
         specifier: workspace:^
         version: link:../../preset/agent-presets
-      '@deepseek-ai/dsh-api-browser-controller':
-        specifier: workspace:^
-        version: link:../../api/browser-controller
       '@deepseek-ai/dsh-api-remotes':
         specifier: workspace:^
         version: link:../../api/remotes
@@ -1569,9 +1566,6 @@ importers:
       '@deepseek-ai/dsh-client-ui-brand-official':
         specifier: workspace:^
         version: link:../../client/ui-brand-official
-      '@deepseek-ai/dsh-client-ui-browser':
-        specifier: workspace:^
-        version: link:../../client/ui-browser
       '@deepseek-ai/dsh-client-ui-chat':
         specifier: workspace:^
         version: link:../../client/ui-chat
