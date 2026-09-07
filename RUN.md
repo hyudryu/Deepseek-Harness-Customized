@@ -13,7 +13,7 @@
 
 ## Start the application
 
-Double-click `RUN.bat`. It first checks that port 3080 is free, then runs `pnpm install`, `pnpm run build`, and `pnpm dsh web`. Installation and build output appear in the console and append to UTF-8 `run.log` beside the launcher; the build can take several minutes. Application output stays in the console.
+Double-click `RUN.bat`. It first checks that port 3080 is free, then runs `pnpm install`, `pnpm run install:custom-plugins`, `pnpm run build`, and `pnpm dsh web`. Installation and build output appear in the console and append to UTF-8 `run.log` beside the launcher; the build can take several minutes. Application output stays in the console.
 
 Open the token-bearing URL printed by dsh. Leave the launcher window open while using the application; press Ctrl+C to stop it.
 
@@ -26,6 +26,8 @@ An installation or build failure preserves the previous running instance, stops 
 If pnpm is missing, follow [contributor setup](docs/development.md) and reopen the launcher.
 
 ## Keep custom plugins available
+
+The root workspace install does not install standalone packages under `Custom Plugins`. Run `pnpm run install:custom-plugins` after changing their dependencies: it installs every direct subdirectory with a `package.json` using its frozen lockfile and imports its declared entry with Node.js. Missing dependencies or import errors stop startup before the build. The launcher and static CI job run this check automatically; plugin authors must commit manifest and lockfile changes together.
 
 Keep the source directories of locally installed plugins at their installed paths, including directories outside this checkout. If startup reports a missing plugin path, restore that directory or reinstall the affected plugin from its retained source. Preserve the existing `.dsh` sessions and settings; deleting or resetting the profile is not a plugin repair.
 

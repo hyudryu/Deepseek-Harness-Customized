@@ -89,6 +89,9 @@ jobs:
       - name: Test custom QA plugin schemas
         run: node --import tsx/esm --test "Custom Plugins/qa-testing/test/*.test.mjs"
 
+      - name: Install and import custom plugins
+        run: pnpm run install:custom-plugins
+
       - name: Run static gates
         env:
           DSH_ARCHIVE_BASE_REF: ${{ github.event.pull_request.base.sha }}
