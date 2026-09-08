@@ -4,6 +4,12 @@ English | [中文](goal.zh.md)
 
 Types shared by the event-sourced goal service and its policy consumers. The [goal-domain Agent Note](../../.agents/notes/implemented/feature/2026-07-19-persisted-same-session-goal-domain.md) owns the persistence and activation decisions; this page records the exact fields and variants from [`packages/goal/goal/src/types.ts`](../../packages/goal/goal/src/types.ts).
 
+## SuperGoal
+
+[SuperGoal](../../packages/goal/super-goal/README.md) retains a separate long-term objective in `super-goal/change` events. [`SuperGoal`](../../packages/goal/super-goal/src/types.ts) contains a monotonic `revision`, the `objective`, and an `active`, `paused`, `blocked`, or `complete` phase. Completion requires `evidence`; a blocker requires `reason` and two or three distinct `choices`. A human response is retained as `answer`. The version-1 change envelope carries its matching revision and a nullable `goal`; null clears the objective without resetting the revision.
+
+The `superGoal` Session projection supplies the highlighted banner above the transcript. Its checkpoint retains the latest revision, current goal, and first validation failure. The plugin compares model mutations and delayed human answers with the current revision. Execution activation is process-local; a durable active phase alone does not restart work after loading a session.
+
 ## Identity and lifecycle
 
 `GoalId` is a [branded id](core.md#branded-ids). A caller mutates one exact revision through `GoalRef`; every accepted durable mutation increments the revision.

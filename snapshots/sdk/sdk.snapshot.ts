@@ -322,7 +322,7 @@ async function hydrateReplayFixtures(scenario: CorpusScenario, cwd: string): Pro
   await mkdir(root, { recursive: true })
   return Promise.all((await fixtureFiles(scenario)).map(async (source) => {
     const destination = join(root, basename(source))
-    await writeFile(destination, (await readFile(source, 'utf8')).replaceAll('{{cwd}}', cwd))
+    await writeFile(destination, (await readFile(source, 'utf8')).replaceAll('{{cwd}}', JSON.stringify(cwd).slice(1, -1)))
     return destination
   }))
 }
@@ -342,6 +342,14 @@ function normalizeNotifications(notifications: readonly HarnessNotification[], c
       normalizeSessionFormatProvenance(`${events.map(event => JSON.stringify(event)).join('\n')}\n`),
       ctx,
     )).trimEnd().split('\n').map(line => JSON.parse(line) as Record<string, unknown>)
+  const commandEvents = normalizedEvents.filter(event => event.type === 'command/run' || event.type === 'command/done')
+  const normalizedCommands = commandEvents.length === 0 ? [] : (redactSessionSnapshotIds([
+    `${commandEvents.map(event => JSON.stringify(event)).join('\n')}\n`,
+  ])[0] as string).trimEnd().split('\n').map(line => JSON.parse(line) as JsonObject)
+  let commandIndex = 0
+  for (const [index, event] of normalizedEvents.entries()) {
+    if (event.type === 'command/run' || event.type === 'command/done') normalizedEvents[index] = normalizedCommands[commandIndex++] as JsonObject
+  }
   let eventIndex = 0
   const records = notifications.map((notification) => {
     if (notification.method !== 'session.event') return { method: notification.method, params: notification.params }
@@ -730,9 +738,9 @@ async function verifyHeaders(
         ? configured
         : { ...configured as JsonObject, tools: selectedSchemas }
       expect(header, `${scenario.name}: session ${logIndex} header ${index + 1}`).toEqual(expected)
-      expect(formatSystemPromptSnapshot(prompts[index] as string), `${scenario.name}: session ${logIndex} prompt ${index + 1}`)
-        .toBe(childPrompts.get(logIndex) ?? prompt)
     }
+    expect(formatSystemPromptSnapshot(prompts[0] as string, prompts.slice(1)), `${scenario.name}: session ${logIndex} prompts`)
+      .toBe(childPrompts.get(logIndex) ?? prompt)
   }
 }
 

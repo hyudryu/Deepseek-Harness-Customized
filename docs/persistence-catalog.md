@@ -778,6 +778,19 @@ Source: [`packages/subagent/subagent/src/descriptor.ts:38`](../packages/subagent
 
 Source: [`packages/subagent/tool-subagent/src/model-selection-state.ts:17`](../packages/subagent/tool-subagent/src/model-selection-state.ts)
 
+### `super-goal/*`
+
+<a id="super-goalchange--log-only"></a>
+
+#### `super-goal/change` — log-only
+
+```ts persistence-catalog
+/** Durable long-term objective and human decisions. */
+'super-goal/change': SuperGoalChange
+```
+
+Source: [`packages/goal/super-goal/src/index.ts:17`](../packages/goal/super-goal/src/index.ts)
+
 ### `team/*`
 
 <a id="teammember--log-only"></a>

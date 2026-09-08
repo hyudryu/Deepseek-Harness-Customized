@@ -1,0 +1,3 @@
+- insert:
+    - id: seed-super-goal
+      name: '../../../packages/goal/super-goal/tests/fixtures/seed-super-goal.ts'

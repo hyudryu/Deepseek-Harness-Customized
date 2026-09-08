@@ -17,6 +17,15 @@ This fork adds custom updates to DeepSeek Harness plus a set of installable plug
 ### Updates to DeepSeek Harness
 
 <details>
+<summary><b>SuperGoal: pursue a long-term objective</b></summary>
+
+Start `/supergoal <objective>` to keep the session working toward a long-term result. A highlighted banner at the top of the session shows the objective with its current status underneath. SuperGoal checks the objective whenever a task is about to finish and continues while work remains. Completion requires recorded evidence; a hard blocker opens a multiple-choice question and gives the session a yellow waiting-for-answer indicator. Your answer is recorded before work resumes.
+
+SuperGoal is included in the standard harness. Use `/supergoal` to inspect it, `/supergoal pause` to stop work, `/supergoal resume` to continue, or `/supergoal clear` to remove it. The objective survives session reloads; resuming execution requires `/supergoal resume`. See the [SuperGoal reference](packages/goal/super-goal/README.md) for behavior and limitations.
+
+</details>
+
+<details>
 <summary><b>Session MCP endpoint for external assistants</b> — click to expand</summary>
 
 Connect an MCP client to `http://127.0.0.1:3080/mcp` to browse projects, find saved sessions by title or ID, and read their transcripts and current status. Reading a saved session does not resume it. External clients can also queue or steer a message and request cancellation for a session already active in the same Harness process.

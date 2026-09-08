@@ -1,0 +1,47 @@
+[
+  {
+    "kind": "chunks",
+    "chunks": [
+      {
+        "type": "block-start",
+        "index": 0,
+        "blockType": "tool-call"
+      },
+      {
+        "type": "tool-call-delta",
+        "index": 0,
+        "id": "super-goal-block",
+        "name": "block_super_goal",
+        "argumentsDelta": "{\"revision\": 1, \"reason\": \"Which deployment target should I use?\", \"choices\": [\"Use staging\", \"Choose another target\"]}"
+      },
+      {
+        "type": "block-end",
+        "index": 0,
+        "block": {
+          "type": "tool-call",
+          "id": "super-goal-block",
+          "name": "block_super_goal",
+          "arguments": "{\"revision\": 1, \"reason\": \"Which deployment target should I use?\", \"choices\": [\"Use staging\", \"Choose another target\"]}"
+        }
+      },
+      {
+        "type": "usage",
+        "usage": {
+          "inputTokens": 10,
+          "outputTokens": 10,
+          "cacheReadTokens": 0,
+          "reasoningTokens": 0
+        }
+      },
+      {
+        "type": "finish",
+        "reason": {
+          "kind": "tool-calls"
+        }
+      }
+    ]
+  },
+  {
+    "kind": "hang"
+  }
+]

@@ -1,0 +1,31 @@
+{
+  "final_response": "SUPERGOAL COMPLETE",
+  "finish_reason": "completed",
+  "changes": [
+    {
+      "type": "super-goal/change",
+      "data": {
+        "version": 1,
+        "revision": 1,
+        "goal": {
+          "revision": 1,
+          "objective": "Verify both acceptance checks before stopping",
+          "phase": "active"
+        }
+      }
+    },
+    {
+      "type": "super-goal/change",
+      "data": {
+        "version": 1,
+        "revision": 2,
+        "goal": {
+          "revision": 2,
+          "objective": "Verify both acceptance checks before stopping",
+          "phase": "complete",
+          "evidence": "Both acceptance checks returned PASS."
+        }
+      }
+    }
+  ]
+}

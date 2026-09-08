@@ -1,0 +1,150 @@
+[
+  {
+    "kind": "chunks",
+    "chunks": [
+      {
+        "type": "block-start",
+        "index": 0,
+        "blockType": "text"
+      },
+      {
+        "type": "text-delta",
+        "index": 0,
+        "text": "The first acceptance check passed."
+      },
+      {
+        "type": "block-end",
+        "index": 0,
+        "block": {
+          "type": "text",
+          "text": "The first acceptance check passed."
+        }
+      },
+      {
+        "type": "usage",
+        "usage": {
+          "inputTokens": 20,
+          "outputTokens": 8
+        }
+      },
+      {
+        "type": "finish",
+        "reason": {
+          "kind": "stop"
+        }
+      }
+    ]
+  },
+  {
+    "kind": "chunks",
+    "chunks": [
+      {
+        "type": "block-start",
+        "index": 0,
+        "blockType": "tool-call"
+      },
+      {
+        "type": "tool-call-delta",
+        "index": 0,
+        "id": "call_supergoal",
+        "name": "complete_super_goal",
+        "argumentsDelta": "{\"revision\":1,\"evidence\":\"Both acceptance checks returned PASS.\"}"
+      },
+      {
+        "type": "block-end",
+        "index": 0,
+        "block": {
+          "type": "tool-call",
+          "id": "call_supergoal",
+          "name": "complete_super_goal",
+          "arguments": "{\"revision\":1,\"evidence\":\"Both acceptance checks returned PASS.\"}"
+        }
+      },
+      {
+        "type": "usage",
+        "usage": {
+          "inputTokens": 20,
+          "outputTokens": 8
+        }
+      },
+      {
+        "type": "finish",
+        "reason": {
+          "kind": "tool-calls"
+        }
+      }
+    ]
+  },
+  {
+    "kind": "chunks",
+    "chunks": [
+      {
+        "type": "block-start",
+        "index": 0,
+        "blockType": "text"
+      },
+      {
+        "type": "text-delta",
+        "index": 0,
+        "text": "SUPERGOAL COMPLETE"
+      },
+      {
+        "type": "block-end",
+        "index": 0,
+        "block": {
+          "type": "text",
+          "text": "SUPERGOAL COMPLETE"
+        }
+      },
+      {
+        "type": "usage",
+        "usage": {
+          "inputTokens": 20,
+          "outputTokens": 8
+        }
+      },
+      {
+        "type": "finish",
+        "reason": {
+          "kind": "stop"
+        }
+      }
+    ]
+  },
+  {
+    "kind": "chunks",
+    "chunks": [
+      {
+        "type": "block-start",
+        "index": 0,
+        "blockType": "text"
+      },
+      {
+        "type": "text-delta",
+        "index": 0,
+        "text": "Both acceptance checks remain complete."
+      },
+      {
+        "type": "block-end",
+        "index": 0,
+        "block": {
+          "type": "text",
+          "text": "Both acceptance checks remain complete."
+        }
+      },
+      {
+        "type": "usage",
+        "usage": {
+          "inputTokens": 20,
+          "outputTokens": 8
+        }
+      },
+      {
+        "type": "finish",
+        "reason": {
+          "kind": "stop"
+        }
+      }
+    ]
+  }
+]

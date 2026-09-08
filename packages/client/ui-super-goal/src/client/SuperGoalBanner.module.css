@@ -1,0 +1,41 @@
+/* Persistent full-width objective card above the transcript. */
+.banner {
+  flex: none;
+  margin: 8px 16px;
+  padding: 12px 16px;
+  border: 1px solid var(--dsw-alias-border-l1);
+  border-inline-start: 4px solid var(--dsw-alias-state-business-primary);
+  border-radius: 12px;
+  background: var(--dsw-specific-tip);
+  color: var(--dsw-alias-label-primary);
+  overflow-wrap: anywhere;
+}
+
+.banner[data-phase='blocked'] {
+  border-inline-start-color: var(--dsw-alias-state-warn-primary);
+}
+
+.banner[data-phase='complete'] {
+  border-inline-start-color: var(--dsw-alias-state-success-primary);
+}
+
+.title {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--dsw-alias-label-secondary);
+}
+
+.objective {
+  margin-top: 4px;
+  font-size: 16px;
+  font-weight: 600;
+  line-height: 1.5;
+}
+
+.status,
+.detail {
+  margin-top: 4px;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--dsw-alias-label-secondary);
+}

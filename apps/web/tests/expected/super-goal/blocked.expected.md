@@ -1,0 +1,4 @@
+- region "SuperGoal":
+  - text: SuperGoal Deploy the verified product to the selected environment
+  - status: "Needs your input: Answer the question to continue"
+  - text: Which deployment target should I use?

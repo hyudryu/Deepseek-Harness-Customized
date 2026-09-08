@@ -11,6 +11,8 @@ English | [中文](README.zh.md)
 
 `ui-conversation` owns target-neutral Conversation assembly and the shared browser shell. It consumes Session Controller `SessionEventLikeEntry` feeds, exposes React-free registries and per-Session bindings through `ctx.uiConversation`, and contributes the `useConversation`, `useInput`, and `inputActions` standard props through `ctx.uiSession`. It also owns the per-session durable image URL cache: `ctx.uiConversation.imageUrl(sessionId, attachment)` resolves one session-authorized browser URL per attachment and revokes it with the Session binding, so every Conversation target shares one `session.attachment` read. Concrete targets such as Chat are separate packages that register their own Definitions, snapshot builders, Views, and renderers.
 
+The shell declares `conversation.session.banner`, a Session-scoped list below the header and above the transcript. Feature plugins register full-width notices there; the shell hides the list when no Session is selected.
+
 ## Table of Contents
 
 - [Conversation assembly](#conversation-assembly)

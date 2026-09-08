@@ -226,11 +226,9 @@ describe('dsh-sdk-jsonrpc-server plugin apply', () => {
       const probe = { jsonrpc: '2.0', id: 'probe-during-delay', method: 'nope/unknown' }
       harness.sendRaw(`${JSON.stringify(initialize)}\n${JSON.stringify(probe)}\n`)
 
-      // The transport processes independent requests concurrently. Receiving
-      // this later probe proves the preceding initialize handler has reached
-      // its Loader wait, without relying on a scheduler delay.
-      await harness.waitForFrame(frame => frame.id === 'probe-during-delay', 'probe while initialize waits')
-      expect(harness.frames().some(frame => frame.id === 'init-delayed')).toBe(false)
+      // Input remains buffered until the Loader has a stable serving owner.
+      await settle()
+      expect(harness.frames()).toEqual([])
 
       release()
       await delayedEntry
@@ -240,6 +238,35 @@ describe('dsh-sdk-jsonrpc-server plugin apply', () => {
         result: { serverInfo: { name: 'deepseek-harness-sdk-runtime' } },
       })
       expect(harness.ctx.llm.listProviders()).toContainEqual({ id: 'delayed-private', name: 'delayed-private' })
+    } finally {
+      release()
+      await Promise.allSettled(delayedEntry === undefined ? [] : [delayedEntry])
+      await harness.dispose()
+      await rm(storageDir, { recursive: true, force: true })
+    }
+  })
+
+  it('does not consume buffered input after disposal during Loader startup', async () => {
+    const storageDir = await mkdtemp(join(tmpdir(), 'dsh-jsonrpc-apply-disposed-readiness-'))
+    let release!: () => void
+    const ready = new Promise<void>((resolve) => { release = resolve })
+    let delayedEntry: Promise<string> | undefined
+    const harness = await mountPlugin(storageDir, {
+      beforeServer: async (ctx) => {
+        await ctx.plugin(Loader)
+        ctx.loader.builtins['delayed-disposal'] = { async apply() { await ready } }
+        delayedEntry = ctx.loader.create({ name: 'cordis:delayed-disposal' })
+      },
+    })
+    try {
+      harness.send({ jsonrpc: '2.0', id: 'unconsumed', method: 'nope/unknown' })
+      await harness.fiber.dispose()
+      release()
+      await delayedEntry
+      await harness.ctx.loader.await()
+      await settle()
+      expect(harness.frames()).toEqual([])
+      expect(harness.exits()).toEqual([])
     } finally {
       release()
       await Promise.allSettled(delayedEntry === undefined ? [] : [delayedEntry])
