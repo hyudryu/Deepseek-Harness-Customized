@@ -280,4 +280,47 @@ Goal mutation accepted by one live agent. The matching `goal/change` session eve
 Types: [Agent](core.md) · [Scoped](scope.md)
 
 Source: [`packages/goal/goal/src/domain.ts`](../../packages/goal/goal/src/domain.ts)
+
+<a id="super-goal-events"></a>
+
+### `super-goal/*` events
+
+<a id="super-goalactivation--bail"></a>
+
+#### `super-goal/activation` — bail
+
+Read process-local pursuit for the exact live root Session.
+
+```ts cordis-catalog
+/**
+ * Read process-local pursuit for the exact live root Session.
+ * @mode bail
+ * @param session - Session whose pursuit is requested.
+ */
+'super-goal/activation'(session: Session): boolean | undefined
+```
+
+Types: [Session](session.md)
+
+Source: [`packages/goal/super-goal/src/index.ts`](../../packages/goal/super-goal/src/index.ts)
+
+<a id="super-goalactivation-changed--emit"></a>
+
+#### `super-goal/activation-changed` — emit
+
+Publish a committed process-local pursuit change.
+
+```ts cordis-catalog
+/**
+ * Publish a committed process-local pursuit change.
+ * @mode emit
+ * @param session - Session whose pursuit changed.
+ * @param armed - Whether SuperGoal continuation is armed.
+ */
+'super-goal/activation-changed'(session: Session, armed: boolean): void
+```
+
+Types: [Session](session.md)
+
+Source: [`packages/goal/super-goal/src/index.ts`](../../packages/goal/super-goal/src/index.ts)
 <!-- END GENERATED cordis-surface -->

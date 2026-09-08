@@ -418,7 +418,7 @@ describe('scope tree', () => {
 
     b.svc.handleControlFrame({
       type: 'baseline',
-      value: { queues: {}, jobs: {}, projections: {} },
+      value: { queues: {}, jobs: {}, superGoalArmed: {}, projections: {} },
     })
     await Promise.resolve()
     expect(b.svc.resolveAgentScope(sid('s-early'))).toBe(scoped)

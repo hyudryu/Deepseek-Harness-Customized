@@ -144,3 +144,32 @@ describe('Session control queue projection', () => {
     await expect(iterator.next()).resolves.toMatchObject({ done: true })
   })
 })
+
+
+describe('SuperGoal activation transport', () => {
+  it('reads current activation in each baseline and streams activation replacements', async () => {
+    const { ctx, control, agent } = await harness()
+    const abort = new AbortController()
+    const iterator = control.control(abort.signal)[Symbol.asyncIterator]()
+    try {
+      expect((await iterator.next()).value).toMatchObject({ type: 'baseline', value: {
+        superGoalArmed: { [agent.session.id]: false },
+      } })
+      const dispose = ctx.on('super-goal/activation', session => session === agent.session)
+      ctx.emit('super-goal/activation-changed', agent.session, true)
+      expect((await iterator.next()).value).toEqual({ type: 'super-goal-activation', sessionId: agent.session.id, armed: true })
+      const reconnect = control.control(abort.signal)[Symbol.asyncIterator]()
+      expect((await reconnect.next()).value).toMatchObject({ type: 'baseline', value: {
+        superGoalArmed: { [agent.session.id]: true },
+      } })
+      await reconnect.return?.()
+      dispose()
+      ctx.emit('super-goal/activation-changed', agent.session, false)
+      expect((await iterator.next()).value).toEqual({ type: 'super-goal-activation', sessionId: agent.session.id, armed: false })
+    } finally {
+      abort.abort()
+      await iterator.return?.()
+      await ctx.fiber.dispose()
+    }
+  })
+})

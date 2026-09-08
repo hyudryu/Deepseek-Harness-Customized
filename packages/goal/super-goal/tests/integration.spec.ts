@@ -1,5 +1,5 @@
 /** SuperGoal behavior through the real agent loop and command runtime. */
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
 import type { Agent } from '@deepseek-ai/dsh-agent'
 import AgentLoop from '@deepseek-ai/dsh-agent-loop'
@@ -55,6 +55,128 @@ function pendingQuestion(ctx: Context) {
 const blocker = { revision: 1, reason: 'Which deployment target is authorized?', choices: ['Use staging', 'Provide another target'] }
 
 describe('SuperGoal through the real loop', () => {
+  it('reads and mutates a materialized objective without copying the session log again', async () => {
+    const { ctx, agent } = await harness(new MockAdapter([]))
+    agent.session.append('super-goal/change', { version: 1, revision: 1,
+      goal: { revision: 1, objective: 'Retained objective', phase: 'paused' } })
+    ctx.sessionProjections.stateOf(agent.session, 'superGoal')
+    const snapshots = vi.spyOn(agent.session, 'snapshotEvents')
+    try {
+      expect((await command(ctx, agent, 'show'))?.result.text).toContain('Retained objective')
+      expect((await command(ctx, agent, 'pause'))?.result.kind).toBe('success')
+      expect((await command(ctx, agent, 'show'))?.result.text).toContain('Retained objective')
+      expect((await command(ctx, agent, 'clear'))?.result.kind).toBe('success')
+      expect((await command(ctx, agent, 'show'))?.result.text).toContain('No SuperGoal')
+      expect(snapshots).not.toHaveBeenCalled()
+      expect(ctx.sessionProjections.stateOf(agent.session, 'superGoal')).toMatchObject({ revision: 3, goal: null })
+    } finally {
+      snapshots.mockRestore()
+    }
+  })
+
+  it('retains an invalid history failure and refuses host reads and mutations', async () => {
+    const { ctx, agent } = await harness(new MockAdapter([]))
+    agent.session.append('super-goal/change', { version: 1, revision: 2,
+      goal: { revision: 2, objective: 'Invalid retained objective', phase: 'paused' } })
+    const failure = ctx.sessionProjections.stateOf(agent.session, 'superGoal')?.failure
+    expect(failure).toContain('Invalid SuperGoal event')
+    agent.session.append('super-goal/change', { version: 1, revision: 1,
+      goal: { revision: 1, objective: 'Later valid event', phase: 'paused' } })
+    const changes = agent.session.snapshotEvents().filter(event => event.type === 'super-goal/change')
+    for (const input of ['show', 'pause', 'clear', 'Replacement objective']) {
+      await expect(command(ctx, agent, input)).rejects.toThrow(failure ?? 'Expected validation failure')
+    }
+    expect(agent.session.snapshotEvents().filter(event => event.type === 'super-goal/change')).toEqual(changes)
+  })
+  it('cancelling a resume command aborts its blocker and rejects a late answer', async () => {
+    const adapter = new MockAdapter([])
+    const { ctx, agent } = await harness(adapter)
+    agent.session.append('super-goal/change', { version: 1, revision: 1,
+      goal: { ...blocker, objective: 'Authorized deployment', phase: 'blocked' } })
+    const question = pendingQuestion(ctx)
+    const controller = new AbortController()
+    const resumed = ctx.commands.execute(agent, '/supergoal resume', [], controller.signal)
+    const rejected = expect(resumed).rejects.toThrow()
+    const request = await question.received
+    controller.abort()
+    await rejected
+    expect(request.signal?.aborted).toBe(true)
+    question.answer.resolve({ answers: [{ id: 'super-goal-blocker', selected: ['Use staging'] }] })
+    await ctx.fiber.dispose()
+    expect(readSuperGoal(agent.session)).toMatchObject({ revision: 1, phase: 'blocked' })
+    expect(adapter.requests).toHaveLength(0)
+  })
+
+  it.each([false, true])('cancellation at answer commit leaves pursuit disarmed with an unrelated turn running: %s', async (running) => {
+    const adapter = new MockAdapter([textResponse('Unrelated task finished.')])
+    const { ctx, agent } = await harness(adapter)
+    agent.session.append('super-goal/change', { version: 1, revision: 1,
+      goal: { ...blocker, objective: 'Authorized deployment', phase: 'blocked' } })
+    const entered = Promise.withResolvers<undefined>()
+    const release = Promise.withResolvers<undefined>()
+    cleanups.push(async () => { release.resolve(undefined); await agent.whenIdle() })
+    ctx.on('agent/pre-step', async (_, next) => {
+      entered.resolve(undefined)
+      await release.promise
+      return next()
+    })
+    if (running) {
+      agent.followup(createUserMessage({ source: { kind: 'user' }, content: [{ type: 'text', text: 'Unrelated task' }] }))
+      await entered.promise
+    }
+    const question = pendingQuestion(ctx)
+    const controller = new AbortController()
+    ctx.on('session/event', (session, event) => {
+      if (session === agent.session && event.type === 'super-goal/change' && event.data.goal?.answer) {
+        queueMicrotask(() => { controller.abort() })
+      }
+    })
+    const resumed = ctx.commands.execute(agent, '/supergoal resume', [], controller.signal)
+    const rejected = expect(resumed).rejects.toThrow()
+    await question.received
+    question.answer.resolve({ answers: [{ id: 'super-goal-blocker', selected: ['Use staging'] }] })
+    await rejected
+    expect(ctx.bail('super-goal/activation', agent.session)).not.toBe(true)
+    expect((await command(ctx, agent, 'show'))?.result.text).toContain('resume to continue')
+    release.resolve(undefined)
+    await agent.whenIdle()
+    expect(adapter.requests).toHaveLength(running ? 1 : 0)
+  })
+
+  it('pause retains the blocked decision requirement and resume asks again', async () => {
+    const adapter = new MockAdapter(['hang'])
+    const { ctx, agent } = await harness(adapter)
+    agent.session.append('super-goal/change', { version: 1, revision: 1,
+      goal: { ...blocker, objective: 'Authorized deployment', phase: 'blocked' } })
+    await command(ctx, agent, 'pause')
+    expect(readSuperGoal(agent.session)?.phase).toBe('blocked')
+    const question = pendingQuestion(ctx)
+    const resumed = command(ctx, agent, 'resume')
+    await question.received
+    expect(adapter.requests).toHaveLength(0)
+    question.answer.resolve({ answers: [{ id: 'super-goal-blocker', selected: ['Use staging'] }] })
+    await resumed
+    expect(readSuperGoal(agent.session)).toMatchObject({ phase: 'active', answer: 'Use staging' })
+    expect((await command(ctx, agent, 'show'))?.result.text).not.toContain('Blocker:')
+    await command(ctx, agent, 'pause')
+    await agent.whenIdle()
+  })
+
+  it.each(['pause', 'clear'])('%s preserves unrelated inbox entries and removes goal continuation', async (action) => {
+    const { ctx, agent } = await harness(new MockAdapter([]))
+    agent.session.append('super-goal/change', { version: 1, revision: 1,
+      goal: { revision: 1, objective: 'Retained work', phase: 'paused' } })
+    const unrelated = createUserMessage({ source: { kind: 'user' }, content: [{ type: 'text', text: 'Accepted user task' }] })
+    const context = createUserMessage({ source: { kind: 'plugin', plugin: 'other' }, content: [{ type: 'text', text: 'Other context' }] })
+    const continuation = createUserMessage({ source: { kind: 'plugin', plugin: 'super-goal' }, content: [{ type: 'text', text: 'Continue goal' }] })
+    agent.inbox.append('next-turn', unrelated)
+    agent.inbox.append('next-step', context)
+    agent.inbox.append('next-step', continuation)
+    await command(ctx, agent, action)
+    expect(agent.inbox.nextTurn).toEqual([unrelated])
+    expect(agent.inbox.nextStep).toEqual([context])
+  })
+
   it.each(['create', 'resume'])('a mid-run %s steers the current turn without queuing work after completion', async (action) => {
     const revision = action === 'resume' ? 2 : 1
     const adapter = new MockAdapter([
@@ -141,6 +263,7 @@ describe('SuperGoal through the real loop', () => {
     await settled
     expect(adapter.requests).toHaveLength(4)
     expect(readSuperGoal(agent.session)).toMatchObject({ phase: 'complete', answer: 'Use staging' })
+    expect((await command(ctx, agent, 'show'))?.result.text).not.toContain('Blocker:')
     const resumed = agent.session.snapshotEvents().find(event => event.type === 'super-goal/change'
       && event.data.goal?.answer === 'Use staging' && event.data.goal.phase === 'active')
     expect(resumed).toBeDefined()
@@ -157,13 +280,23 @@ describe('SuperGoal through the real loop', () => {
     expect(request.signal?.aborted).toBe(true)
     question.answer.resolve({ answers: [{ id: 'super-goal-blocker', selected: ['Use staging'] }] })
     await settled
-    expect(readSuperGoal(agent.session)).toEqual(action === 'clear' ? null : expect.objectContaining({ phase: 'paused' }))
+    expect(readSuperGoal(agent.session)).toEqual(action === 'clear' ? null : expect.objectContaining({ phase: 'blocked' }))
     expect(agent.session.snapshotEvents().some(event => event.type === 'super-goal/change' && event.data.goal?.answer)).toBe(false)
   })
 
   it('manual cancellation does not restart the active goal on an unrelated task', async () => {
     const adapter = new MockAdapter(['hang', textResponse('Unrelated answer.')])
     const { ctx, agent } = await harness(adapter)
+    const activations: boolean[] = []
+    ctx.on('super-goal/activation-changed', (session, armed) => {
+      if (session === agent.session) activations.push(armed)
+    })
+    expect(ctx.bail('super-goal/activation', agent.session)).not.toBe(true)
+    ctx.on('agent/status', ({ agent: subject, status }) => {
+      if (subject === agent && status === 'running' && adapter.requests.length === 1) {
+        expect(ctx.bail('super-goal/activation', agent.session)).not.toBe(true)
+      }
+    })
     const streaming = Promise.withResolvers<undefined>()
     ctx.on('agent/assistant-stream', ({ agent: subject, frame }) => {
       if (subject === agent && frame.type === 'chunk') streaming.resolve(undefined)
@@ -181,6 +314,8 @@ describe('SuperGoal through the real loop', () => {
     expect(adapter.requests).toHaveLength(2)
     expect(readSuperGoal(agent.session)?.phase).toBe('active')
     expect((await command(ctx, agent, 'show'))?.result.text).toContain('resume')
+    expect(activations).toEqual([true, false])
+    expect(ctx.bail('super-goal/activation', agent.session)).not.toBe(true)
   })
 
   it.each([
@@ -320,7 +455,12 @@ describe('SuperGoal through the real loop', () => {
     await goalStreaming.promise
     ordinary.followup(createUserMessage({ content: [{ type: 'text', text: 'Ordinary work' }], source: { kind: 'user' } }))
     await ordinaryStreaming.promise
+    expect(ctx.bail('super-goal/activation', agent.session)).toBe(true)
+    const activationChanged = vi.fn()
+    ctx.on('super-goal/activation-changed', activationChanged)
     await goalPlugin.dispose()
+    expect(activationChanged).toHaveBeenCalledWith(agent.session, false)
+    expect(ctx.bail('super-goal/activation', agent.session)).toBeUndefined()
     expect(agent.status).toBe('idle')
     expect(ordinary.status).toBe('running')
     expect(adapter.requests).toHaveLength(2)

@@ -7,7 +7,7 @@ import type {} from '@deepseek-ai/dsh-user-questions'
 import { createUserMessage } from '@deepseek-ai/dsh-llm'
 import { defineTool } from '@deepseek-ai/dsh-tools'
 import type { ToolDefinition, ToolRunContext } from '@deepseek-ai/dsh-tools'
-import type { SuperGoal, SuperGoalChange } from './types.ts'
+import type { SuperGoal, SuperGoalChange, SuperGoalProjectionState } from './types.ts'
 import { stateSchema, changeSchema, superGoalProjectionDefinition } from './projection.ts'
 export type * from './types.ts'
 
@@ -31,6 +31,24 @@ function readChange(session: Session): SuperGoalChange {
   return current
 }
 
+declare module '@deepseek-ai/cordis' {
+  interface Events {
+    /**
+     * Read process-local pursuit for the exact live root Session.
+     * @mode bail
+     * @param session - Session whose pursuit is requested.
+     */
+    'super-goal/activation'(session: Session): boolean | undefined
+    /**
+     * Publish a committed process-local pursuit change.
+     * @mode emit
+     * @param session - Session whose pursuit changed.
+     * @param armed - Whether SuperGoal continuation is armed.
+     */
+    'super-goal/activation-changed'(session: Session, armed: boolean): void
+  }
+}
+
 /** Read a detached durable objective without activating continuation.
  * @param session - Session whose goal is requested.
  * @returns Current goal or null after clearing or before creation.
@@ -47,7 +65,23 @@ export const inject = ['agents', 'tools', 'commands', 'userQuestions', 'sessionP
  */
 export function apply(ctx: Context): void {
   ctx.sessionProjections.register(superGoalProjectionDefinition)
+  function currentChange(session: Session): SuperGoalProjectionState {
+    const state = ctx.sessionProjections.stateOf(session, 'superGoal')
+    if (!state) throw new Error('SuperGoal projection is not registered')
+    if (state.failure !== null) throw new Error(state.failure)
+    return state
+  }
+  function currentGoal(session: Session): SuperGoal | null {
+    return currentChange(session).goal
+  }
   const armed = new Set<Agent>()
+  function setArmed(agent: Agent, value: boolean): void {
+    if (armed.has(agent) === value) return
+    if (value) armed.add(agent)
+    else armed.delete(agent)
+    ctx.emit('super-goal/activation-changed', agent.session, value)
+  }
+  ctx.on('super-goal/activation', session => ctx.agents.roots().some(agent => agent.session === session && armed.has(agent)))
   const installed = new WeakMap<Agent, () => Promise<void>>()
   const definitions: ToolDefinition[] = []
   function ensureTools(agent: Agent): void {
@@ -88,16 +122,17 @@ export function apply(ctx: Context): void {
   function commit(agent: Agent, goal: null): null
   function commit(agent: Agent, goal: Omit<SuperGoal, 'revision'> | null): SuperGoal | null
   function commit(agent: Agent, goal: Omit<SuperGoal, 'revision'> | null): SuperGoal | null {
-    const revision = readChange(agent.session).revision + 1
+    const revision = currentChange(agent.session).revision + 1
     const next = goal === null ? null : stateSchema.parse({ ...goal, revision })
     agent.session.append('super-goal/change', { version: 1, revision, goal: next })
     return next
   }
-  function active(agent: Agent, revision: number): SuperGoal {
-    const goal = readSuperGoal(agent.session)
-    if (!goal || goal.revision !== revision || goal.phase !== 'active' || !armed.has(agent)) {
+  function active(agent: Agent, revision: number, activate = false): SuperGoal {
+    const goal = currentGoal(agent.session)
+    if (!goal || goal.revision !== revision || goal.phase !== 'active' || (!activate && !armed.has(agent))) {
       throw new Error('SuperGoal is inactive or the revision is stale; read it again or ask the user to /supergoal resume')
     }
+    if (activate) setArmed(agent, true)
     return goal
   }
   function askBlocker(agent: Agent, blocked: SuperGoal, callerSignal: AbortSignal): Promise<SuperGoal> {
@@ -111,7 +146,7 @@ export function apply(ctx: Context): void {
           options: (blocked.choices as readonly string[]).map(label => ({ label })), multiSelect: false }] })
         signal.throwIfAborted()
         root(agent)
-        const current = readSuperGoal(agent.session)
+        const current = currentGoal(agent.session)
         if (current?.revision !== blocked.revision || current.phase !== 'blocked') throw new Error('SuperGoal changed while waiting for input')
         const item = answer.answers.find(item => item.id === 'super-goal-blocker')
         if (item && !item.custom?.trim() && (item.selected.length !== 1 || !(blocked.choices as readonly string[]).includes(item.selected[0] ?? ''))) {
@@ -120,7 +155,6 @@ export function apply(ctx: Context): void {
         const decision = item?.custom?.trim() || item?.selected.join(', ').trim()
         if (!decision) throw new Error('SuperGoal requires an answer before continuing')
         const next = commit(agent, { ...blocked, phase: 'active', answer: decision })
-        armed.add(agent)
         return next
       } finally {
         questionWork.delete(done)
@@ -132,19 +166,19 @@ export function apply(ctx: Context): void {
     return done
   }
   ctx.on('agent/session-start', ({ agent }) => {
-    armed.delete(agent)
-    if (ctx.agents.roots().includes(agent) && readSuperGoal(agent.session)) ensureTools(agent)
+    setArmed(agent, false)
+    if (ctx.agents.roots().includes(agent) && currentGoal(agent.session)) ensureTools(agent)
   })
   ctx.on('agent/disposed', ({ agent }) => {
-    armed.delete(agent)
+    setArmed(agent, false)
     pending.get(agent)?.controller.abort()
   })
   ctx.on('agent/status', ({ agent, status }) => {
-    if (status !== 'running') armed.delete(agent)
+    if (status !== 'running') setArmed(agent, false)
   })
   ctx.on('agent/turn-stopping', ({ agent, signal }) => {
     if (signal.aborted || lifetime.signal.aborted || !armed.has(agent)) return
-    const goal = readSuperGoal(agent.session)
+    const goal = currentGoal(agent.session)
     if (goal?.phase === 'active') agent.steer(message(goal))
   })
   ctx.commands.register({
@@ -154,18 +188,21 @@ export function apply(ctx: Context): void {
       lifetime.signal.throwIfAborted()
       const agent = root(invocation.agent)
       const input = invocation.rawInput.trim()
-      const goal = readSuperGoal(agent.session)
+      const goal = currentGoal(agent.session)
       if (!input || input === 'show') return { kind: 'success', text: goal
-        ? `SuperGoal (${goal.phase}${armed.has(agent) ? '' : '; use /supergoal resume to continue'}): ${goal.objective}${goal.reason ? '\nBlocker: ' + goal.reason : ''}`
+        ? `SuperGoal (${goal.phase}${armed.has(agent) ? '' : '; use /supergoal resume to continue'}): ${goal.objective}${goal.phase === 'blocked' && goal.reason ? '\nBlocker: ' + goal.reason : ''}`
         : 'No SuperGoal. Use /supergoal <objective>.' }
       if (input === 'pause' && goal?.phase === 'complete') return { kind: 'error', text: 'No unfinished SuperGoal to pause.' }
       if (input === 'pause' || input === 'clear') {
-        armed.delete(agent)
+        setArmed(agent, false)
         pending.get(agent)?.controller.abort()
         if (!goal) return { kind: 'error', text: 'No SuperGoal is set.' }
-        commit(agent, input === 'clear' ? null : { ...goal, phase: 'paused' })
+        commit(agent, input === 'clear' ? null : { ...goal, phase: goal.phase === 'blocked' ? 'blocked' : 'paused' })
         const cleanup = input === 'clear' ? installed.get(agent)?.() : undefined
-        agent.cancel({ kind: 'user' })
+        for (const entry of [...agent.inbox.nextStep, ...agent.inbox.nextTurn]) {
+          if (entry.source.kind === 'plugin' && entry.source.plugin === name) agent.inbox.remove(entry.id)
+        }
+        agent.cancel({ kind: 'user' }, { keepInbox: true })
         await cleanup
         return { kind: 'success', text: `SuperGoal ${input === 'clear' ? 'cleared' : 'paused'}.` }
       }
@@ -173,16 +210,17 @@ export function apply(ctx: Context): void {
       if (input !== 'resume' && goal && goal.phase !== 'complete') return { kind: 'error', text: 'Clear or resume the existing SuperGoal first.' }
       pending.get(agent)?.controller.abort()
       if (input === 'resume' && goal?.phase === 'blocked') {
-        const next = await askBlocker(agent, goal, lifetime.signal)
+        const next = await askBlocker(agent, goal, invocation.signal)
         lifetime.signal.throwIfAborted()
-        active(agent, next.revision)
+        invocation.signal.throwIfAborted()
+        active(agent, next.revision, true)
         ensureTools(agent)
         agent.steer(message(next))
         return { kind: 'success', text: `SuperGoal active: ${next.objective}` }
       }
       const next = commit(agent, { ...(input === 'resume' ? goal as SuperGoal : { objective: input }), phase: 'active' })
       ensureTools(agent)
-      armed.add(agent)
+      setArmed(agent, true)
       agent.steer(message(next))
       return { kind: 'success', text: `SuperGoal active: ${next.objective}` }
     },
@@ -194,7 +232,7 @@ export function apply(ctx: Context): void {
   const revision = { type: 'number' as const, required: true as const, description: 'Exact revision returned by get_super_goal.' }
   definitions.push(defineTool({
     name: 'get_super_goal', description: 'Read the long-term SuperGoal and exact revision.', parameters: {}, output,
-    execute: (_args, exec) => Promise.resolve(JSON.stringify(readSuperGoal(executing(exec).session))),
+    execute: (_args, exec) => Promise.resolve(JSON.stringify(currentGoal(executing(exec).session))),
     presentCall: () => ({ card: 'generic', title: 'Read SuperGoal', kind: 'read' }),
   }))
   definitions.push(defineTool({
@@ -204,7 +242,7 @@ export function apply(ctx: Context): void {
       const agent = executing(exec)
       const goal = active(agent, args.revision)
       const next = commit(agent, { ...goal, phase: 'complete', evidence: args.evidence })
-      armed.delete(agent)
+      setArmed(agent, false)
       return Promise.resolve(JSON.stringify(next))
     },
     presentCall: args => ({ card: 'generic', title: 'Complete SuperGoal', kind: 'other', rawInput: args.evidence }),
@@ -217,25 +255,25 @@ export function apply(ctx: Context): void {
       const agent = executing(exec)
       const goal = active(agent, args.revision)
       const blocked = commit(agent, { ...goal, phase: 'blocked', reason: args.reason, choices: args.choices })
-      armed.delete(agent)
+      setArmed(agent, false)
       const next = await askBlocker(agent, blocked, exec.signal)
       lifetime.signal.throwIfAborted()
       exec.signal.throwIfAborted()
-      active(agent, next.revision)
+      active(agent, next.revision, true)
       exec.deferContext(message(next))
       return JSON.stringify(next)
     },
     presentCall: args => ({ card: 'generic', title: 'SuperGoal needs input', kind: 'other', rawInput: args.reason }),
   }))
   for (const agent of ctx.agents.roots()) {
-    if (readSuperGoal(agent.session)) ensureTools(agent)
+    if (currentGoal(agent.session)) ensureTools(agent)
   }
   ctx.effect(() => async () => {
     lifetime.abort()
     const requests = [...pending.values()]
     const work = [...questionWork.keys()]
     const owned = new Set([...armed, ...questionWork.values()])
-    armed.clear()
+    for (const agent of armed) setArmed(agent, false)
     for (const request of requests) request.controller.abort()
     for (const agent of owned) agent.cancel({ kind: 'parent' })
     await Promise.allSettled([

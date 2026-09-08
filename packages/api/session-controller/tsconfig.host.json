@@ -21,6 +21,7 @@
     "src/skill-catalog.ts"
   ],
   "references": [
+    { "path": "../../goal/super-goal" },
     { "path": "../../../vendor/cordis" },
     { "path": "../../../vendor/schemastery" },
     { "path": "../../core/agent" },

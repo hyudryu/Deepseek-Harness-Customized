@@ -3,6 +3,7 @@
 import type { Context } from '@deepseek-ai/cordis'
 import type { Agent } from '@deepseek-ai/dsh-agent'
 import { Deque } from '@deepseek-ai/dsh-deque'
+import type {} from '@deepseek-ai/dsh-super-goal'
 import type { JobSnapshot } from '@deepseek-ai/dsh-jobs'
 import type {
   Session, SessionEvent, SessionEventMap, SessionId, UserMessage,
@@ -23,6 +24,9 @@ export class SessionControlController {
 
   /** @param ctx - Host context carrying live Agent, projection, and jobs services. */
   constructor(private readonly ctx: Context) {
+    ctx.on('super-goal/activation-changed', (session, armed) => {
+      this.broadcast({ type: 'super-goal-activation', sessionId: session.id, armed })
+    })
     ctx.on('session/event', (session, event) => { this.onSessionEvent(session, event) })
     ctx.sessionProjections.onChanged((session, key, value, seq) => {
       this.broadcast({
@@ -65,17 +69,21 @@ export class SessionControlController {
   }
 
   private baseline(): SessionControlBaseline {
-    const sessions = this.ctx.sessions.list()
+    const ctx = this.ctx
+    const sessions = ctx.sessions.list()
     const queues = Object.create(null) as Record<SessionId, readonly SessionQueuedItem[]>
+    const superGoalArmed = Object.create(null) as Record<SessionId, boolean>
     const jobs = Object.create(null) as Record<SessionId, readonly SessionJob[]>
     for (const session of sessions) {
       const agent = this.ctx.agents.get(session.id)
+      superGoalArmed[session.id] = ctx.bail('super-goal/activation', session) === true
       queues[session.id] = agent?.session === session ? queueItems(agent) : []
       jobs[session.id] = this.jobsFor(agent)
     }
     return {
       queues,
       jobs,
+      superGoalArmed,
       projections: this.projectionBaseline(sessions),
     }
   }

@@ -21,7 +21,7 @@ This fork adds custom updates to DeepSeek Harness plus a set of installable plug
 
 Start `/supergoal <objective>` to keep the session working toward a long-term result. A highlighted banner at the top of the session shows the objective with its current status underneath. SuperGoal checks the objective whenever a task is about to finish and continues while work remains. Completion requires recorded evidence; a hard blocker opens a multiple-choice question and gives the session a yellow waiting-for-answer indicator. Your answer is recorded before work resumes.
 
-SuperGoal is included in the standard harness. Use `/supergoal` to inspect it, `/supergoal pause` to stop unfinished work, `/supergoal resume` to continue, or `/supergoal clear` to remove it and its tools. Completed objectives stay complete. The objective survives session reloads; resuming execution requires `/supergoal resume`. See the [SuperGoal reference](packages/goal/super-goal/README.md) for behavior and limitations.
+SuperGoal is included in the standard harness. Use `/supergoal` to inspect it, `/supergoal pause` to stop unfinished work, `/supergoal resume` to continue, or `/supergoal clear` to remove it and its tools. Pause preserves unanswered blockers and queued user work. Completed objectives stay complete. The objective survives session reloads; resuming execution requires `/supergoal resume`. See the [SuperGoal reference](packages/goal/super-goal/README.md) for behavior and limitations.
 
 </details>
 

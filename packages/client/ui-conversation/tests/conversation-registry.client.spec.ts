@@ -26,7 +26,7 @@ function sessionSnapshot(): SessionSnapshot {
     sessionId: SESSION_ID,
     queue: [],
     pendingSubmissions: [],
-    running: false,
+    running: false, superGoalArmed: false,
     subagent: null,
     removed: false,
     openState: 'open',

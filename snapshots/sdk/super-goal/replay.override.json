@@ -110,41 +110,5 @@
         }
       }
     ]
-  },
-  {
-    "kind": "chunks",
-    "chunks": [
-      {
-        "type": "block-start",
-        "index": 0,
-        "blockType": "text"
-      },
-      {
-        "type": "text-delta",
-        "index": 0,
-        "text": "Both acceptance checks remain complete."
-      },
-      {
-        "type": "block-end",
-        "index": 0,
-        "block": {
-          "type": "text",
-          "text": "Both acceptance checks remain complete."
-        }
-      },
-      {
-        "type": "usage",
-        "usage": {
-          "inputTokens": 20,
-          "outputTokens": 8
-        }
-      },
-      {
-        "type": "finish",
-        "reason": {
-          "kind": "stop"
-        }
-      }
-    ]
   }
 ]

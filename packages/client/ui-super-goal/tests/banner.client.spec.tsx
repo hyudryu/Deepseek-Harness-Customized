@@ -8,10 +8,11 @@ import { en } from '../src/client/locales.ts'
 
 afterEach(cleanup)
 
-function props(goal: SuperGoal | null | undefined, running = true) {
+function props(goal: SuperGoal | null | undefined, superGoalArmed = true, running = true) {
   return {
     useProjection: vi.fn(() => goal),
-    useSession: vi.fn((select: (snapshot: { running: boolean }) => unknown) => select({ running })),
+    useSession: vi.fn((select: (snapshot: { running: boolean; superGoalArmed: boolean }) => unknown) =>
+      select({ running, superGoalArmed })),
     t: makeTranslate(en),
   } as unknown as Parameters<typeof SuperGoalBanner>[0]
 }
@@ -43,8 +44,8 @@ describe('SuperGoal session banner', () => {
   })
 
   it('does not promise continuation when ordinary work runs with a saved active goal', () => {
-    render(<SuperGoalBanner {...props(goal, true)} />)
-    expect(screen.getByRole('status').textContent).toBe('Not yet achieved')
+    render(<SuperGoalBanner {...props(goal, false, true)} />)
+    expect(screen.getByRole('status').textContent).toBe(en['status.ready'])
     expect(screen.queryByText(/continuing until/i)).toBeNull()
   })
 

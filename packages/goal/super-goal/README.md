@@ -34,11 +34,11 @@ The standard harness includes SuperGoal. It remains inactive until a user sets a
 | `/supergoal resume` | Continue an unfinished objective. |
 | `/supergoal clear` | Clear the objective. |
 
-SuperGoal is separate from the ordinary `/goal` objective. Only the root agent can control it or ask for human input. Delegated agents report their results to that root. Activation during a running turn steers that turn. Completed objectives reject pause and resume; clear removes the objective and its scoped tools.
+SuperGoal is separate from the ordinary `/goal` objective. Only the root agent can control it or ask for human input. Delegated agents report their results to that root. Activation during a running turn steers that turn. Completed objectives reject pause and resume; clear removes the objective and its scoped tools. Pause and clear remove only SuperGoal continuation input and preserve queued user requests.
 
 ### Completion and blockers
 
-The model must provide concrete verification evidence to complete the entire objective. Completing a task leaves SuperGoal active. A hard blocker requires a concrete explanation and two or three distinct, actionable choices. The selected answer or custom text is recorded before further work proceeds. An unanswered or cancelled question leaves the objective unresolved.
+The model must provide concrete verification evidence to complete the entire objective. Completing a task leaves SuperGoal active. A hard blocker requires a concrete explanation and two or three distinct, actionable choices. The selected answer or custom text is recorded before further work proceeds. An unanswered or cancelled question leaves the objective unresolved. Cancelling a resume command cancels its question. Pausing a blocked objective dismisses the question but preserves the blocker; resuming asks for an answer again. Command output shows blocker reasons only while the objective is blocked.
 
 ### Composition
 
@@ -58,7 +58,7 @@ There are no configuration fields or automatic task-count limits. The compositio
 <details>
 <summary>Implementation details</summary>
 
-The plugin records versioned state in the Session log and reads it through strict validation. Each mutation advances a revision, including clearing. Tool calls and question answers must match the current revision, so a late answer cannot reactivate a replaced objective.
+The plugin records versioned state in the Session log and reads current state through the incremental session projection. A retained validation failure rejects reads and mutations. Each mutation advances a revision, including clearing. Tool calls and question answers must match the current revision, so a late answer cannot reactivate a replaced objective.
 
 The public task-stopping event supplies the continuation point. Continuation instructions enter ordinary logged model history. Tool registrations belong to the agent scope and are installed when a SuperGoal is present; ordinary sessions retain their existing tool schemas. Process-local activation ends on manual interruption or plugin disposal and is not restored merely by reading a saved session.
 

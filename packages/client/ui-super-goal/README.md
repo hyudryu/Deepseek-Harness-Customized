@@ -7,7 +7,7 @@ kind: "package-reference"
 
 ## Summary
 
-Keep the current SuperGoal visible in a highlighted card above the session transcript. A smaller status line shows progress, a pause, a blocker, or completion. Blocked goals also display the reason that needs your decision. Saved or manually stopped active goals show resume guidance.
+Keep the current SuperGoal visible in a highlighted card above the session transcript. A smaller status line shows progress, a pause, a blocker, or completion. Blocked goals also display the reason that needs your decision. Saved or manually stopped active goals show resume guidance, including while an unrelated task is running.
 
 ## Table of Contents
 
@@ -33,7 +33,7 @@ The Web bundle mounts this plugin with the SuperGoal capability. Enter `/supergo
 <details>
 <summary>Implementation internals - click to expand</summary>
 
-The browser plugin contributes to `conversation.session.banner` below the header. It reads the durable `superGoal` projection and the live session activity flag through framework hooks. It owns no state store or RPC methods. No invariant companion is published: this presentation reads one authoritative projection and owns no independent runtime relationship to reconcile.
+The browser plugin contributes to `conversation.session.banner` below the header. It reads the durable `superGoal` projection and the process-local SuperGoal activation flag through framework hooks. It owns no state store or RPC methods. No invariant companion is published: this presentation reads one authoritative projection and owns no independent runtime relationship to reconcile.
 
 </details>
 

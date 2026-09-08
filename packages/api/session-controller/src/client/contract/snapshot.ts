@@ -86,6 +86,8 @@ export interface SessionSnapshot {
   /** Local prompt-submission echoes not yet observed as durable events or queue occurrences. */
   readonly pendingSubmissions: readonly PendingSubmission[]
   readonly running: boolean
+  /** Whether this Host process is pursuing the saved SuperGoal. */
+  readonly superGoalArmed: boolean
   readonly subagent: {
     readonly address: SubagentAddress
     /** Absent until the direct-parent catalog resolves. */

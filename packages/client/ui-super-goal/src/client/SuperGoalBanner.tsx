@@ -20,14 +20,14 @@ type BannerProps = PropsRuntime<'conversation.session.banner'> & PropsLocale<'su
  */
 export function SuperGoalBanner({ useProjection, useSession, t }: BannerProps) {
   const goal = useProjection('superGoal')
-  const running = useSession(snapshot => snapshot.running)
+  const armed = useSession(snapshot => snapshot.superGoalArmed)
   if (goal == null) return null
   return (
     <section className={css.banner} data-phase={goal.phase} aria-label={t('title')}>
       <div className={css.title}>{t('title')}</div>
       <div className={css.objective}>{goal.objective}</div>
       <div className={css.status} role="status" aria-live="polite">
-        {t(goal.phase === 'active' && !running ? 'status.ready' : statusKeys[goal.phase])}
+        {t(goal.phase === 'active' && !armed ? 'status.ready' : statusKeys[goal.phase])}
       </div>
       {goal.phase === 'blocked' && goal.reason !== undefined
         ? <div className={css.detail}>{goal.reason}</div>
