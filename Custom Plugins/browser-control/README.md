@@ -2,12 +2,18 @@
 
 English | [中文](README.zh.md)
 
-This optional profile bundle provides a shared Playwright Chromium context for each session's browser tool and browser panel. Install its dependencies with the repository's `install:custom-plugins` command before adding the bundle to a profile.
+This optional bundle shares a session's browser tools and panel. Chrome is the default: it connects to `http://127.0.0.1:9222`, or launches installed Chrome visibly with a dedicated persistent profile when that port is unavailable. The Playwright client supplies CDP transport and semantic locators; Chrome mode does not launch an isolated browser. Connection failures never fall back to Playwright.
 
-`frameQuality` controls the panel's JPEG frames. It defaults to `60` and accepts integers from `0` through `100`, inclusive. Invalid values fail when the plugin loads.
+Install dependencies with `install:custom-plugins`, then add this bundle or the `dsh-chrome-browser` alias to a profile. Both register the same provider, controller, and panel IDs; install one in the profile. `backend: playwright` explicitly selects an isolated Playwright Chromium context; the tool accepts that backend on `open` only when the user requests it. Switching backend closes the session's previous tabs first.
 
-Closing a browser reports Playwright shutdown failures to the caller and retains the context for retry. A successful close removes the session's browser state. Subscriptions remain active across close and reopen. Plugin disposal attempts every context and then the shared browser, awaits shutdown, and reports cleanup failures.
+`homepage` defaults to `https://www.google.com/`. Opening without a URL navigates a new session to its homepage; reopening an existing session preserves its location. Bare domains such as `jackandjill.com` use HTTPS. Bare loopback addresses use HTTP; explicit HTTP and HTTPS URLs are preserved. `about:blank` supports local fixtures. Invalid addresses reject before browser allocation.
 
-A failed initial navigation closes a newly created context before rejecting the open request. Open and close requests for one session run in issue order across the service and tool, so another request cannot adopt that context before rollback settles. Navigation failure preserves an existing context. If rollback cleanup also fails, the request reports both failures and retains the context for explicit cleanup retry.
+`chromeEndpoint` must be an HTTP loopback origin with an explicit port. `chromeUserDataDir` defaults to `~/.dsh/chrome-profile`; `chromeExecutablePath` optionally names an absolute installed-Chrome executable. `chromeConnectTimeoutMs` defaults to `10000`. `headless` applies only to Playwright. Chrome credentials and cookies persist. Preexisting tabs, the shared context, and Chrome survive session close and plugin disposal; only session-created tabs and their popups are closed.
 
-Run the behavior suite with `node --test "Custom Plugins/browser-control/test/browser.test.mjs"` from the repository root. It includes a real Chromium navigation, interaction, frame capture, close, and reopen check, plus configuration and shutdown failure regressions. Chromium must be installed through the plugin's Playwright CLI; CI installs it and runs this suite explicitly.
+The panel and tool create, select, and close session-owned tabs. Tool actions `tabs`, `new_tab`, `switch_tab`, and `close_tab` use opaque `tab_id` values returned by `tabs`. IDs remain stable when other tabs close; foreign IDs reject. Closing the last tab stops the session browser. Legacy `pages` and `switch_page` retain positional indexes. Serialized tab results exceeding `maxSnapshotChars` reject before model delivery.
+
+`frameQuality` controls JPEG frames, defaults to `60`, and accepts integers from `0` through `100`. Invalid configuration fails at load. CDP screenshots use visible viewport dimensions when no emulated viewport exists.
+
+Initial navigation failure awaits cleanup of newly created resources before rejecting; existing contexts survive navigation failure. Session lifecycle mutations run in issue order. Cleanup failures remain retryable. Disposal awaits owned cleanup and disconnects from Chrome, leaving its process alive.
+
+Run `node --test "Custom Plugins/browser-control/test/*.test.mjs"`. Tests cover URL/configuration validation, lifecycle concurrency, isolated Playwright behavior, Chrome tab ownership, and preservation of existing tabs after disposal. Chrome fixtures use temporary profiles and ephemeral ports and close their own processes. Real-provider cases require installed Chrome and Playwright Chromium.

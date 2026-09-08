@@ -21,12 +21,14 @@ let page: Page
 let server: Server
 let overlayRoot: string | undefined
 let destination: string
+let homepage: string
 let tripwire: ReturnType<typeof watchConsole>
 
 beforeAll(async () => {
-  server = createServer((_request, response) => {
+  server = createServer((request, response) => {
     response.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' })
-    response.end('<!doctype html><title>Browser control local fixture</title><h1>Browser frame received</h1>')
+    const title = request.url === '/home' ? 'Browser homepage local fixture' : 'Browser control local fixture'
+    response.end(`<!doctype html><title>${title}</title><h1>Browser frame received</h1>`)
   })
   await new Promise<void>((resolve, reject) => {
     server.once('error', reject)
@@ -34,11 +36,16 @@ beforeAll(async () => {
   })
   const address = server.address()
   if (address === null || typeof address === 'string') throw new Error('Fixture needs a TCP address')
-  destination = `http://127.0.0.1:${address.port}/`
+  destination = `http://localhost:${address.port}/`
+  homepage = `http://127.0.0.1:${address.port}/home`
   overlayRoot = await mkdtemp(join(tmpdir(), 'dsh-browser-overlay-'))
   const overlay = join(overlayRoot, 'cordis.patch.yml')
   const providerUrl = new URL('../../../Custom Plugins/browser-control/index.js', import.meta.url).href
-  await writeFile(overlay, (await readFile(bundle, 'utf8')).replace('name: dsh-browser-control', `name: ${JSON.stringify(providerUrl)}`))
+  const patch = (await readFile(bundle, 'utf8'))
+    .replace('name: dsh-browser-control', `name: ${JSON.stringify(providerUrl)}`)
+    .replace(/^        (?:backend|homepage):.*\r?\n/gm, '')
+    .replace('        headless:', `        backend: playwright\n        homepage: ${JSON.stringify(homepage)}\n        headless:`)
+  await writeFile(overlay, patch)
   scaffold = await launchWebScaffold({ extraOverlayPath: overlay, extraInstallAnchors: [manifest] })
   await seedSession(scaffold, await readFile(seed, 'utf8'), sessionId)
   browser = await chromium.launch()
@@ -66,19 +73,34 @@ afterAll(async () => {
   if (failures.length > 0) throw new AggregateError(failures, 'Browser smoke cleanup failed')
 })
 
-it('starts, navigates, displays a real frame, stops, and reopens the same session browser', async () => {
+it('starts at its configured homepage, navigates a bare localhost URL, and reopens the session browser', async () => {
   onTestFailed(() => saveFailureShot(page, 'web-e2e-browser-control'))
   await expect.poll(() => scaffold.ctx.sessions.get(sessionId) !== undefined, { timeout: 15_000 }).toBe(true)
   await page.locator('button[aria-label="Start Browser"]').click()
   const panel = page.getByRole('region', { name: 'Browser', exact: true })
   await panel.getByRole('button', { name: 'Stop browser', exact: true }).waitFor({ timeout: 20_000 })
-  await panel.getByPlaceholder('Enter URL (optional)').fill(destination)
+  const homeFrame = panel.getByRole('img', { name: 'Browser homepage local fixture', exact: true })
+  await homeFrame.waitFor({ timeout: 20_000 })
+  expect(scaffold.ctx.browserControl.snapshot(sessionId)).toMatchObject({ open: true, url: homepage })
+  await panel.getByPlaceholder('Enter URL (optional)').fill(destination.replace('http://', ''))
   await panel.getByRole('button', { name: 'Navigate', exact: true }).click()
   const frame = panel.getByRole('img', { name: 'Browser control local fixture', exact: true })
   await frame.waitFor({ timeout: 20_000 })
   await expect.poll(() => frame.evaluate(image => image instanceof HTMLImageElement && image.complete && image.naturalWidth > 0)).toBe(true)
   expect(scaffold.ctx.browserControl.snapshot(sessionId)).toMatchObject({ open: true, url: destination, title: 'Browser control local fixture' })
   expect(await frame.getAttribute('src')).toMatch(/^data:image\/jpeg;base64,/)
+  const firstTabId = scaffold.ctx.browserControl.snapshot(sessionId).activeTabId
+  await panel.getByRole('button', { name: 'New tab', exact: true }).click()
+  await expect.poll(() => scaffold.ctx.browserControl.snapshot(sessionId).tabs?.length).toBe(2)
+  await panel.getByRole('tab', { name: 'Browser homepage local fixture', exact: true }).waitFor()
+  expect(scaffold.ctx.browserControl.snapshot(sessionId).activeTabId).not.toBe(firstTabId)
+  await panel.getByRole('tab', { name: 'Browser control local fixture', exact: true }).click()
+  await expect.poll(() => scaffold.ctx.browserControl.snapshot(sessionId).activeTabId).toBe(firstTabId)
+  await frame.waitFor()
+  expect(await panel.getByRole('textbox', { name: 'Address', exact: true }).inputValue()).toBe(destination)
+  await panel.getByRole('button', { name: 'Close tab Browser homepage local fixture', exact: true }).click()
+  await expect.poll(() => scaffold.ctx.browserControl.snapshot(sessionId).tabs?.length).toBe(1)
+  expect(scaffold.ctx.browserControl.snapshot(sessionId).activeTabId).toBe(firstTabId)
   await panel.getByRole('button', { name: 'Stop browser', exact: true }).click()
   await panel.getByText('Stopped', { exact: true }).waitFor()
   expect(scaffold.ctx.browserControl.snapshot(sessionId).open).toBe(false)
@@ -86,5 +108,8 @@ it('starts, navigates, displays a real frame, stops, and reopens the same sessio
   await panel.getByRole('button', { name: 'Start Browser', exact: true }).click()
   await frame.waitFor({ timeout: 20_000 })
   expect(scaffold.ctx.browserControl.snapshot(sessionId).open).toBe(true)
+  await panel.getByRole('button', { name: 'Close tab Browser control local fixture', exact: true }).click()
+  await panel.getByText('Stopped', { exact: true }).waitFor()
+  expect(scaffold.ctx.browserControl.snapshot(sessionId).open).toBe(false)
   expect(tripwire.pageErrors).toEqual([])
 })

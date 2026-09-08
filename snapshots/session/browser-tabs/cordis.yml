@@ -1,0 +1,16 @@
+# Exercise the real optional browser provider through the shipped headless profile.
+- insert:
+    - id: browser-control
+      name: '../../../Custom Plugins/browser-control/index.js'
+      config:
+        backend: playwright
+        homepage: about:blank
+        headless: true
+
+# Keep machine-local skills outside this browser-only scenario.
+- id: skill-filesystem
+  disabled: true
+- id: skill-badge
+  disabled: true
+- id: tool-skill
+  disabled: true

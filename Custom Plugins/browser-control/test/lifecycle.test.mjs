@@ -14,6 +14,7 @@ function fixture(t, config = {}) {
   page.goto = async () => {}
   context.setDefaultTimeout = () => {}
   context.setDefaultNavigationTimeout = () => {}
+  context.pages = () => [page]
   context.newPage = async () => page
   context.close = t.mock.fn(async () => { context.emit('close') })
   const browser = { newContext: async () => context, close: t.mock.fn(async () => {}) }
@@ -26,7 +27,7 @@ function fixture(t, config = {}) {
     provide(_name, value) { control = value },
     skills: { register() {} },
     tools: { register(value) { tool = value } },
-  }, config)
+  }, { backend: 'playwright', homepage: 'about:blank', ...config })
   async function dispose() {
     for (const disposer of disposers.reverse()) await disposer?.()
   }
@@ -188,6 +189,32 @@ test('concurrent browser tool opens navigate in issued order', async t => {
   releaseFirst()
   await Promise.all([first, second])
   assert.equal(gotoCalls, 2)
+})
+
+test('tab listing bounds the complete result including its action acknowledgement', async t => {
+  const id = '0'.repeat(36)
+  const partial = { tabs: [{ id, url: 'about:blank', title: '' }], activeTabId: id }
+  const { control, tool } = fixture(t, { maxSnapshotChars: JSON.stringify(partial).length })
+  await control.open('session')
+  await assert.rejects(tool.execute({ action: 'tabs' }, { agent: { session: { id: 'session' } } }), /exceeds maxSnapshotChars/)
+})
+
+test('tab listing accepts a complete result exactly at the configured limit', async t => {
+  const id = '0'.repeat(36)
+  const complete = { ok: true, action: 'tabs', tabs: [{ id, url: 'about:blank', title: '' }], activeTabId: id }
+  const limit = JSON.stringify(complete).length
+  const { control, tool } = fixture(t, { maxSnapshotChars: limit })
+  await control.open('session')
+  const result = await tool.execute({ action: 'tabs' }, { agent: { session: { id: 'session' } } })
+  assert.equal(JSON.stringify(result).length, limit)
+})
+
+test('closing the last tab also bounds its complete empty listing', async t => {
+  const { control, tool } = fixture(t, { maxSnapshotChars: JSON.stringify({ tabs: [] }).length })
+  await control.open('session')
+  const tab_id = control.snapshot('session').activeTabId
+  await assert.rejects(tool.execute({ action: 'close_tab', tab_id }, { agent: { session: { id: 'session' } } }), /exceeds maxSnapshotChars/)
+  assert.equal(control.snapshot('session').open, false)
 })
 
 for (const quality of [0, 60, 100]) {

@@ -13,7 +13,7 @@ function harness(config) {
     provide(_name, service) { result.control = service },
     skills: { register() {} },
     tools: { register(tool) { result.tool = tool } },
-  }, config)
+  }, { backend: 'playwright', homepage: 'about:blank', ...config })
   return result
 }
 
@@ -29,9 +29,11 @@ function mockBrowser(t) {
       const page = new EventEmitter()
       page.url = () => 'about:blank'
       page.title = async () => 'Fixture'
+      page.goto = async () => {}
       page.viewportSize = () => ({ width: 800, height: 600 })
       page.screenshot = async ({ quality }) => { qualities.push(quality); return Buffer.from('frame') }
-      context.newPage = async () => page
+      context.pages = () => [page]
+  context.newPage = async () => page
       context.close = t.mock.fn(async () => {
         if (context.closeError) throw context.closeError
         context.emit('close')
@@ -118,7 +120,7 @@ test('the panel and browser tool share a context across navigation, close, and r
     provide(name, service) { assert.equal(name, 'browserControl'); control = service },
     skills: { register() {} },
     tools: { register(value) { tool = value } },
-  })
+  }, { backend: 'playwright', homepage: 'about:blank' })
   const server = createServer((_req, res) => {
     res.end('<title>Browser fixture</title><h1>Browser works</h1><button onclick="this.textContent=\'Clicked\'">Try it</button>')
   })

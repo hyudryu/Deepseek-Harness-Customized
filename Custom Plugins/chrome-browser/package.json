@@ -1,0 +1,22 @@
+{
+  "name": "dsh-chrome-browser",
+  "version": "0.1.0",
+  "description": "Visible Chrome debugging bundle for DeepSeek Harness",
+  "type": "module",
+  "main": "index.js",
+  "files": [
+    "index.js",
+    "cordis.patch.yml"
+  ],
+  "license": "MIT",
+  "dependencies": {
+    "dsh-browser-control": "file:../browser-control",
+    "@deepseek-ai/dsh-api-browser-controller": "link:../../packages/api/browser-controller",
+    "@deepseek-ai/dsh-client-ui-browser": "link:../../packages/client/ui-browser"
+  },
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    }
+  }
+}

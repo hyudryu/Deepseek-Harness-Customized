@@ -24,7 +24,7 @@ This controller lets the Web client open a session browser, navigate it, and fol
 <a id="use-this-package"></a>
 ## Use this package
 
-The Web application composition mounts this controller with a provider of `ctx.browserControl`. The [browser panel](../../client/ui-browser/README.md) consumes its generated `remote.browser` API. The controller has no configuration fields.
+The Web application composition mounts this controller with a provider of `ctx.browserControl`. The [browser panel](../../client/ui-browser/README.md) consumes its generated `remote.browser` API. The controller has no configuration fields. `createTab`, `selectTab`, and `closeTab` require a live session and operate on its owned tabs. Tab identifiers use the opaque `BrowserTabId` type. Snapshots carry ordered tab metadata, the active tab identity, and the provider backend; their page URL, title, and frame describe the active tab. Closing the last owned tab stops the session browser. A tab operation completing after session disposal awaits browser cleanup and rejects its acknowledgement.
 
 -----
 
@@ -34,7 +34,7 @@ The Web application composition mounts this controller with a provider of `ctx.b
 <details>
 <summary>Implementation internals — click to expand</summary>
 
-The [controller](src/index.ts) subscribes before reading the initial snapshot, and retains only the latest pending replacement snapshot, so slow readers skip superseded frames without accumulating screenshots. Subscriptions stay active while the browser is closed and receive later open and reopen updates. Cancellation removes the subscription. The browser-control provider owns Playwright contexts and screenshots; the controller forwards its operations and snapshots.
+The [controller](src/index.ts) subscribes before reading the initial snapshot, and retains only the latest pending replacement snapshot, so slow readers skip superseded frames without accumulating screenshots. Subscriptions stay active while the browser is closed and receive later open and reopen updates. Cancellation removes the subscription. The browser-control provider owns session tabs, isolated contexts, and screenshots; the controller forwards its operations and snapshots.
 
 </details>
 

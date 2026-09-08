@@ -338,6 +338,7 @@ export const LINK_MAP: Readonly<Record<string, string>> = {
   SessionPageRequest: 'session.md',
   SessionPromptRequest: 'session.md',
   BrowserSnapshot: 'web-client.md',
+  BrowserTabId: 'web-client.md',
   SessionPromptValue: 'session.md',
   SessionRenameRequest: 'session.md',
   SessionRenameValue: 'session.md',

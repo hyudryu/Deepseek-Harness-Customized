@@ -9,7 +9,7 @@ English | [中文](README.zh.md)
 
 ## Summary
 
-The upper-right browser icon starts the selected session's browser and expands its right-side panel. The panel shows page screenshots, the current URL, and browser action history. Navigation failures appear in the panel; hiding the panel does not close the browser.
+The upper-right browser icon starts the selected session's browser and expands its right-side panel. The panel shows session-owned tabs, the active page screenshot and URL, and browser action history. Navigation failures appear in the panel; hiding the panel does not close the browser.
 
 ## Table of Contents
 
@@ -24,7 +24,7 @@ The upper-right browser icon starts the selected session's browser and expands i
 <a id="use-this-package"></a>
 ## Use this package
 
-The optional `Custom Plugins/browser-control` bundle mounts its provider, this UI, and the [browser controller](../../api/browser-controller/README.md). Select a session, use the upper-right icon, and enter an address in the panel to navigate. The same icon collapses the panel; the panel's Stop browser action closes the browser context.
+The optional `Custom Plugins/browser-control` bundle mounts its provider, this UI, and the [browser controller](../../api/browser-controller/README.md). Select a session, use the upper-right icon, and enter an address in the panel to navigate. The same icon collapses the panel; the panel's Stop browser action closes the session's owned tabs or isolated context. The address bar follows successful navigation and accepts bare domains through the provider. New sessions use the provider's configured homepage, which defaults to Google. The Chrome provider opens a visible window for direct login interaction; the panel remains a screenshot view and displays a reminder to interact in Chrome. The tab strip creates, selects, and closes tabs through the same session-scoped operations used by the agent. Left and right arrow keys select adjacent tabs. Closing the final tab stops the session browser; unrelated Chrome tabs are excluded.
 
 -----
 

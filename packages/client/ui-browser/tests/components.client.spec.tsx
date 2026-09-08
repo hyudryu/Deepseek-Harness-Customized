@@ -4,7 +4,7 @@ import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
 import { SessionId } from '@deepseek-ai/dsh-session/types'
 import { en as commonEn } from '@deepseek-ai/dsh-client-locale/src/locales/en.ts'
-import type { BrowserSnapshot } from '@deepseek-ai/dsh-api-browser-controller/types'
+import type { BrowserSnapshot, BrowserTabId } from '@deepseek-ai/dsh-api-browser-controller/types'
 import { BrowserPanel, type BrowserPanelProps } from '../src/client/BrowserPanel.tsx'
 import { StartBrowserDock } from '../src/client/StartBrowserDock.tsx'
 import { apply, type BrowserInjected } from '../src/client/index.ts'
@@ -56,6 +56,7 @@ function panel(overrides: Partial<BrowserPanelProps> = {}) {
   const useBrowser: BrowserPanelProps['useBrowser'] = selector => selector(useSyncExternalStore(observable.subscribe, observable.getSnapshot))
   const props = {
     t, useBrowser, start: vi.fn(async () => {}), navigate: vi.fn(async () => {}),
+    createTab: vi.fn(async () => {}), selectTab: vi.fn(async () => {}), closeTab: vi.fn(async () => {}),
     stop: vi.fn(async () => {}), closePanel: vi.fn(), ...overrides,
   }
   // This component consumes none of the renderer's global/session selector hooks.
@@ -114,6 +115,7 @@ it('renders replacement frames and actions, stops the browser, and releases its 
   expect(fixture.props.start).not.toHaveBeenCalled()
   expect(screen.getAllByRole('button').map(button => button.textContent)).toMatchInlineSnapshot(`
     [
+      "New tab",
       "Navigate",
       "Stop browser",
       "Hide actions",
@@ -289,6 +291,9 @@ it.each([false, true])('opens and controls a Session through registered callback
   }
   const open = vi.fn(async () => ({ ok: true }))
   const close = vi.fn(async () => ({ ok: true }))
+  const createTab = vi.fn(async () => ({ ok: true }))
+  const selectTab = vi.fn(async () => ({ ok: true }))
+  const closeTab = vi.fn(async () => ({ ok: true }))
   const watch = vi.fn()
   let streamOptions!: { open: (signal: AbortSignal) => unknown; ended: (accepted: boolean) => Error }
   const remoteStream = vi.fn((options: typeof streamOptions) => {
@@ -302,7 +307,7 @@ it.each([false, true])('opens and controls a Session through registered callback
   const openBrowser = vi.fn()
   const closeBrowser = vi.fn()
   const registrations = new Map<string, (sessionId: SessionId) => BrowserInjected>()
-  ctx.provide('remote', { browser: { open, close, watch }, $stream: remoteStream })
+  ctx.provide('remote', { browser: { open, close, watch, createTab, selectTab, closeTab }, $stream: remoteStream })
   ctx.provide('layout', { openBrowser, closeBrowser })
   ctx.provide('locale', { register: () => () => {} })
   ctx.provide('slots', {
@@ -327,6 +332,21 @@ it.each([false, true])('opens and controls a Session through registered callback
     expect(open).toHaveBeenLastCalledWith({ sessionId })
     await injected.navigate('https://example.test/')
     expect(openBrowser).toHaveBeenCalledTimes(2)
+    const tabId = 'owned-tab' as BrowserTabId
+    await injected.createTab()
+    expect(createTab).toHaveBeenLastCalledWith({ sessionId })
+    await injected.createTab('https://new.test/')
+    expect(createTab).toHaveBeenLastCalledWith({ sessionId, url: 'https://new.test/' })
+    await injected.selectTab(tabId)
+    expect(selectTab).toHaveBeenLastCalledWith({ sessionId, tabId })
+    await injected.closeTab(tabId)
+    expect(closeTab).toHaveBeenLastCalledWith({ sessionId, tabId })
+    createTab.mockResolvedValueOnce({ ok: false, error: { message: 'create failed' } } as never)
+    selectTab.mockResolvedValueOnce({ ok: false, error: { message: 'select failed' } } as never)
+    closeTab.mockResolvedValueOnce({ ok: false, error: { message: 'tab close failed' } } as never)
+    await expect(injected.createTab()).rejects.toThrow('create failed')
+    await expect(injected.selectTab(tabId)).rejects.toThrow('select failed')
+    await expect(injected.closeTab(tabId)).rejects.toThrow('tab close failed')
     await injected.stop()
     close.mockResolvedValueOnce({ ok: false, error: { message: 'close failed' } } as never)
     await expect(injected.stop()).rejects.toThrow('close failed')
@@ -373,4 +393,68 @@ it('contains a subscriber exception without stopping frame delivery or reporting
   expect(state.getSnapshot().error).toBe('')
   expect(diagnostic).toHaveBeenCalledTimes(2)
   await state.dispose()
+})
+
+it('shows the navigated address while preserving an address being edited', async () => {
+  const fixture = panel()
+  await act(async () => { fixture.push({ open: true, title: 'Google', url: 'https://www.google.com/', actions: [] }) })
+  const address = screen.getByRole('textbox', { name: en.address }) as HTMLInputElement
+  expect(address.value).toBe('https://www.google.com/')
+  fireEvent.change(address, { target: { value: 'jackandjill.com' } })
+  await act(async () => { fixture.push({ open: true, title: 'Google', url: 'https://www.google.com/', actions: [] }) })
+  expect(address.value).toBe('jackandjill.com')
+  fireEvent.click(screen.getByRole('button', { name: en.navigate }))
+  await waitFor(() => { expect(fixture.props.navigate).toHaveBeenCalledWith('jackandjill.com') })
+  await act(async () => { fixture.push({ open: true, title: 'Destination', url: 'https://jackandjill.com/', actions: [] }) })
+  expect(address.value).toBe('https://jackandjill.com/')
+})
+
+
+it('shows selected tabs and delegates creation, keyboard selection, and close without changing tab identities', async () => {
+  const fixture = panel()
+  const first = 'tab-first' as BrowserTabId
+  const second = 'tab-second' as BrowserTabId
+  const snapshot: BrowserSnapshot = { open: true, backend: 'chrome', title: 'First', url: 'https://first.test/', actions: [],
+    tabs: [{ id: first, title: 'First', url: 'https://first.test/' }, { id: second, title: 'Second', url: 'https://second.test/' }],
+    activeTabId: first }
+  await act(async () => { fixture.push(snapshot) })
+  expect(screen.getByText(en.chromeInteraction)).toBeTruthy()
+  expect(screen.getAllByRole('tab').map(tab => ({ label: tab.textContent, selected: tab.getAttribute('aria-selected') })))
+    .toMatchInlineSnapshot(`
+      [
+        {
+          "label": "First",
+          "selected": "true",
+        },
+        {
+          "label": "Second",
+          "selected": "false",
+        },
+      ]
+    `)
+  await act(async () => { fireEvent.keyDown(screen.getByRole('tab', { name: 'First' }), { key: 'ArrowRight' }) })
+  expect(fixture.props.selectTab).toHaveBeenCalledWith(second)
+  await act(async () => { fixture.push({ ...snapshot, title: 'Second', url: 'https://second.test/', activeTabId: second }) })
+  expect(screen.getByRole('tab', { name: 'Second' }).getAttribute('aria-selected')).toBe('true')
+  await act(async () => { fireEvent.keyDown(screen.getByRole('tab', { name: 'Second' }), { key: 'ArrowLeft' }) })
+  expect(fixture.props.selectTab).toHaveBeenLastCalledWith(first)
+  await act(async () => { fireEvent.click(screen.getByRole('tab', { name: 'Second' })) })
+  expect(fixture.props.selectTab).toHaveBeenLastCalledWith(second)
+  expect(screen.getByRole<HTMLInputElement>('textbox', { name: en.address }).value).toBe('https://second.test/')
+  await act(async () => { fireEvent.click(screen.getByRole('button', { name: en.newTab })) })
+  expect(fixture.props.createTab).toHaveBeenCalledOnce()
+  await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Close tab First' })) })
+  expect(fixture.props.closeTab).toHaveBeenCalledWith(first)
+})
+
+it('keeps a tab visible when closing it fails and never shows Chrome interaction advice for Playwright', async () => {
+  const closeTab = vi.fn(async () => { throw new Error('Tab cleanup failed') })
+  const fixture = panel({ closeTab })
+  const id = 'tab-first' as BrowserTabId
+  await act(async () => { fixture.push({ open: true, backend: 'playwright', title: '', url: '', actions: [], activeTabId: id,
+    tabs: [{ id, title: '', url: '' }] }) })
+  expect(screen.queryByText(en.chromeInteraction)).toBeNull()
+  await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Close tab Untitled tab' })) })
+  expect(screen.getByRole('alert').textContent).toBe('Tab cleanup failed')
+  expect(screen.getByRole('tab', { name: en.untitledTab })).toBeTruthy()
 })

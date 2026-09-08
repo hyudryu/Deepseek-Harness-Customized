@@ -1,6 +1,6 @@
 - insert:
     - id: browser-control
-      name: dsh-browser-control
+      name: dsh-chrome-browser
       config:
         backend: chrome
         homepage: https://www.google.com/

@@ -1,19 +1,21 @@
 {
   "name": "dsh-browser-control",
   "version": "0.1.0",
-  "description": "Compact Playwright browser-control bundle for DeepSeek Harness coding agents",
+  "description": "Visible Chrome debugging with explicit isolated Playwright browser support",
   "type": "module",
   "main": "index.js",
   "files": [
     "index.js",
     "cordis.patch.yml",
-    "skills/browser-control.md"
+    "skills/browser-control.md",
+    "chrome-backend.js"
   ],
   "license": "MIT",
   "dependencies": {
     "@deepseek-ai/dsh-api-browser-controller": "link:../../packages/api/browser-controller",
     "@deepseek-ai/dsh-client-ui-browser": "link:../../packages/client/ui-browser",
-    "playwright": "^1.62.0"
+    "playwright": "^1.62.0",
+    "chrome-launcher": "^1.2.1"
   },
   "dsh": {
     "bundle": {

@@ -612,15 +612,30 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
       },
       {
         signature: 'open(sessionId: SessionId, url?: string): Promise<void>',
-        description: 'Ensure an open context and page for one session, navigating to the optional url.',
-        parameters: [{ name: 'sessionId', description: 'session whose browser is opened.' }, { name: 'url', description: 'optional navigation destination.' }],
+        description: 'Ensure an open page for one session, navigating to the optional URL or the configured homepage for a new session.',
+        parameters: [{ name: 'sessionId', description: 'session whose browser is opened.' }, { name: 'url', description: 'optional navigation destination; the provider normalizes bare hostnames.' }],
         throws: ['Navigation failures close newly created contexts; existing contexts remain open. Cleanup failures retain the context for retry.'],
       },
       {
         signature: 'close(sessionId: SessionId): Promise<void>',
-        description: 'Close one session\'s browser context, if any; retain any still-open context if cleanup fails.',
+        description: 'Close one session\'s owned tabs or isolated context; retain retryable state if cleanup fails.',
         parameters: [{ name: 'sessionId', description: 'session whose browser is closed.' }],
         throws: ['Context cleanup failures; callers may retry.'],
+      },
+      {
+        signature: 'createTab(sessionId: SessionId, url?: string): Promise<void>',
+        description: 'Create and select a session-owned tab, opening its browser if necessary.',
+        parameters: [{ name: 'sessionId', description: 'session owning the new tab.' }, { name: 'url', description: 'optional destination; omission uses the configured homepage.' }],
+      },
+      {
+        signature: 'selectTab(sessionId: SessionId, tabId: BrowserTabId): Promise<void>',
+        description: 'Select an existing tab and publish its current frame.',
+        parameters: [{ name: 'sessionId', description: 'session owning the tab.' }, { name: 'tabId', description: 'opaque identity from that session\'s snapshot.' }],
+      },
+      {
+        signature: 'closeTab(sessionId: SessionId, tabId: BrowserTabId): Promise<void>',
+        description: 'Close an owned tab; closing the last tab stops the session browser.',
+        parameters: [{ name: 'sessionId', description: 'session owning the tab.' }, { name: 'tabId', description: 'opaque identity from that session\'s snapshot.' }],
       },
     ],
   },
@@ -3800,7 +3815,15 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'BrowserSnapshot',
-    declaration: 'export interface BrowserSnapshot {\n    readonly open: boolean;\n    readonly url: string;\n    readonly title: string;\n    readonly actions: readonly BrowserActionEntry[];\n    readonly frame?: string;\n    readonly frameWidth?: number;\n    readonly frameHeight?: number;\n}',
+    declaration: 'export interface BrowserSnapshot {\n    readonly open: boolean;\n    readonly backend?: \'chrome\' | \'playwright\';\n    readonly tabs?: readonly BrowserTab[];\n    readonly activeTabId?: BrowserTabId;\n    readonly url: string;\n    readonly title: string;\n    readonly actions: readonly BrowserActionEntry[];\n    readonly frame?: string;\n    readonly frameWidth?: number;\n    readonly frameHeight?: number;\n}',
+  },
+  {
+    name: 'BrowserTab',
+    declaration: 'export interface BrowserTab {\n    readonly id: BrowserTabId;\n    readonly title: string;\n    readonly url: string;\n}',
+  },
+  {
+    name: 'BrowserTabId',
+    declaration: 'export type BrowserTabId = Branded<\'BrowserTabId\'>;',
   },
   {
     name: 'ClientArtifactBaseline',
