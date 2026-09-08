@@ -536,6 +536,8 @@ export interface SessionJob {
 
 /** Complete live control baseline emitted once per control stream generation. */
 export interface SessionControlBaseline {
+  /** Process-local SuperGoal pursuit, replaced on every reconnect. */
+  readonly superGoalArmed: Readonly<Record<SessionId, boolean>>
   readonly queues: Readonly<Record<SessionId, readonly SessionQueuedItem[]>>
   readonly jobs: Readonly<Record<SessionId, readonly SessionJob[]>>
   readonly projections: Readonly<Record<SessionId, SessionProjectionBaseline>>
@@ -552,6 +554,7 @@ export interface SessionProjectionUpdate {
 /** Host-wide live state stream. Each generation starts with exactly one baseline. */
 export type SessionControlFrame =
   | { readonly type: 'baseline'; readonly value: SessionControlBaseline }
+  | { readonly type: 'super-goal-activation'; readonly sessionId: SessionId; readonly armed: boolean }
   | { readonly type: 'queue'; readonly sessionId: SessionId; readonly items: readonly SessionQueuedItem[] }
   | { readonly type: 'jobs'; readonly sessionId: SessionId; readonly jobs: readonly SessionJob[] }
   | ({ readonly type: 'projection' } & SessionProjectionUpdate)

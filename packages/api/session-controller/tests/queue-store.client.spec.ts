@@ -248,7 +248,7 @@ describe('queue reconnect semantics', () => {
   it('a control baseline clears stale state before a fresh update lands', () => {
     const session = makeSession()
     session.handleControlFrame(queueFrame([{ id: 'q-old', body: '旧连接' }]))
-    session.replaceControl([])
+    session.replaceControl([], false)
     expect(session.getSnapshot().queue).toEqual([])
     session.handleControlFrame(queueFrame([{ id: 'q-new', body: '新基线' }]))
     expect(session.getSnapshot().queue.map(row => row.id)).toEqual(['q-new'])
@@ -287,7 +287,7 @@ describe('manager buffering of queue snapshots', () => {
       type: 'baseline',
       value: {
         queues: { [SID]: nextQueue },
-        jobs: {},
+        jobs: {}, superGoalArmed: {},
         projections: {},
       },
     })

@@ -187,7 +187,7 @@ describe('list lifecycle', () => {
     frame({
       type: 'baseline',
       value: {
-        queues: {}, jobs: {},
+        queues: {}, jobs: {}, superGoalArmed: {},
         projections: { [S1]: { asOfSeq: 2, values: {} } },
       },
     })
@@ -200,7 +200,7 @@ describe('list lifecycle', () => {
     frame({
       type: 'baseline',
       value: {
-        queues: {}, jobs: {},
+        queues: {}, jobs: {}, superGoalArmed: {},
         projections: { [S1]: { asOfSeq: 2, values: { title: 'Durable' } } },
       },
     })
@@ -958,7 +958,7 @@ describe('background-job mirror', () => {
     manager.handleControlFrame(tasksFrame(S1, [view()]))
     manager.handleControlFrame({
       type: 'baseline',
-      value: { queues: {}, jobs: {}, projections: {} },
+      value: { queues: {}, jobs: {}, superGoalArmed: {}, projections: {} },
     })
     expect(S1 in manager.getListSnapshot().jobsBySession).toBe(false)
   })
@@ -979,5 +979,29 @@ describe('background-job mirror', () => {
     // The notifier batches on a microtask; the frame itself is already applied.
     await Promise.resolve()
     expect(seen).toHaveBeenCalled()
+  })
+})
+
+
+describe('SuperGoal activation control', () => {
+  it('retains activation before Session creation and replaces it on reconnect', () => {
+    const manager = makeManager()
+    manager.handleControlFrame({ type: 'super-goal-activation', sessionId: S1, armed: true })
+    const session = manager.get(S1)
+    expect(session.getSnapshot().superGoalArmed).toBe(true)
+    manager.handleControlFrame({ type: 'baseline', value: {
+      queues: {}, jobs: {}, projections: {}, superGoalArmed: {},
+    } })
+    expect(session.getSnapshot().superGoalArmed).toBe(false)
+    manager.handleControlFrame({ type: 'baseline', value: {
+      queues: {}, jobs: {}, projections: {}, superGoalArmed: { [S1]: true },
+    } })
+    expect(session.getSnapshot().superGoalArmed).toBe(true)
+    manager.handleControlFrame({ type: 'super-goal-activation', sessionId: S1, armed: false })
+    session.handleRunning(true)
+    expect(session.getSnapshot()).toMatchObject({ running: true, superGoalArmed: false })
+    manager.handleControlFrame({ type: 'super-goal-activation', sessionId: S1, armed: true })
+    manager.handleSessionRemoved(S1)
+    expect(session.getSnapshot()).toMatchObject({ removed: true, superGoalArmed: false })
   })
 })

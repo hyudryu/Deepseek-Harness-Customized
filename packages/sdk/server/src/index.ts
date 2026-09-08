@@ -93,8 +93,16 @@ export function apply(ctx: Context, config: JsonRpcConfig): void {
   })
 
   ctx.effect(() => {
-    transport.start()
+    const stopped = new AbortController()
+    const loader = ctx.get('loader')
+    if (loader === undefined) transport.start()
+    else void loader.await().then(() => {
+      if (!stopped.signal.aborted) transport.start()
+    }, () => {
+      // Boot reports Loader failures; a failed tree must not consume SDK input.
+    })
     return async () => {
+      stopped.abort()
       await server.shutdown()
       transport.close()
     }

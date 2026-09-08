@@ -25,7 +25,7 @@ const FIXTURE: Record<string, string> = {
     },
     include: ['vendor/**/*.ts', 'packages/**/*.ts'],
   }),
-  'vendor/cordis/src/context.ts': 'export class Context { private brand!: void }\n',
+  'vendor/cordis/src/context.ts': 'export class Context { private brand!: void; bail(event: string): boolean | undefined { return undefined } }\n',
   'vendor/cordis/src/events.ts': [
     'export class EventsService {',
     '  dispatch(type: string, args: unknown[]): unknown[] { return [type, args] }',
@@ -48,6 +48,9 @@ const FIXTURE: Record<string, string> = {
     '',
   ].join('\n'),
   'packages/fix/pkgb/src/index.ts': [
+    "import { Context } from '../../../../vendor/cordis/src/context.ts'",
+    'declare const ctx: Context',
+    "ctx.bail('pkgb/activation')",
     "import { aliased } from '../../pkga/src/index.ts'",
     "aliased(['pkgb/aliased-event'])",
     '',
@@ -82,6 +85,11 @@ function dispatchersOf(pkgs: readonly string[], event: string): string[] {
 }
 
 describe('event relation call-site indexing', () => {
+  it('recognizes synchronous bail dispatch from a Context receiver', () => {
+    const relations = new EventRelationCollector(project, sources).collect()
+    expect([...relations.get('pkgb/activation')?.dispatchers.get('pkgb') ?? []]).toEqual(['bail'])
+  })
+
   it('recovers a proven-local helper through the single-file fast path', () => {
     expect(dispatchersOf(['pkga', 'pkgb'], 'pkga/local-event')).toEqual(['pkga'])
   })

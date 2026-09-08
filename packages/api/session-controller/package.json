@@ -114,6 +114,7 @@
     }
   },
   "devDependencies": {
+    "@deepseek-ai/dsh-super-goal": "workspace:^",
     "@deepseek-ai/cordis": "workspace:^",
     "@deepseek-ai/dsh-agent": "workspace:^",
     "@deepseek-ai/dsh-agent-default-model": "workspace:^",

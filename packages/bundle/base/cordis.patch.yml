@@ -311,6 +311,9 @@
     - id: command-goal
       name: '@deepseek-ai/dsh-command-goal'
 
+    - id: super-goal
+      name: '@deepseek-ai/dsh-super-goal'
+
     - id: plan-mode
       name: '@deepseek-ai/dsh-plan-mode'
       config:

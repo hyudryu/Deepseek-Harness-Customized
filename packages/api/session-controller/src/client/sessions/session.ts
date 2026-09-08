@@ -103,6 +103,7 @@ export class Session implements SessionFace {
   private readonly queueMirror = new SessionQueueMirror()
   private readonly assistantStream = new ClientAssistantStream()
   private running = false
+  private superGoalArmed = false
   private address: SubagentAddress | undefined
   private parentAvailable: boolean | undefined
   /**
@@ -493,8 +494,10 @@ export class Session implements SessionFace {
   /**
    * Replace every transient control value for this Session from one stream baseline.
    * @param queue - complete pending queue for this Session.
+   * @param superGoalArmed - process-local SuperGoal pursuit from the baseline.
    */
-  replaceControl(queue: readonly SessionQueuedItem[]): void {
+  replaceControl(queue: readonly SessionQueuedItem[], superGoalArmed: boolean): void {
+    this.superGoalArmed = superGoalArmed
     this.queueMirror.replace(queue)
     this.observeSubmissionQueue(queue)
     this.notifier.markDirty()
@@ -502,9 +505,14 @@ export class Session implements SessionFace {
 
   /**
    * Apply one Session-addressed live control update.
-   * @param frame - queue replacement addressed to this Session.
+   * @param frame - queue or SuperGoal activation replacement addressed to this Session.
    */
-  handleControlFrame(frame: Extract<SessionControlFrame, { type: 'queue' }>): void {
+  handleControlFrame(frame: Extract<SessionControlFrame, { type: 'queue' | 'super-goal-activation' }>): void {
+    if (frame.type === 'super-goal-activation') {
+      this.superGoalArmed = frame.armed
+      this.notifier.markDirty()
+      return
+    }
     this.queueMirror.replace(frame.items)
     this.observeSubmissionQueue(frame.items)
     this.notifier.markDirty()
@@ -570,6 +578,7 @@ export class Session implements SessionFace {
   /** `api-session/removed` relay: flag the snapshot while retaining the resident instance. */
   handleRemoved(): void {
     this.removed = true
+    this.superGoalArmed = false
     this.notifier.markDirty()
   }
 
@@ -797,6 +806,7 @@ export class Session implements SessionFace {
       queue: this.queueMirror.snapshot(),
       pendingSubmissions: this.pendingSubmissions,
       running: this.running,
+      superGoalArmed: this.superGoalArmed,
       subagent: this.address === undefined
         ? null
         : {

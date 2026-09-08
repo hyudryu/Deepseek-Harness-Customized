@@ -96,6 +96,7 @@ export class SessionManager {
   private readonly sessions = new Map<SessionId, Session>()
   /** In-flight Session disposals remain here after instances leave `sessions`, so manager disposal can await quiescence. */
   private readonly sessionDisposals = new Set<Promise<void>>()
+  private readonly superGoalArmed = new Map<SessionId, boolean>()
   /** Latest transient queues, retained independently of Session object materialization. */
   private readonly queues = new Map<SessionId, readonly SessionQueuedItem[]>()
   /**
@@ -294,7 +295,7 @@ export class SessionManager {
       // not-running summary must sweep replayed queue
       // rows the same way a live status flip would (their retirement events dropped
       // while the session was uninstantiated).
-      session.replaceControl(this.queues.get(sessionId) ?? [])
+      session.replaceControl(this.queues.get(sessionId) ?? [], this.superGoalArmed.get(sessionId) === true)
       // Sync the running and blank bits from the list snapshot into the new
       // instance (consistency when the list precedes open).
       const summary = this.summaries.find(s => s.sessionId === sessionId)
@@ -669,6 +670,11 @@ export class SessionManager {
       this.notifier.markDirty()
       return
     }
+    if (frame.type === 'super-goal-activation') {
+      this.superGoalArmed.set(frame.sessionId, frame.armed)
+      this.sessions.get(frame.sessionId)?.handleControlFrame(frame)
+      return
+    }
     if (frame.type === 'jobs') {
       if (frame.jobs.length === 0) this.jobsBySession.delete(frame.sessionId)
       else this.jobsBySession.set(frame.sessionId, frame.jobs)
@@ -680,6 +686,10 @@ export class SessionManager {
   }
 
   private replaceControlBaseline(baseline: SessionControlBaseline): void {
+    this.superGoalArmed.clear()
+    for (const [sessionId, armed] of Object.entries(baseline.superGoalArmed)) {
+      this.superGoalArmed.set(sessionId as SessionId, armed)
+    }
     this.queues.clear()
     for (const [sessionId, items] of Object.entries(baseline.queues)) {
       this.queues.set(sessionId as SessionId, items)
@@ -697,7 +707,7 @@ export class SessionManager {
       store.seed({ ...block, asOfSeq })
     }
     for (const [sessionId, session] of this.sessions) {
-      session.replaceControl(this.queues.get(sessionId) ?? [])
+      session.replaceControl(this.queues.get(sessionId) ?? [], this.superGoalArmed.get(sessionId) === true)
     }
     this.notifier.markDirty()
   }
@@ -738,6 +748,7 @@ export class SessionManager {
     this.updateCatalogActivity(sessionId, false)
     if (durableSubagent) this.sessions.get(sessionId)?.handleRunning(false)
     else this.sessions.get(sessionId)?.handleRemoved()
+    this.superGoalArmed.delete(sessionId)
     this.queues.delete(sessionId)
     this.jobsBySession.delete(sessionId)
     if (!durableSubagent) this.projectionStores.delete(sessionId)

@@ -52,6 +52,8 @@ import * as ToolStrReplaceEditor from '@deepseek-ai/dsh-tool-str-replace-editor'
 import TerminalSessionService from '@deepseek-ai/dsh-terminal'
 import * as ToolPty from '@deepseek-ai/dsh-tool-terminal'
 import * as ToolGoal from '@deepseek-ai/dsh-tool-goal'
+import * as SuperGoal from '@deepseek-ai/dsh-super-goal'
+import CommandRegistry from '@deepseek-ai/dsh-commands'
 import * as ToolSchedule from '@deepseek-ai/dsh-schedule'
 import Lsp from '@deepseek-ai/dsh-lsp'
 import * as ToolLsp from '@deepseek-ai/dsh-tool-lsp'
@@ -375,6 +377,33 @@ const TOOL_PACKAGES: ToolPackage[] = [
     },
     note:
       'create, edit, pause, and resume require direct-human root authority; complete and blocked also accept the exact current goal round. The default blocked lower bound is three admitted rounds.',
+  },
+  {
+    pkg: '@deepseek-ai/dsh-super-goal',
+    dir: 'super-goal',
+    source: 'packages/goal/super-goal/src/index.ts',
+    requires: ['ctx.tools', 'ctx.agents', 'ctx.commands', 'ctx.userQuestions', 'ctx.sessionProjections'],
+    writes: ['tool/call', 'super-goal/change', 'tool/result', 'user/message continuation'],
+    async mount(ctx) {
+      await ctx.plugin(SessionStore)
+      await ctx.plugin(AgentRegistry)
+      await ctx.plugin(CommandRegistry)
+      await ctx.plugin(UserQuestionService)
+      const session = ctx.sessions.create(SessionId('tool-catalog-super-goal'))
+      session.append('super-goal/change', {
+        version: 1, revision: 1,
+        goal: { revision: 1, objective: 'Catalog SuperGoal tools', phase: 'paused' },
+      })
+      // Schema harvesting needs a registered root scope but never executes a model or tool.
+      const agent = { id: session.id, session, status: 'idle' } as Agent
+      await mountCatalogChildScope(ctx, (childCtx) => {
+        Object.defineProperty(agent, 'ctx', { value: childCtx })
+      }, agent, ['tools'])
+      ctx.agents.register(agent)
+      await ctx.plugin(SuperGoal)
+    },
+    scope: ctx => catalogChildScopes.get(ctx) as Agent,
+    note: 'Tools are scoped to sessions containing a SuperGoal. Completion requires evidence; hard blockers request two or three human choices before resuming.',
   },
   {
     pkg: '@deepseek-ai/dsh-schedule',

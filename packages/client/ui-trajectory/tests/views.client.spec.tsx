@@ -113,7 +113,7 @@ function sessionSnapshot(nodes: LegacyConversationSlice['nodes']): SessionSnapsh
     sessionId: SID,
     queue: [],
     pendingSubmissions: [],
-    running: false,
+    running: false, superGoalArmed: false,
     subagent: null,
     removed: false,
     openState: 'open',

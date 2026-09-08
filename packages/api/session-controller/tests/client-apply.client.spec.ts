@@ -155,7 +155,7 @@ describe('Session Controller Client apply', () => {
 
     expect(accept).toHaveBeenCalledWith({
       type: 'baseline',
-      value: { queues: {}, jobs: {}, projections: {} },
+      value: { queues: {}, jobs: {}, superGoalArmed: {}, projections: {} },
     })
 
     bench.api.failStreams(new RemoteStreamCarrierError('generation lost'))

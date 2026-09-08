@@ -3403,6 +3403,22 @@ export const EVENT_API: readonly EventApiEntry[] = [
     parameters: [{ name: 'info', description: 'the provider and published child identity.' }],
   },
   {
+    name: 'super-goal/activation',
+    mode: 'bail',
+    signature: '\'super-goal/activation\'(session: Session): boolean | undefined',
+    summary: 'Read process-local pursuit for the exact live root Session.',
+    description: 'Read process-local pursuit for the exact live root Session.',
+    parameters: [{ name: 'session', description: 'Session whose pursuit is requested.' }],
+  },
+  {
+    name: 'super-goal/activation-changed',
+    mode: 'emit',
+    signature: '\'super-goal/activation-changed\'(session: Session, armed: boolean): void',
+    summary: 'Publish a committed process-local pursuit change.',
+    description: 'Publish a committed process-local pursuit change.',
+    parameters: [{ name: 'session', description: 'Session whose pursuit changed.' }, { name: 'armed', description: 'Whether SuperGoal continuation is armed.' }],
+  },
+  {
     name: 'system-prompt/assemble',
     mode: 'waterfall',
     signature: '\'system-prompt/assemble\'(this: Scoped<SystemPrompt>, assembly: PromptAssembly, context: AssembleContext, next: () => Promise<PromptAssembly>): Promise<PromptAssembly>',
@@ -5048,11 +5064,11 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'SessionControlBaseline',
-    declaration: 'export interface SessionControlBaseline {\n    readonly queues: Readonly<Record<SessionId, readonly SessionQueuedItem[]>>;\n    readonly jobs: Readonly<Record<SessionId, readonly SessionJob[]>>;\n    readonly projections: Readonly<Record<SessionId, SessionProjectionBaseline>>;\n}',
+    declaration: 'export interface SessionControlBaseline {\n    readonly superGoalArmed: Readonly<Record<SessionId, boolean>>;\n    readonly queues: Readonly<Record<SessionId, readonly SessionQueuedItem[]>>;\n    readonly jobs: Readonly<Record<SessionId, readonly SessionJob[]>>;\n    readonly projections: Readonly<Record<SessionId, SessionProjectionBaseline>>;\n}',
   },
   {
     name: 'SessionControlFrame',
-    declaration: 'export type SessionControlFrame = {\n    readonly type: \'baseline\';\n    readonly value: SessionControlBaseline;\n} | {\n    readonly type: \'queue\';\n    readonly sessionId: SessionId;\n    readonly items: readonly SessionQueuedItem[];\n} | {\n    readonly type: \'jobs\';\n    readonly sessionId: SessionId;\n    readonly jobs: readonly SessionJob[];\n} | ({\n    readonly type: \'projection\';\n} & SessionProjectionUpdate);',
+    declaration: 'export type SessionControlFrame = {\n    readonly type: \'baseline\';\n    readonly value: SessionControlBaseline;\n} | {\n    readonly type: \'super-goal-activation\';\n    readonly sessionId: SessionId;\n    readonly armed: boolean;\n} | {\n    readonly type: \'queue\';\n    readonly sessionId: SessionId;\n    readonly items: readonly SessionQueuedItem[];\n} | {\n    readonly type: \'jobs\';\n    readonly sessionId: SessionId;\n    readonly jobs: readonly SessionJob[];\n} | ({\n    readonly type: \'projection\';\n} & SessionProjectionUpdate);',
   },
   {
     name: 'SessionCreateRequest',

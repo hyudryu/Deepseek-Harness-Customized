@@ -157,7 +157,7 @@ export class FakeApiClient {
   followCursor: number | undefined
   controlBaseline: SessionControlBaseline = {
     queues: {},
-    jobs: {},
+    jobs: {}, superGoalArmed: {},
     projections: {},
   }
   assistantStreamBaseline: SessionAssistantStreamBaseline = {
