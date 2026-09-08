@@ -14,6 +14,8 @@ Completion requires concrete evidence. Blocking requires a reason and two or thr
 
 Durable state resides in versioned Session events. Execution activation remains process-local: opening or forking a transcript grants no new execution authority. Manual stop and plugin disposal end execution and preserve the objective. Scoped tools appear only in sessions containing a SuperGoal.
 
+Activation steers the current turn, or starts one when idle, so completion cannot leave an activation queued for another turn. Clearing disposes scoped tools after committing the tombstone and permits registration for a replacement objective. Completion is terminal: pause cannot convert a completed objective into resumable work.
+
 ## Alternatives considered
 
 **Reuse the ordinary goal's round cap.** That policy can stop because a task count was reached even while useful work remains. SuperGoal's objective is independent of that task policy.
@@ -21,6 +23,8 @@ Durable state resides in versioned Session events. Execution activation remains 
 **Add another notification type.** The existing multiple-choice question adapter already marks the session as waiting for an answer. Reusing it keeps answer delivery and notification dismissal under one owner.
 
 **Automatically restart persisted work on load.** Reading a session is not an instruction to execute it. Explicit resumption avoids unexpected work when a user opens historical sessions.
+
+**Queue activation for a separate turn.** A running turn can already assess and complete the objective. A queued activation would then spend another model request and replace the final response.
 
 ## Consequences
 

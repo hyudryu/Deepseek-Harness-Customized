@@ -34,7 +34,7 @@ The standard harness includes SuperGoal. It remains inactive until a user sets a
 | `/supergoal resume` | Continue an unfinished objective. |
 | `/supergoal clear` | Clear the objective. |
 
-SuperGoal is separate from the ordinary `/goal` objective. Only the root agent can control it or ask for human input. Delegated agents report their results to that root.
+SuperGoal is separate from the ordinary `/goal` objective. Only the root agent can control it or ask for human input. Delegated agents report their results to that root. Activation during a running turn steers that turn. Completed objectives reject pause and resume; clear removes the objective and its scoped tools.
 
 ### Completion and blockers
 

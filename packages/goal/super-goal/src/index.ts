@@ -48,13 +48,16 @@ export const inject = ['agents', 'tools', 'commands', 'userQuestions', 'sessionP
 export function apply(ctx: Context): void {
   ctx.sessionProjections.register(superGoalProjectionDefinition)
   const armed = new Set<Agent>()
-  const installed = new WeakSet<Agent>()
+  const installed = new WeakMap<Agent, () => Promise<void>>()
   const definitions: ToolDefinition[] = []
   function ensureTools(agent: Agent): void {
     if (installed.has(agent)) return
     const disposers = definitions.map(definition => agent.ctx.tools.register(definition))
-    ctx.effect(() => () => { for (const dispose of disposers) dispose() })
-    installed.add(agent)
+    const uninstall = ctx.effect(() => () => {
+      installed.delete(agent)
+      for (const dispose of disposers) dispose()
+    })
+    installed.set(agent, uninstall)
   }
   const pending = new Map<Agent, { controller: AbortController; done: Promise<unknown> }>()
   const questionWork = new Map<Promise<unknown>, Agent>()
@@ -155,12 +158,15 @@ export function apply(ctx: Context): void {
       if (!input || input === 'show') return { kind: 'success', text: goal
         ? `SuperGoal (${goal.phase}${armed.has(agent) ? '' : '; use /supergoal resume to continue'}): ${goal.objective}${goal.reason ? '\nBlocker: ' + goal.reason : ''}`
         : 'No SuperGoal. Use /supergoal <objective>.' }
+      if (input === 'pause' && goal?.phase === 'complete') return { kind: 'error', text: 'No unfinished SuperGoal to pause.' }
       if (input === 'pause' || input === 'clear') {
         armed.delete(agent)
         pending.get(agent)?.controller.abort()
         if (!goal) return { kind: 'error', text: 'No SuperGoal is set.' }
         commit(agent, input === 'clear' ? null : { ...goal, phase: 'paused' })
+        const cleanup = input === 'clear' ? installed.get(agent)?.() : undefined
         agent.cancel({ kind: 'user' })
+        await cleanup
         return { kind: 'success', text: `SuperGoal ${input === 'clear' ? 'cleared' : 'paused'}.` }
       }
       if (input === 'resume' && (!goal || goal.phase === 'complete')) return { kind: 'error', text: 'No unfinished SuperGoal to resume.' }
@@ -171,13 +177,13 @@ export function apply(ctx: Context): void {
         lifetime.signal.throwIfAborted()
         active(agent, next.revision)
         ensureTools(agent)
-        agent.followup(message(next))
+        agent.steer(message(next))
         return { kind: 'success', text: `SuperGoal active: ${next.objective}` }
       }
       const next = commit(agent, { ...(input === 'resume' ? goal as SuperGoal : { objective: input }), phase: 'active' })
       ensureTools(agent)
       armed.add(agent)
-      agent.followup(message(next))
+      agent.steer(message(next))
       return { kind: 'success', text: `SuperGoal active: ${next.objective}` }
     },
   })

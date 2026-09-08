@@ -55,6 +55,37 @@ function pendingQuestion(ctx: Context) {
 const blocker = { revision: 1, reason: 'Which deployment target is authorized?', choices: ['Use staging', 'Provide another target'] }
 
 describe('SuperGoal through the real loop', () => {
+  it.each(['create', 'resume'])('a mid-run %s steers the current turn without queuing work after completion', async (action) => {
+    const revision = action === 'resume' ? 2 : 1
+    const adapter = new MockAdapter([
+      textResponse('The original task is finished.'),
+      toolCallResponse('complete', 'complete_super_goal', { revision, evidence: 'Acceptance verified.' }),
+      textResponse('Complete.'),
+    ])
+    const { ctx, agent } = await harness(adapter)
+    if (action === 'resume') {
+      agent.session.append('super-goal/change', { version: 1, revision: 1,
+        goal: { revision: 1, objective: 'Verify acceptance', phase: 'paused' } })
+    }
+    let activated = false
+    ctx.on('agent/pre-step', async ({ agent: subject }, next) => {
+      if (subject === agent && !activated) {
+        activated = true
+        await command(ctx, agent, action === 'resume' ? 'resume' : 'Verify acceptance')
+      }
+      return next()
+    })
+    agent.followup(createUserMessage({ content: [{ type: 'text', text: 'Finish the original task' }], source: { kind: 'user' } }))
+    await agent.whenIdle()
+    expect(adapter.requests).toHaveLength(3)
+    const events = agent.session.snapshotEvents()
+    expect(events.filter(event => event.type === 'turn/start')).toHaveLength(1)
+    expect(events.filter(event => event.type === 'turn/end')).toHaveLength(1)
+    expect(events.filter(event => event.type === 'user/message' && event.data.source.kind === 'plugin'
+      && event.data.source.plugin === 'super-goal')).toHaveLength(1)
+    expect(readSuperGoal(agent.session)?.phase).toBe('complete')
+  })
+
   it('leaves ordinary session tool schemas unchanged until the user creates a goal', async () => {
     const adapter = new MockAdapter([textResponse('Ordinary answer.')])
     const { ctx, agent } = await harness(adapter)
@@ -245,10 +276,11 @@ describe('SuperGoal through the real loop', () => {
     expect(readSuperGoal(agent.session)).toMatchObject({ phase: 'complete', revision: 3 })
   })
 
-  it('clear retains its revision tombstone before a replacement objective is created', async () => {
+  it('clear removes goal schemas from ordinary requests and reinstalls them for a replacement objective', async () => {
     const adapter = new MockAdapter([
       toolCallResponse('complete-first', 'complete_super_goal', { revision: 1, evidence: 'First check passed.' }),
       textResponse('First complete.'),
+      textResponse('An ordinary answer after clearing.'),
       toolCallResponse('complete-next', 'complete_super_goal', { revision: 4, evidence: 'Second check passed.' }),
       textResponse('Second complete.'),
     ])
@@ -256,11 +288,20 @@ describe('SuperGoal through the real loop', () => {
     const firstIdle = idle(ctx, agent)
     await command(ctx, agent, 'First objective')
     await firstIdle
+    await agent.whenIdle()
     await command(ctx, agent, 'clear')
     expect(readSuperGoal(agent.session)).toBeNull()
+    const ordinaryIdle = idle(ctx, agent)
+    agent.followup(createUserMessage({ content: [{ type: 'text', text: 'An ordinary question' }], source: { kind: 'user' } }))
+    await ordinaryIdle
+    await agent.whenIdle()
+    expect(adapter.requests[2]?.tools).toBeUndefined()
     const settled = idle(ctx, agent)
     await command(ctx, agent, 'Replacement objective')
     await settled
+    expect(adapter.requests[3]?.tools?.map(tool => tool.name).sort()).toEqual([
+      'block_super_goal', 'complete_super_goal', 'get_super_goal',
+    ])
     expect(readSuperGoal(agent.session)).toMatchObject({ revision: 5, objective: 'Replacement objective', phase: 'complete' })
   })
 
@@ -328,7 +369,11 @@ describe('SuperGoal through the real loop', () => {
     const direct = await ctx.tools.execute({ agent, signal: new AbortController().signal,
       callId: ToolCallId('direct-goal'), name: 'get_super_goal', arguments: {} })
     expect(direct.isError).toBe(true)
+    const completed = readSuperGoal(agent.session)
+    expect((await command(ctx, agent, 'pause'))?.result.kind).toBe('error')
+    expect(readSuperGoal(agent.session)).toEqual(completed)
     expect((await command(ctx, agent, 'resume'))?.result.kind).toBe('error')
+    expect(readSuperGoal(agent.session)).toEqual(completed)
   })
 
   it('mounting the plugin around existing agents restores only the session that owns a goal', async () => {
