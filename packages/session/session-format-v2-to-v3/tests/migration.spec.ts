@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { assertReleasedV2Artifact } from '@deepseek-ai/dsh-session-format-v1-to-v2'
 import { sessionFormatV2ToV3 } from '@deepseek-ai/dsh-session-format-v2-to-v3'
 import type { SessionFormatArtifact, SessionFormatEvent } from '@deepseek-ai/dsh-session-format'
 
@@ -65,15 +66,48 @@ describe('sessionFormatV2ToV3', () => {
     expect(migrated.events[0]?.data).toStrictEqual(skillCatalogMessage)
   })
 
-  it('refuses a released-v2 log that emits a presentationDigest on a skill-catalog source', () => {
-    const tagged = {
-      ...skillCatalogMessage,
-      source: { ...skillCatalogMessage.source, presentationDigest: 'abc123' },
+  const locations = ['user/message', 'next-turn', 'next-step'] as const
+
+  function catalogArtifact(location: typeof locations[number], source: SessionFormatEvent['data']) {
+    const message = { ...skillCatalogMessage, source }
+    return artifact([location === 'user/message'
+      ? { ...event('user/message', 0, 100, message), surfaceOp: 'append' }
+      : event('agent/inbox/spliced', 0, 100, { target: location, start: 0, inserted: [message] })])
+  }
+
+  it.each(locations)('preserves an early v2 presentation digest in %s without changing the frozen v2 reader', (location) => {
+    const source = catalogArtifact(location, {
+      ...skillCatalogMessage.source, presentationDigest: 'a1'.repeat(32),
+    })
+    const before = JSON.stringify(source)
+    expect(() => { assertReleasedV2Artifact(source) }).toThrow(/unexpected member "presentationDigest"/)
+    expect(sessionFormatV2ToV3.migrate(source)).toStrictEqual({
+      ...source, header: { ...source.header, version: 3 },
+    })
+    expect(JSON.stringify(source)).toBe(before)
+  })
+
+  it.each(locations)('rejects malformed digests and unrelated source members in %s', (location) => {
+    for (const digest of ['abc123', 'A'.repeat(64), 'g'.repeat(64), 'a'.repeat(63), 'a'.repeat(65), 1, null]) {
+      expect(() => sessionFormatV2ToV3.migrate(catalogArtifact(location, {
+        ...skillCatalogMessage.source, presentationDigest: digest,
+      }))).toThrow(/presentationDigest/)
     }
-    const source = artifact([
-      { ...event('user/message', 0, 100, tagged), surfaceOp: 'append' },
-    ])
-    expect(() => sessionFormatV2ToV3.migrate(source)).toThrow(/unexpected member/)
+    expect(() => sessionFormatV2ToV3.migrate(catalogArtifact(location, {
+      ...skillCatalogMessage.source, presentationDigest: 'a'.repeat(64), extra: true,
+    }))).toThrow(/unexpected member "extra"/)
+    expect(() => sessionFormatV2ToV3.migrate(catalogArtifact(location, {
+      kind: 'user', presentationDigest: 'a'.repeat(64),
+    }))).toThrow(/unexpected member "presentationDigest"/)
+  })
+
+  it('rejects source header drift and unknown events before returning a successor', () => {
+    expect(() => sessionFormatV2ToV3.migrate(artifact([], {
+      version: 3, id: 'wrong-version', createdAt: 1, isSeeded: false, delegationDepth: 0,
+    }))).toThrow(/expected format v2 header/)
+    expect(() => sessionFormatV2ToV3.migrate(artifact([
+      { ...event('external/unknown', 0, 100, {}), ignorable: true },
+    ]))).toThrow(/unknown event type/)
   })
 
   it('exposes an exact released-v3 target policy', () => {

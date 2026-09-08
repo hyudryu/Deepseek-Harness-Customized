@@ -5,6 +5,10 @@
 - id: headless-runner
   disabled: true
 
+# The fixture driver owns startup; MCP still serves this resumed session.
+- id: session-mcp
+  inject: []
+
 - id: llm-deepseek
   disabled: true
 
