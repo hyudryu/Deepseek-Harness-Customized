@@ -25,7 +25,7 @@ afterEach(async () => {
   if (directory !== undefined) await rm(directory, { recursive: true, force: true })
 })
 
-async function boot() {
+async function boot(maxAccounts = 100, maxMetadataBytes = 256) {
   directory = await mkdtemp(join(tmpdir(), 'dsh-authenticator-http-'))
   const config = join(directory, 'cordis.yml')
   await writeFile(config, [
@@ -33,7 +33,7 @@ async function boot() {
     '- name: webserver', '  config:', "    host: '127.0.0.1'", '    port: 0',
     '- name: connection', '- name: system-prompt', '- name: tools',
     '- name: settings', '  config:', `    dshHome: '${directory}'`, '    watch: false',
-    '- id: authenticator', '  name: authenticator', '  config:', `    dshHome: '${directory}'`, '',
+    '- id: authenticator', '  name: authenticator', '  config:', `    dshHome: '${directory}'`, `    maxAccounts: ${maxAccounts}`, `    maxMetadataBytes: ${maxMetadataBytes}`, '',
   ].join('\n'))
   const ctx = context = new Context()
   ctx.baseUrl = pathToFileURL(directory).href + '/'
@@ -141,4 +141,27 @@ it('imports, returns codes through REST and official MCP, and deletes through th
   expect(ctx.tools.schemas()).toEqual([])
   expect((await call('/authenticator')).status).toBe(200)
   expect(await (await call('/authenticator')).text()).toBe('authenticated')
+})
+
+
+it('enforces configured list bounds through the shared HTTP, native and MCP store', async () => {
+  const { call, ctx } = await boot(1, 3)
+  const imported = await call('/authenticator/import', { uri: 'otpauth://totp/%E7%95%8C?secret=JBSWY3DPEHPK3PXP' })
+  expect(imported.status).toBe(200)
+  const rejected = await call('/authenticator/import', { uri: 'otpauth://totp/bob?secret=GEZDGNBVGY3TQOJQ' })
+  expect(rejected.status).toBe(400)
+  const oversized = await call('/authenticator/import', { uri: 'otpauth://totp/long?secret=GEZDGNBVGY3TQOJQ' })
+  expect(oversized.status).toBe(400)
+  const settings = await (await call('/authenticator')).json() as { accounts: unknown[] }
+  expect(settings.accounts).toHaveLength(1)
+  const native = await ctx.tools.execute({ name: 'authenticator_list_accounts', arguments: {},
+    callId: ToolCallId('bounded-list'), signal: new AbortController().signal })
+  expect(native.isError).toBe(false)
+  const mcp: unknown = await (await call('/authenticator/mcp', {
+    jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name: 'authenticator_list_accounts', arguments: {} },
+  }, { accept: 'application/json, text/event-stream', 'mcp-protocol-version': '2025-03-26' })).json()
+  for (const projection of [settings, native, mcp]) {
+    expect(Buffer.byteLength(JSON.stringify(projection))).toBeLessThan(1024)
+    expect(JSON.stringify(projection)).not.toContain('JBSWY3DPEHPK3PXP')
+  }
 })

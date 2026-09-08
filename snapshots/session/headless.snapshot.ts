@@ -756,7 +756,7 @@ describe('headless recorded-session snapshots', () => {
         },
       }
       const header = {
-        type: 'session', version: 2, id: 'sidecar-session', createdAt: 1,
+        type: 'session', version: 3, id: 'sidecar-session', createdAt: 1,
         cwd: '/tmp/sidecar-session', isSeeded: false, delegationDepth: 0,
       }
       const content = [
@@ -790,7 +790,7 @@ describe('headless recorded-session snapshots', () => {
       expect(await readFile(join(directory, 'tool-schemas.expected.json'), 'utf8'))
         .toContain('"name": "fresh_tool"')
       expect(await readFile(join(directory, 'session.v1.jsonl'), 'utf8')).toBe(retained)
-      expect(await readdir(directory)).not.toContain('session.v2.jsonl')
+      expect(await readdir(directory)).not.toContain('session.v3.jsonl')
     } finally {
       await rm(directory, { recursive: true, force: true })
     }

@@ -855,6 +855,10 @@ Requires: `webServer` · `connection` · `settings` · `tools`
 export interface Config {
   /** Dedicated account file; omission uses the current Harness home. */
   path?: string
+  /** Maximum accounts retained and returned in one list. */
+  maxAccounts: number
+  /** Maximum UTF-8 bytes in each account label and issuer. */
+  maxMetadataBytes: number
   /** Explicit Harness home, otherwise DSH_HOME or ~/.dsh. */
   dshHome?: string
 }
@@ -2150,6 +2154,40 @@ export interface Config {
 
 Source: [`packages/skill/skill/src/index.ts:280`](../packages/skill/skill/src/index.ts)
 
+<a id="deepseek-aidsh-skill-catalog-buckets"></a>
+
+## `@deepseek-ai/dsh-skill-catalog-buckets`
+
+Requires: `skills` · `tools`
+
+```ts config-catalog
+/** User-configurable discovery categories and output limits. */
+export interface Config {
+  /** Ordered categories; omission uses AWS, MCP, reviews and security. */
+  buckets?: Bucket[]
+  /** Maximum UTF-8 bytes in a complete discovery response; positive safe integer, default 32768. */
+  maxResponseBytes?: number
+  /** Maximum UTF-8 bytes in the framed category message; positive safe integer, default 8192. */
+  maxCatalogBytes?: number
+  /** Maximum skill summaries per listing page; integer 1 through 100, default 20. */
+  pageSize?: number
+  /** Maximum normalized summary characters including count suffix and ellipsis; integer 3 through 2000, default 160. */
+  descriptionMaxLength?: number
+}
+
+/** Ordered category definition; the first matching category wins. */
+export interface Bucket {
+  /** Unique kebab-case category name; other is reserved. */
+  name: string
+  /** Human-authored routing summary for the initial catalog. */
+  description: string
+  /** Case-insensitive word phrases matched against skill metadata. */
+  keywords: string[]
+}
+```
+
+Source: [`packages/skill/skill-catalog-buckets/src/index.ts:20`](../packages/skill/skill-catalog-buckets/src/index.ts)
+
 <a id="deepseek-aidsh-skill-filesystem"></a>
 
 ## `@deepseek-ai/dsh-skill-filesystem`
@@ -2927,7 +2965,7 @@ export interface Config {
 }
 ```
 
-Source: [`packages/skill/tool-skill/src/index.ts:61`](../packages/skill/tool-skill/src/index.ts)
+Source: [`packages/skill/tool-skill/src/index.ts:99`](../packages/skill/tool-skill/src/index.ts)
 
 <a id="deepseek-aidsh-tool-str-replace-editor"></a>
 
@@ -3137,7 +3175,7 @@ export interface Config {
 export type ToolPresentationMode = 'native' | 'ptc' | 'both'
 ```
 
-Source: [`packages/core/tools/src/index.ts:647`](../packages/core/tools/src/index.ts)
+Source: [`packages/core/tools/src/index.ts:655`](../packages/core/tools/src/index.ts)
 
 <a id="deepseek-aidsh-typert-loader"></a>
 
@@ -3534,6 +3572,7 @@ Imported as libraries by other packages; a `cordis.yml` cannot load them.
 - `@deepseek-ai/dsh-session-format-catalog` ([`packages/session/session-format-catalog/src/index.ts`](../packages/session/session-format-catalog/src/index.ts))
 - `@deepseek-ai/dsh-session-format-v0-to-v1` ([`packages/session/session-format-v0-to-v1/src/index.ts`](../packages/session/session-format-v0-to-v1/src/index.ts))
 - `@deepseek-ai/dsh-session-format-v1-to-v2` ([`packages/session/session-format-v1-to-v2/src/index.ts`](../packages/session/session-format-v1-to-v2/src/index.ts))
+- `@deepseek-ai/dsh-session-format-v2-to-v3` ([`packages/session/session-format-v2-to-v3/src/index.ts`](../packages/session/session-format-v2-to-v3/src/index.ts))
 - `@deepseek-ai/dsh-session-snapshot` ([`packages/test-support/session-snapshot/src/index.ts`](../packages/test-support/session-snapshot/src/index.ts))
 - `@deepseek-ai/dsh-session-telemetry` ([`packages/session/session-telemetry/src/index.ts`](../packages/session/session-telemetry/src/index.ts))
 - `@deepseek-ai/dsh-session-title-llm` ([`packages/session/session-title-llm/src/index.ts`](../packages/session/session-title-llm/src/index.ts))

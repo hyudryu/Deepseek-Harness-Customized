@@ -23,11 +23,19 @@ export const inject = ['webServer', 'connection', 'settings', 'tools']
 export interface Config {
   /** Dedicated account file; omission uses the current Harness home. */
   path?: string
+  /** Maximum accounts retained and returned in one list. */
+  maxAccounts: number
+  /** Maximum UTF-8 bytes in each account label and issuer. */
+  maxMetadataBytes: number
   /** Explicit Harness home, otherwise DSH_HOME or ~/.dsh. */
   dshHome?: string
 }
 
-export const Config: schema<Config> = schema.object({ path: schema.string(), dshHome: schema.string() })
+export const Config: schema<Config> = schema.object({
+  path: schema.string(), dshHome: schema.string(),
+  maxAccounts: schema.number().min(1).default(100),
+  maxMetadataBytes: schema.number().min(1).default(256),
+})
 
 const metadata = {
   id: { type: 'string', required: true }, label: { type: 'string', required: true },
@@ -55,8 +63,11 @@ async function readBody(request: IncomingMessage): Promise<unknown> {
  * @param config - account storage location.
  */
 export function apply(ctx: Context, config: Config): void {
+  for (const [key, value] of [['maxAccounts', config.maxAccounts], ['maxMetadataBytes', config.maxMetadataBytes]] as const) {
+    if (!Number.isSafeInteger(value) || value < 1) throw new Error(`${key} must be a positive safe integer`)
+  }
   const filename = resolve(config.path ?? join(resolveDshHome(config.dshHome), 'authenticator', 'accounts.json'))
-  const store = new AuthenticatorStore(filename)
+  const store = new AuthenticatorStore(filename, config)
   ctx.settings.register('authenticator', schema.object({}))
   ctx.tools.register(defineTool({
     name: 'authenticator_list_accounts',

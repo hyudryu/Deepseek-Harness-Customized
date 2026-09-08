@@ -7,8 +7,9 @@
 import { createHash } from 'node:crypto'
 import type { Context } from '@deepseek-ai/cordis'
 import z from '@deepseek-ai/schemastery'
-import type { Agent, PreStepDecision } from '@deepseek-ai/dsh-agent'
-import { defineTool } from '@deepseek-ai/dsh-tools'
+import { agentEvents, type Agent, type PreStepDecision } from '@deepseek-ai/dsh-agent'
+import type { Scoped } from '@deepseek-ai/dsh-scope'
+import { defineTool, type ToolDefinition } from '@deepseek-ai/dsh-tools'
 import { createUserMessage } from '@deepseek-ai/dsh-llm'
 import { SessionSeq, type UserMessage } from '@deepseek-ai/dsh-session'
 import {
@@ -24,6 +25,17 @@ import {
 export const name = 'tool-skill'
 export const inject = ['agents', 'tools', 'skills']
 
+const skillLoaders = new WeakSet<ToolDefinition>()
+
+/**
+ * Identify an exact live loader registration, excluding unrelated same-name tools.
+ * @param tool - definition resolved in the calling agent's scope.
+ * @returns whether tool-skill owns this active registration.
+ */
+export function isSkillLoader(tool: ToolDefinition | undefined): boolean {
+  return tool !== undefined && skillLoaders.has(tool)
+}
+
 const DEFAULT_CATALOG_DESCRIPTION_MAX_LENGTH = 500
 /**
  * Durable provider and item records for one published session skill catalog. The catalog is a
@@ -38,6 +50,32 @@ export interface SkillCatalogSource {
   readonly update?: true
   /** Exactly the entries this message published, in catalog order. */
   readonly entries: readonly { readonly name: string; readonly description: string }[]
+  /** Identity of a custom presentation, including its unpublished membership revision. */
+  readonly presentationDigest?: string
+}
+
+/** Model-facing catalog projection supplied by an optional discovery plugin. */
+export interface SkillCatalogPresentation {
+  /** Exactly the names and descriptions rendered by this presentation. */
+  readonly entries: SkillCatalogSource['entries']
+  /** Complete message text used verbatim for initial and replacement catalogs; omission retains standard prose. */
+  readonly text?: string
+  /** Additional identity for membership changes not visible in the summary rows. */
+  readonly revision?: string
+}
+
+declare module '@deepseek-ai/cordis' {
+  interface Events {
+    /**
+     * Project a complete model-invocable skill snapshot before durable catalog publication.
+     * Scope-filtered dispatch selects listeners visible to the subject agent.
+     * @mode waterfall
+     * @param payload - subject agent and complete visible skill metadata.
+     * @param next - delegated presentation, defaulting to the standard full catalog.
+     */
+    'skill/catalog'(this: Scoped<Agent>, payload: { agent: Agent; skills: readonly SkillSummary[] },
+      next: () => Promise<SkillCatalogPresentation>): Promise<SkillCatalogPresentation>
+  }
 }
 
 declare module '@deepseek-ai/dsh-llm' {
@@ -80,9 +118,9 @@ export function apply(ctx: Context, config: Config = {}): void {
 
   const skillTool = defineTool({
     name: 'skill',
-    description: 'Load the full instructions for an available skill. Call this with the exact skill name from the session skill catalog before acting on a task that names or clearly matches that skill.',
+    description: 'Load the full instructions for an available skill. Call this with the exact available skill name before acting on a task that names or clearly matches that skill.',
     parameters: {
-      name: { type: 'string', required: true, description: 'The exact skill name from the available skills list.' },
+      name: { type: 'string', required: true, description: 'The exact skill name from skill discovery.' },
     },
     output: {
       schema: {
@@ -158,7 +196,16 @@ export function apply(ctx: Context, config: Config = {}): void {
       return { card: 'generic', title: `Load skill ${args.name}`, kind: 'read', rawInput: args.name }
     },
   })
-  ctx.tools.register(skillTool)
+  skillLoaders.add(skillTool)
+  try {
+    ctx.tools.register(skillTool)
+  } catch (error) {
+    skillLoaders.delete(skillTool)
+    throw error
+  }
+  ctx.effect(() => {
+    return () => { skillLoaders.delete(skillTool) }
+  })
 
   // User-explicit skill invocation: a claimed user message whose first line
   // starts with `/<name>` naming a user-invocable skill is a deterministic
@@ -224,8 +271,14 @@ export function apply(ctx: Context, config: Config = {}): void {
     signal.throwIfAborted()
     if (!snapshot.complete) return decision
     const skills = snapshot.skills.filter(isModelInvocable)
-    const entries = catalogSourceEntries(skills, catalogDescriptionMaxLength)
-    const digest = digestCatalogEntries(entries)
+    const baseline: SkillCatalogPresentation = { entries: catalogSourceEntries(skills, catalogDescriptionMaxLength) }
+    const presentation = toolVisible
+      ? await agentEvents(ctx, agent).waterfall('skill/catalog', { skills }, () => Promise.resolve(baseline))
+      : baseline
+    signal.throwIfAborted()
+    const entries = presentation.entries
+    const presentationDigest = digestPresentation(presentation)
+    const digest = digestCatalog(entries, presentationDigest)
     const history = catalogHistory(agent)
     const existing = catalogMessage(decision.messages)
     if (history.visibleDigest === digest) {
@@ -233,15 +286,15 @@ export function apply(ctx: Context, config: Config = {}): void {
         ? decision
         : { ...decision, messages: decision.messages.filter(message => message.id !== existing.message.id) }
     }
-    if (existing !== undefined && digestCatalogEntries(existing.entries) === digest) return decision
+    if (existing !== undefined && existing.digest === digest) return decision
     if (!history.published && skills.length === 0) {
       return existing === undefined
         ? decision
         : { ...decision, messages: decision.messages.filter(message => message.id !== existing.message.id) }
     }
     const catalog = history.published
-      ? renderCatalogUpdate(entries)
-      : renderCatalogMessage(entries)
+      ? renderCatalogUpdate(entries, presentation.text, presentationDigest)
+      : renderCatalogMessage(entries, presentation.text, presentationDigest)
     return {
       ...decision,
       messages: existing === undefined
@@ -251,11 +304,11 @@ export function apply(ctx: Context, config: Config = {}): void {
   })
 }
 
-function renderCatalogMessage(entries: SkillCatalogSource['entries']): UserMessage {
+function renderCatalogMessage(entries: SkillCatalogSource['entries'], text?: string, presentationDigest?: string): UserMessage {
   return createUserMessage({
     content: [{
       type: 'text',
-      text: [
+      text: text ?? [
         '<system-reminder>',
         'A skill is a reusable set of task-specific instructions. The following skills are available in this session:',
         '',
@@ -272,11 +325,12 @@ function renderCatalogMessage(entries: SkillCatalogSource['entries']): UserMessa
       kind: 'skill-catalog',
       form: 'catalog',
       entries,
+      ...presentationDigest === undefined ? {} : { presentationDigest },
     },
   })
 }
 
-function renderCatalogUpdate(entries: SkillCatalogSource['entries']): UserMessage {
+function renderCatalogUpdate(entries: SkillCatalogSource['entries'], text?: string, presentationDigest?: string): UserMessage {
   const availability = entries.length === 0
     ? [
       'No skills are currently available through the `skill` tool. Do not use names from earlier skill catalogs.',
@@ -289,7 +343,7 @@ function renderCatalogUpdate(entries: SkillCatalogSource['entries']): UserMessag
   return createUserMessage({
     content: [{
       type: 'text',
-      text: [
+      text: text ?? [
         '<system-reminder>',
         'The available skill catalog changed. This complete catalog replaces every earlier available-skills list in this session:',
         '',
@@ -306,6 +360,7 @@ function renderCatalogUpdate(entries: SkillCatalogSource['entries']): UserMessag
       form: 'catalog',
       update: true,
       entries,
+      ...presentationDigest === undefined ? {} : { presentationDigest },
     },
   })
 }
@@ -332,6 +387,23 @@ function digestCatalogEntries(entries: SkillCatalogSource['entries']): string {
   return createHash('sha256')
     .update(canonical)
     .digest('hex')
+}
+
+function digestPresentation(presentation: SkillCatalogPresentation): string | undefined {
+  if (presentation.text === undefined && presentation.revision === undefined) return undefined
+  return createHash('sha256').update(JSON.stringify([presentation.text, presentation.revision])).digest('hex')
+}
+
+function digestCatalog(entries: SkillCatalogSource['entries'], presentationDigest?: string): string {
+  const legacy = digestCatalogEntries(entries)
+  return presentationDigest === undefined ? legacy : createHash('sha256').update(`${legacy}:${presentationDigest}`).digest('hex')
+}
+
+/** Reject malformed optional presentation identity on durable/external message input. */
+function readCatalogDigest(source: unknown, entries: SkillCatalogSource['entries']): string | undefined {
+  const value = (source as { presentationDigest?: unknown }).presentationDigest
+  if (value !== undefined && (typeof value !== 'string' || !/^[a-f0-9]{64}$/.test(value))) return undefined
+  return digestCatalog(entries, value)
 }
 
 /**
@@ -369,7 +441,8 @@ function catalogHistory(agent: Agent): { visibleDigest?: string; published: bool
     if (event.type !== 'user/message' || event.data.source.kind !== 'skill-catalog') continue
     const entries = readCatalogEntries(event.data.source)
     if (entries === undefined) continue
-    const digest = digestCatalogEntries(entries)
+    const digest = readCatalogDigest(event.data.source, entries)
+    if (digest === undefined) continue
     published = true
     if (visible.has(event.seq)) return { visibleDigest: digest, published }
   }
@@ -378,11 +451,14 @@ function catalogHistory(agent: Agent): { visibleDigest?: string; published: bool
 
 function catalogMessage(
   messages: readonly UserMessage[],
-): { message: UserMessage; entries: SkillCatalogSource['entries'] } | undefined {
+): { message: UserMessage; digest: string } | undefined {
   for (const message of messages) {
     if (message.source.kind !== 'skill-catalog') continue
     const entries = readCatalogEntries(message.source)
-    if (entries !== undefined) return { message, entries }
+    if (entries !== undefined) {
+      const digest = readCatalogDigest(message.source, entries)
+      if (digest !== undefined) return { message, digest }
+    }
   }
   return undefined
 }

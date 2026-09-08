@@ -39,6 +39,15 @@ Declares a new `sidebar.workspaces.actions` list slot (root scope) on the worksp
 
 </details>
 
+<details>
+<summary><b>On-demand skill category catalogs (`skill-catalog-buckets`)</b> — click to expand</summary>
+
+Reduces the initial skill context by replacing the full skill list with compact, user-configurable category catalogs. The model calls the `skill_catalog` tool to list names and summaries one category (`aws`, `mcp`, `reviews`, `security`, plus `other`) at a time with paginated results, then loads full instructions with `skill`.
+
+Configure `buckets` (ordered routing categories), `pageSize`, and `descriptionMaxLength` on the plugin row in the profile's `cordis.yml`. Discovery only registers when the exact scoped `skill` loader is live, so a preset that omits or denies that loader never exposes an orphan catalog tool.
+
+</details>
+
 ### Plugins
 
 These bundles live in [`Custom Plugins/`](Custom Plugins/). They are intentionally kept outside the core `packages/` tree and are installed per profile via `dsh plugin --profile <name> add <path>`.

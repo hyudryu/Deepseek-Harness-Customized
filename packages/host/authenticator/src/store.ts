@@ -108,12 +108,31 @@ async function protectDirectory(directory: string): Promise<void> {
   await run('icacls.exe', [directory, '/inheritance:r', '/grant:r', `*${sid}:(OI)(CI)F`], options)
 }
 
+/** Validated deployment limits shared by all account projections. */
+export interface StoreLimits {
+  /** Maximum number of durable accounts. */
+  maxAccounts: number
+  /** Maximum UTF-8 bytes per label and issuer. */
+  maxMetadataBytes: number
+}
+
 /** Atomic account reads and cross-process serialized mutations. */
 export class AuthenticatorStore {
   private ready: Promise<void> | undefined
 
-  /** @param filename - dedicated account document outside the repository. */
-  constructor(private readonly filename: string) {}
+  /**
+   * @param filename - dedicated account document outside the repository.
+   * @param limits - positive integer limits validated by the plugin configuration.
+   */
+  constructor(private readonly filename: string, private readonly limits: StoreLimits) {}
+
+  private checkLimits(accounts: Omit<Account, 'id'>[]): void {
+    if (accounts.length > this.limits.maxAccounts
+      || accounts.some(account => [account.label, account.issuer]
+        .some(value => Buffer.byteLength(value, 'utf8') > this.limits.maxMetadataBytes))) {
+      throw new AccountError('Authenticator account count or metadata exceeds configured limits', 'invalid-request')
+    }
+  }
 
   private prepare(): Promise<void> {
     return this.ready ??= protectDirectory(dirname(this.filename))
@@ -129,7 +148,11 @@ export class AuthenticatorStore {
     if (process.platform !== 'win32' && ((await stat(this.filename)).mode & 0o077) !== 0) {
       throw new Error('Authenticator storage must have owner-only permissions (chmod 600)')
     }
-    try { return documentSchema.parse(JSON.parse(text)).accounts } catch {
+    try {
+      const accounts = documentSchema.parse(JSON.parse(text)).accounts
+      this.checkLimits(accounts)
+      return accounts
+    } catch {
       throw new Error('Authenticator storage is invalid; the existing file was preserved')
     }
   }
@@ -178,6 +201,7 @@ export class AuthenticatorStore {
    */
   async importUri(uri: string): Promise<AccountInfo> {
     const parsed = parseUri(uri)
+    this.checkLimits([parsed])
     await this.prepare()
     return withFileLock(this.filename, async () => {
       const accounts = await this.read()
@@ -185,6 +209,7 @@ export class AuthenticatorStore {
         || (account.label === parsed.label && account.issuer === parsed.issuer))) {
         throw new AccountError('This authenticator account is already stored; delete it before replacing it', 'duplicate-account')
       }
+      this.checkLimits([...accounts, parsed])
       const account = { ...parsed, id: parseAccountId(randomUUID()) }
       await this.write([...accounts, account])
       return publicInfo(account)

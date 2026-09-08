@@ -45,4 +45,7 @@ export function parseImported(value: unknown): void { metadata.parse(value) }
 /** Validate a delete acknowledgement before showing success.
  * @param value - Decoded delete JSON.
  */
-export function parseDeleted(value: unknown): void { z.object({ removed: z.boolean() }).parse(value) }
+export function parseDeleted(value: unknown): void {
+  const { removed } = z.object({ removed: z.boolean() }).parse(value)
+  if (!removed) throw new AuthenticatorRequestError({ errorCode: 'account-not-found' })
+}

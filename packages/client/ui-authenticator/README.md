@@ -31,6 +31,8 @@ Open the Authenticator MCP card, choose Import QR code, and select a PNG, JPEG, 
 <a id="understand-the-implementation"></a>
 ## Understand the implementation
 
+Deletion is acknowledged only when the server reports an account was removed. If another client already deleted it, the card displays the localized account-not-found warning.
+
 <details>
 <summary>Implementation internals — click to expand</summary>
 

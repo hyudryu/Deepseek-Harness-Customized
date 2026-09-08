@@ -65,6 +65,8 @@ When you launch `dsh --profile web` over SSH, the URL line still prints but the 
 
 Each browser session composes its own agent from the shipped presets (the `standard` preset by default), instead of sharing one process-wide tool set. You can change the default preset or add your own presets under `$DSH_HOME/.agent-presets`.
 
+The Web bundle enables [skill catalog buckets](../../skill/skill-catalog-buckets/README.md): agents discover brief categories, request a page of summaries with `skill_catalog`, and load full instructions with `skill`. Configure category keywords and page limits on the plugin row in the profile configuration. Skill providers keep their existing files; no cloud storage is required.
+
 -----
 
 <a id="understand-the-implementation"></a>
