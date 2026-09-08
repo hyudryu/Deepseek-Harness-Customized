@@ -78,12 +78,14 @@ describe('sessionFormatV2ToV3', () => {
 
   it('exposes an exact released-v3 target policy', () => {
     const target = sessionFormatV2ToV3.migrate(artifact([]))
-    expect(() => sessionFormatV2ToV3.validateTarget(target)).not.toThrow()
-    expect(() => sessionFormatV2ToV3.validateTargetHeader(target.header)).not.toThrow()
-    expect(() => sessionFormatV2ToV3.validateTarget({
-      header: { ...target.header, version: 2 },
-      inheritedEventCount: 0,
-      events: [],
-    })).toThrow(/expected format v3 header/)
+    expect(() => { sessionFormatV2ToV3.validateTarget(target) }).not.toThrow()
+    expect(() => { sessionFormatV2ToV3.validateTargetHeader(target.header) }).not.toThrow()
+    expect(() => {
+      sessionFormatV2ToV3.validateTarget({
+        header: { ...target.header, version: 2 },
+        inheritedEventCount: 0,
+        events: [],
+      })
+    }).toThrow(/expected format v3 header/)
   })
 })

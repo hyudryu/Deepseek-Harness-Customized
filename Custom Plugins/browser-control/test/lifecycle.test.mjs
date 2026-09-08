@@ -53,12 +53,15 @@ test('failed context cleanup rejects both callers and leaves the browser availab
 test('open state remains visible while context cleanup is pending', async t => {
   const { context, control } = fixture(t)
   await control.open('session')
+  let cleanupStarted
+  const started = new Promise(resolve => { cleanupStarted = resolve })
   let finish
   context.close.mock.mockImplementation(() => new Promise(resolve => {
+    cleanupStarted()
     finish = () => { context.emit('close'); resolve() }
   }))
   const closing = control.close('session')
-  await Promise.resolve()
+  await started
   assert.equal(control.snapshot('session').open, true)
   finish()
   await closing
@@ -119,18 +122,72 @@ test('failed initial navigation reports rollback failure and permits cleanup ret
   assert.equal(control.snapshot('session').open, false)
 })
 
-test('concurrent failed opens roll back a newly created context exactly once', async t => {
+test('failed initial navigation rolls back before a concurrent open adopts the context', async t => {
   const { page, context, control } = fixture(t)
-  page.goto = async () => { throw new Error('navigation failed') }
-  const results = await Promise.allSettled([
-    control.open('session', 'https://a.invalid'),
-    control.open('session', 'https://b.invalid'),
-  ])
-  assert.equal(results.every(result => result.status === 'rejected'), true)
-  // Only the call that created the state owns the rollback; the racing peer
-  // must not close the shared context a second time.
+  let navigationStarted
+  const started = new Promise(resolve => { navigationStarted = resolve })
+  let failNavigation
+  page.goto = async () => {
+    navigationStarted()
+    await new Promise((_, reject) => { failNavigation = () => reject(new Error('navigation failed')) })
+  }
+  const first = control.open('session', 'https://unreachable.invalid')
+  await started
+  let peerSettled = false
+  const peer = control.open('session').then(() => { peerSettled = true })
+  await new Promise(resolve => setImmediate(resolve))
+  assert.equal(peerSettled, false)
+  failNavigation()
+  await assert.rejects(first, /navigation failed/)
+  await peer
   assert.equal(context.close.mock.callCount(), 1)
+  assert.equal(control.snapshot('session').open, true)
+})
+
+test('a close issued after a queued open leaves the session closed', async t => {
+  const { page, context, control } = fixture(t)
+  let navigationStarted
+  const started = new Promise(resolve => { navigationStarted = resolve })
+  let failNavigation
+  page.goto = async () => {
+    navigationStarted()
+    await new Promise((_, reject) => { failNavigation = () => reject(new Error('navigation failed')) })
+  }
+  const first = control.open('session', 'https://unreachable.invalid')
+  await started
+  const peer = control.open('session')
+  const closing = control.close('session')
+  failNavigation()
+  await assert.rejects(first, /navigation failed/)
+  await peer
+  await closing
+  assert.equal(context.close.mock.callCount(), 2)
   assert.equal(control.snapshot('session').open, false)
+})
+
+test('concurrent browser tool opens navigate in issued order', async t => {
+  const { page, tool } = fixture(t)
+  let firstStarted
+  const started = new Promise(resolve => { firstStarted = resolve })
+  let releaseFirst
+  const blocked = new Promise(resolve => { releaseFirst = resolve })
+  let gotoCalls = 0
+  page.goto = async () => {
+    gotoCalls += 1
+    if (gotoCalls === 1) {
+      firstStarted()
+      await blocked
+    }
+  }
+  const exec = { agent: { session: { id: 'session' } } }
+  const first = tool.execute({ action: 'open', url: 'https://first.invalid' }, exec)
+  await started
+  const second = tool.execute({ action: 'open', url: 'https://second.invalid' }, exec)
+  await new Promise(resolve => setImmediate(resolve))
+  assert.equal(gotoCalls, 1)
+  releaseFirst()
+  await Promise.all([first, second])
+  assert.equal(gotoCalls, 2)
 })
 
 for (const quality of [0, 60, 100]) {

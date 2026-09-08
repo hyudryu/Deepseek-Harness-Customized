@@ -196,9 +196,14 @@ export function apply(ctx: Context, config: Config = {}): void {
       return { card: 'generic', title: `Load skill ${args.name}`, kind: 'read', rawInput: args.name }
     },
   })
-  ctx.tools.register(skillTool)
+  skillLoaders.add(skillTool)
+  try {
+    ctx.tools.register(skillTool)
+  } catch (error) {
+    skillLoaders.delete(skillTool)
+    throw error
+  }
   ctx.effect(() => {
-    skillLoaders.add(skillTool)
     return () => { skillLoaders.delete(skillTool) }
   })
 

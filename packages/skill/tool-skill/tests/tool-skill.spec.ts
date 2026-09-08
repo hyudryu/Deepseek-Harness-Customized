@@ -9,7 +9,7 @@ import {
   SESSION_FORMAT_VERSION, Session, SessionId, type SessionEvent, type UserMessage,
 } from '@deepseek-ai/dsh-session'
 import SystemPrompt, { renderPrompt } from '@deepseek-ai/dsh-system-prompt'
-import ToolRuntime, { defineContentToolFixture } from '@deepseek-ai/dsh-tools'
+import ToolRuntime, { defineContentToolFixture, type ToolDefinition } from '@deepseek-ai/dsh-tools'
 import AgentRegistry, { agentEvents, Inbox, type Agent, type PreStepDecision } from '@deepseek-ai/dsh-agent'
 import SkillRegistry from '@deepseek-ai/dsh-skill'
 import * as SkillFileSystem from '@deepseek-ai/dsh-skill-filesystem'
@@ -234,8 +234,14 @@ describe('dsh-tool-skill', () => {
     await ctx.plugin(SkillRegistry)
     await ctx.plugin(SkillFileSystem, { dshHome: join(home, '.dsh'), agentsHome: join(home, '.agents'), watch: false })
     ctx.skills.register({ name: 'lifecycle-skill', description: 'Lifecycle', source: 'runtime', content: 'body' })
+    const loaderStates: (boolean | undefined)[] = []
+    ctx.on('tools/change', () => {
+      const skill = ctx.tools.get('skill')
+      loaderStates.push(skill === undefined ? undefined : toolSkill.isSkillLoader(skill))
+    })
 
     const fiber = await ctx.plugin(toolSkill)
+    expect(loaderStates).toEqual([true])
     expect(ctx.tools.schemas().map(tool => tool.name)).toEqual(['skill'])
     expect(await composePrefix(ctx, '/workspace')).toHaveLength(1)
     expect(ctx.tools.get('skill')?.presentCall?.({ name: 'project-skill' })).toEqual({
@@ -245,11 +251,28 @@ describe('dsh-tool-skill', () => {
       rawInput: 'project-skill',
     })
     await fiber.dispose()
+    expect(loaderStates).toEqual([true, undefined])
     expect(ctx.tools.schemas()).toEqual([])
     expect(await composePrefix(ctx, '/workspace')).toEqual([])
 
     toolSkill.apply(ctx)
     expect(ctx.tools.schemas().map(tool => tool.name)).toEqual(['skill'])
+  })
+
+  it('removes loader identity when tool registration fails', () => {
+    let rejected: ToolDefinition | undefined
+    const failure = new Error('registration failed')
+    const ctx = {
+      tools: {
+        register(definition: ToolDefinition) {
+          rejected = definition
+          throw failure
+        },
+      },
+    } as unknown as Context
+
+    expect(() => { toolSkill.apply(ctx) }).toThrow(failure)
+    expect(toolSkill.isSkillLoader(rejected)).toBe(false)
   })
 
   it('forwards the step abort signal to skill discovery', async () => {

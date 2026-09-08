@@ -126,7 +126,7 @@ ADVANCED_SNAPSHOT_DIRECTORY = (
     Path(__file__).resolve().parent / "snapshots" / "python-sdk-single-exe" / "advanced"
 )
 ADVANCED_SNAPSHOT_FILENAMES = (
-    "result.json", "session.v2.jsonl", "session.1.v2.jsonl", "session.2.v2.jsonl",
+    "result.json", "session.v3.jsonl", "session.1.v3.jsonl", "session.2.v3.jsonl",
 )
 MINIMAL_SNAPSHOT_DIRECTORY = (
     Path(__file__).resolve().parent / "snapshots" / "python-sdk-single-exe" / "minimal"
@@ -138,7 +138,7 @@ RESTART_SNAPSHOT_DIRECTORY = (
     Path(__file__).resolve().parent / "snapshots" / "python-sdk-single-exe" / "restart"
 )
 RESTART_SNAPSHOT_FILENAMES = (
-    "result.json", "requests.json", "session.1.v2.jsonl", "session.2.v2.jsonl",
+    "result.json", "requests.json", "session.1.v3.jsonl", "session.2.v3.jsonl",
 )
 MCP_SERVER_SCRIPT = """\
 import json
