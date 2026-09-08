@@ -22,14 +22,15 @@ import { createScope, type Scope } from '@deepseek-ai/dsh-scope'
 
 let ctx: Context | undefined
 let directory: string | undefined
-afterEach(async () => {
+async function cleanupFixture() {
   await ctx?.fiber.dispose()
   ctx = undefined
   if (directory !== undefined) await rm(directory, { recursive: true, force: true })
   directory = undefined
-})
+}
+afterEach(cleanupFixture)
 
-async function boot(descriptionMaxLength = 160): Promise<{ context: Context; agent: Agent }> {
+async function boot(descriptionMaxLength = 160, limits: Buckets.Config = {}): Promise<{ context: Context; agent: Agent }> {
   directory = await mkdtemp(join(tmpdir(), 'dsh-skill-buckets-'))
   for (const [name, description, body, invocation] of [
     ['aws-alpha', 'AWS deployment', 'Inspect the requested AWS resource.', ''],
@@ -53,7 +54,7 @@ async function boot(descriptionMaxLength = 160): Promise<{ context: Context; age
   await writeFile(configFile, [...plugins.keys()].map((name) => {
     const extra = name === 'agent-loop' ? '  config:\n    agents: []\n'
       : name === 'skill-filesystem' ? `  config:\n    includeDefaultRoots: false\n    customSkillDirs: [${JSON.stringify(join(directory!, '.dsh', 'skills'))}]\n    watch: false\n`
-        : name === 'skill-buckets' ? `  config:\n    pageSize: 1\n    descriptionMaxLength: ${descriptionMaxLength}\n` : ''
+        : name === 'skill-buckets' ? `  config: ${JSON.stringify(Object.assign({ pageSize: 1, descriptionMaxLength }, limits))}\n` : ''
     return `- id: ${name}\n  name: ${name}\n${extra}`
   }).join(''))
   const context = ctx = new Context()
@@ -263,4 +264,63 @@ it.each([3, 12, 160])('bounds complete durable bucket summaries to %i characters
     event.type === 'user/message' && event.data.source.kind === 'skill-catalog')
   if (catalog?.type !== 'user/message' || catalog.data.source.kind !== 'skill-catalog') throw new Error('Missing catalog')
   for (const entry of catalog.data.source.entries) expect(entry.description.length).toBeLessThanOrEqual(limit)
+})
+
+
+const firstAwsPage = { bucket: 'aws', total: 2,
+  skills: [{ name: 'aws-alpha', description: 'AWS deployment' }], nextOffset: 1 }
+const firstAwsPageBytes = Buffer.byteLength(JSON.stringify(firstAwsPage), 'utf8')
+
+it.each([1, firstAwsPageBytes - 1, firstAwsPageBytes])('checks the complete listing JSON against a %i-byte limit', async (limit) => {
+  const { context, agent } = await boot(160, { maxResponseBytes: limit })
+  const result = await context.tools.execute({ name: 'skill_catalog', arguments: { bucket: 'aws' }, agent,
+    callId: ToolCallId('response-bound'), signal: new AbortController().signal })
+  expect(result.isError).toBe(limit < firstAwsPageBytes)
+  if (limit === firstAwsPageBytes) {
+    expect(result.content).toEqual([{ type: 'text', text: JSON.stringify(firstAwsPage) }])
+  } else {
+    expect(JSON.stringify(result.content)).not.toContain('aws-alpha')
+  }
+})
+
+it.each(['multibyte', 'long-name'] as const)('rejects an oversized %s page without emitting partial skill identifiers', async (mode) => {
+  const { context, agent } = await boot(160, { maxResponseBytes: 150 })
+  const name = mode === 'long-name' ? 'aws-' + 'a'.repeat(40000) : 'aws-unicode'
+  const description = mode === 'multibyte' ? '\u754c'.repeat(40) : 'AWS'
+  context.skills.register({ name, description, source: 'runtime', content: 'Instructions stay private.' })
+  const result = await context.tools.execute({ name: 'skill_catalog', arguments: { bucket: 'aws', query: name }, agent,
+    callId: ToolCallId('response-name-bound'), signal: new AbortController().signal })
+  expect(result.isError).toBe(true)
+  expect(JSON.stringify(result.content)).not.toContain(name)
+  expect(JSON.stringify(result.content)).not.toContain(description)
+})
+
+
+it.each([0, -1])('accepts only the fully framed catalog byte budget with offset %i', async (offset) => {
+  const initial = await boot(3, { buckets: [] })
+  await publish(initial.context, initial.agent)
+  const event = initial.agent.session.snapshotEvents().find(value =>
+    value.type === 'user/message' && value.data.source.kind === 'skill-catalog')
+  if (event?.type !== 'user/message') throw new Error('Missing catalog message')
+  const content = event.data.content
+  if (!Array.isArray(content) || content[0]?.type !== 'text') throw new Error('Missing catalog text')
+  const bytes = Buffer.byteLength(content[0].text, 'utf8')
+  await cleanupFixture()
+  if (offset < 0) {
+    expect(() => { Buckets.apply(new Context(), { buckets: [], descriptionMaxLength: 3, maxCatalogBytes: bytes - 1 }) })
+      .toThrow('skill-catalog-buckets:')
+  } else {
+    const exact = await boot(3, { buckets: [], maxCatalogBytes: bytes })
+    expect(await publish(exact.context, exact.agent)).toContain('available_skill_buckets')
+  }
+})
+
+
+it('counts UTF-8 category summary bytes when validating the fully framed catalog at load', async () => {
+  const bucket = { name: 'aws', description: 'a'.repeat(160), keywords: ['aws'] }
+  const { context, agent } = await boot(160, { buckets: [bucket], maxCatalogBytes: 1000 })
+  expect(await publish(context, agent)).toContain('available_skill_buckets')
+  expect(() => { Buckets.apply(new Context(), {
+    buckets: [{ ...bucket, description: '\u754c'.repeat(160) }], maxCatalogBytes: 1000,
+  }) }).toThrow('skill-catalog-buckets:')
 })

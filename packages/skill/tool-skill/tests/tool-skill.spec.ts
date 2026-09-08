@@ -193,9 +193,11 @@ describe('dsh-tool-skill', () => {
       revision = 'second'
       await fireStep(ctx, agent, 1, 3)
       expect(catalogMessages(agent.session)).toHaveLength(2)
+      expect(catalogMessages(agent.session).at(-1)!.data.content).toEqual([{ type: 'text', text }])
       text = 'Bucket presentation two'
       await fireStep(ctx, agent, 1, 4)
       expect(catalogMessages(agent.session)).toHaveLength(3)
+      expect(catalogMessages(agent.session).at(-1)!.data.content).toEqual([{ type: 'text', text }])
       undo()
       await fireStep(ctx, agent, 1, 5)
       const last = catalogMessages(agent.session).at(-1)!

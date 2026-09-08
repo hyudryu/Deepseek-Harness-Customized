@@ -58,7 +58,7 @@ export interface SkillCatalogSource {
 export interface SkillCatalogPresentation {
   /** Exactly the names and descriptions rendered by this presentation. */
   readonly entries: SkillCatalogSource['entries']
-  /** Complete replacement message text; omission retains the standard skill-list prose. */
+  /** Complete message text used verbatim for initial and replacement catalogs; omission retains standard prose. */
   readonly text?: string
   /** Additional identity for membership changes not visible in the summary rows. */
   readonly revision?: string
@@ -343,7 +343,7 @@ function renderCatalogUpdate(entries: SkillCatalogSource['entries'], text?: stri
   return createUserMessage({
     content: [{
       type: 'text',
-      text: text === undefined ? [
+      text: text ?? [
         '<system-reminder>',
         'The available skill catalog changed. This complete catalog replaces every earlier available-skills list in this session:',
         '',
@@ -353,7 +353,7 @@ function renderCatalogUpdate(entries: SkillCatalogSource['entries'], text?: stri
         '',
         ...availability,
         '</system-reminder>',
-      ].join('\n') : `The available skill catalog changed. This complete catalog replaces every earlier available-skills list in this session:\n\n${text}`,
+      ].join('\n'),
     }],
     source: {
       kind: 'skill-catalog',

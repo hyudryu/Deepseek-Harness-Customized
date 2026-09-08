@@ -43,8 +43,12 @@ Mount this plugin alongside the registry, a provider, and the existing loader:
 | `buckets` | AWS, MCP, reviews, security | Ordered categories with unique kebab-case `name`, nonempty `description`, and nonempty keyword phrases; `other` is reserved |
 | `pageSize` | `20` | Summaries per response, integer from 1 to 100 |
 | `descriptionMaxLength` | `160` | Complete normalized summary character limit including count suffix and ellipsis, integer from 3 to 2000 |
+| `maxResponseBytes` | `32768` | Positive safe-integer UTF-8 byte limit for the complete JSON response, including names and pagination metadata |
+| `maxCatalogBytes` | `8192` | Positive safe-integer UTF-8 byte limit for the complete framed category message |
 
 The generated [configuration catalog](../../../docs/config-catalog.md#deepseek-aidsh-skill-catalog-buckets) lists accepted fields. Set these fields on the plugin row in the profile configuration. Custom categories replace the default category rules; the fallback remains available.
+
+Configuration is rejected at load if the category message can exceed `maxCatalogBytes`, including every configured name, the fallback, escaped summaries, count suffixes, and framing. A page exceeding `maxResponseBytes` fails before returning metadata; narrow the query or increase the configured limit. Exact skill names are never truncated.
 
 ### Discover and load
 

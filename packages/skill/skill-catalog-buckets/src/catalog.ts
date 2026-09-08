@@ -6,6 +6,8 @@ import type { Bucket, Config } from './index.ts'
 /** Validated settings used identically by prompt publication and discovery. */
 export interface CatalogSpec {
   buckets: readonly Bucket[]
+  maxResponseBytes: number
+  maxCatalogBytes: number
   pageSize: number
   descriptionMaxLength: number
 }
@@ -35,6 +37,11 @@ function words(value: string): string {
  * @returns complete category and pagination settings.
  */
 export function resolveCatalogSpec(config: Config): CatalogSpec {
+  const maxResponseBytes = config.maxResponseBytes ?? 32768
+  const maxCatalogBytes = config.maxCatalogBytes ?? 8192
+  for (const [key, value] of Object.entries({ maxResponseBytes, maxCatalogBytes })) {
+    if (!Number.isSafeInteger(value) || value < 1) throw new Error(`skill-catalog-buckets: ${key} must be a positive safe integer`)
+  }
   const buckets = config.buckets ?? DEFAULT_BUCKETS
   const names = new Set<string>()
   for (const bucket of buckets) {
@@ -54,7 +61,10 @@ export function resolveCatalogSpec(config: Config): CatalogSpec {
   if (!Number.isInteger(descriptionMaxLength) || descriptionMaxLength < 3 || descriptionMaxLength > 2000) {
     throw new Error('skill-catalog-buckets: descriptionMaxLength must be an integer from 3 to 2000')
   }
-  return { buckets: [...buckets.map(bucket => ({ ...bucket, keywords: [...bucket.keywords] })), other], pageSize, descriptionMaxLength }
+  return {
+    buckets: [...buckets.map(bucket => ({ ...bucket, keywords: [...bucket.keywords] })), other],
+    pageSize, descriptionMaxLength, maxResponseBytes, maxCatalogBytes,
+  }
 }
 
 /**

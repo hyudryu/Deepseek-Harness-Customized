@@ -72,7 +72,7 @@ This section explains how the catalog and the invocation boundary are built; the
 
 ### Design concept
 
-The package is built on two ideas. First, the catalog is a durable projection, diffed by a digest over the published entries rather than the rendered prose, so the `<system-reminder>` framing can never force a republish and consumers never re-parse the `<available_skills>` block. Second, one canonical rendering serves both load paths — the tool result and the user-explicit injection — through `renderSkillContent` shared from `dsh-skill`, so the model sees the same `<skill_content>` shape regardless of who initiated the load.
+The package is built on two ideas. First, the default catalog compares a digest of published entries; its standard prose does not affect identity. A custom `skill/catalog` presentation also includes supplied `text` and `revision` in its digest, so changed guidance or unlisted membership can trigger a replacement even when entries match. Consumers read durable entries without parsing the `<available_skills>` block. Second, one canonical rendering serves both load paths — the tool result and the user-explicit injection — through `renderSkillContent` shared from `dsh-skill`, so the model sees the same `<skill_content>` shape regardless of who initiated the load.
 
 ### Source map
 
@@ -83,7 +83,7 @@ The package is built on two ideas. First, the catalog is a durable projection, d
 
 ### Catalog lifecycle
 
-At each eligible `agent/pre-step`, the plugin snapshots the calling session's skill catalog, applies exact `skill` tool visibility, filters to model-invocable skills, and compares a digest of the entries against the newest visible `skill-catalog` message in the session log. When the digest changed, it hands the `enter` decision a durable user-role message containing the complete replacement catalog; an empty replacement explicitly retires earlier names. An incomplete provider snapshot emits nothing and preserves the last-good view for the next pre-step. The visibility check compares against the exact tool definition this plugin registered, so a scoped same-name shadow removes both the schema and its guidance; the plugin works mounted globally or inside one agent's composition.
+At each eligible `agent/pre-step`, the plugin snapshots the calling session's skill catalog, applies exact `skill` tool visibility, filters to model-invocable skills, and compares the entry digest and any custom presentation digest against the newest visible `skill-catalog` message in the session log. Supplied presentation text is used verbatim for both initial and replacement messages; omission selects standard prose. When the digest changed, it hands the `enter` decision a durable user-role message containing the complete replacement catalog; an empty replacement explicitly retires earlier names. An incomplete provider snapshot emits nothing and preserves the last-good view for the next pre-step. The visibility check compares against the exact tool definition this plugin registered, so a scoped same-name shadow removes both the schema and its guidance; the plugin works mounted globally or inside one agent's composition.
 
 The exported `isSkillLoader` predicate identifies active registrations owned by this plugin. Discovery consumers use it with the caller-scoped tool lookup to reject omitted, restricted, or unrelated same-name loaders.
 

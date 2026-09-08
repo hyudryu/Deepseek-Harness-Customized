@@ -2131,6 +2131,10 @@ Requires: `skills` · `tools`
 export interface Config {
   /** Ordered categories; omission uses AWS, MCP, reviews and security. */
   buckets?: Bucket[]
+  /** Maximum UTF-8 bytes in a complete discovery response; positive safe integer, default 32768. */
+  maxResponseBytes?: number
+  /** Maximum UTF-8 bytes in the framed category message; positive safe integer, default 8192. */
+  maxCatalogBytes?: number
   /** Maximum skill summaries per listing page; integer 1 through 100, default 20. */
   pageSize?: number
   /** Maximum normalized summary characters including count suffix and ellipsis; integer 3 through 2000, default 160. */

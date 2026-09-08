@@ -2,7 +2,8 @@
 import { describe, expect, it } from 'vitest'
 import type { SkillSummary } from '@deepseek-ai/dsh-skill'
 import { catalogRevision, classifySkills, resolveCatalogSpec, shortDescription } from '../src/catalog.ts'
-import { Config } from '../src/index.ts'
+import { Context } from '@deepseek-ai/cordis'
+import { Config, apply } from '../src/index.ts'
 
 function skill(name: string, description = '', whenToUse?: string): SkillSummary {
   return { name, description, source: 'runtime', provider: 'fixture', invocation: { modelInvocable: true, userInvocable: true },
@@ -63,4 +64,21 @@ describe('skill catalog buckets', () => {
     ]) expect(() => resolveCatalogSpec(config)).toThrow('skill-catalog-buckets:')
     expect(resolveCatalogSpec({ buckets: [] }).buckets.map(item => item.name)).toEqual(['other'])
   })
+})
+
+
+it('rejects non-positive, fractional and unsafe byte limits at configuration resolution', () => {
+  for (const limit of [0, -1, 1.5, NaN, Infinity, Number.MAX_SAFE_INTEGER + 1]) {
+    expect(() => resolveCatalogSpec({ maxResponseBytes: limit })).toThrow('skill-catalog-buckets:')
+    expect(() => resolveCatalogSpec({ maxCatalogBytes: limit })).toThrow('skill-catalog-buckets:')
+  }
+})
+
+it('rejects excessive configured category names and counts before any skills are discovered', () => {
+  expect(() => { apply(new Context(), { maxCatalogBytes: 1 }) }).toThrow('skill-catalog-buckets:')
+  expect(() => { apply(new Context(), { buckets: [{ name: 'a'.repeat(9000), description: 'Short', keywords: ['aws'] }] }) })
+    .toThrow('skill-catalog-buckets:')
+  expect(() => { apply(new Context(), { buckets: Array.from({ length: 1000 }, (_, index) => ({
+    name: `category-${index}`, description: 'Short', keywords: ['aws'],
+  })) }) }).toThrow('skill-catalog-buckets:')
 })
