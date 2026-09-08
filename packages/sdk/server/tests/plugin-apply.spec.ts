@@ -246,6 +246,33 @@ describe('dsh-sdk-jsonrpc-server plugin apply', () => {
     }
   })
 
+  it('leaves input unread when Loader settlement rejects', async () => {
+    const storageDir = await mkdtemp(join(tmpdir(), 'dsh-jsonrpc-apply-failed-readiness-'))
+    let release!: () => void
+    const ready = new Promise<void>((resolve) => { release = resolve })
+    const failure = ready.then(() => { throw new Error('adapter startup failed') })
+    const harness = await mountPlugin(storageDir, {
+      beforeServer: async (ctx) => {
+        await ctx.plugin(Loader)
+        vi.spyOn(ctx.loader, 'await').mockReturnValue(failure)
+      },
+    })
+    try {
+      harness.send({ jsonrpc: '2.0', id: 'failed-tree', method: 'initialize', params: { cwd: storageDir, provider: 'deepseek-official', model: 'apply-model' } })
+      release()
+      await expect(failure).rejects.toThrow('adapter startup failed')
+      await settle()
+      expect(harness.frames()).toEqual([])
+      expect(harness.exits()).toEqual([])
+    } finally {
+      release()
+      await Promise.allSettled([failure])
+      vi.restoreAllMocks()
+      await harness.dispose()
+      await rm(storageDir, { recursive: true, force: true })
+    }
+  })
+
   it('does not consume buffered input after disposal during Loader startup', async () => {
     const storageDir = await mkdtemp(join(tmpdir(), 'dsh-jsonrpc-apply-disposed-readiness-'))
     let release!: () => void
