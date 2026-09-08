@@ -20,6 +20,8 @@ Secrets belong in a dedicated local document rather than the settings namespace,
 
 The card receives validated read and mutation callbacks from its slot registrant. Keeping HTTP operations outside presentation lets component checks drive account behavior without a browser transport.
 
+The store enforces configured account-count and UTF-8 metadata limits for every consumer. Refusing oversized existing data preserves account identities and secrets instead of silently truncating discovery; operators can raise the limits to regain access.
+
 ## Alternatives considered
 
 Storing provisioning secrets in the shared settings document would expose them through configuration projections. Launching a separate public MCP process would require a new authentication and application launch mechanism. Keeping one private account store behind the existing authenticated Web application avoids both costs.

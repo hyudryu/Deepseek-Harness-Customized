@@ -28,6 +28,7 @@ The skill group gives agents and users access to reusable, task-specific instruc
 | [`skill-filesystem/`](skill-filesystem/README.md) | Discovers skills from project, custom, and user directories and watches them for changes | registers on `ctx.skills` |
 | [`skill-badge/`](skill-badge/README.md) | Bundles the official "powered by dsh" badge skill, disabled by default | registers on `ctx.skills` |
 | [`tool-skill/`](tool-skill/README.md) | Publishes the session skill catalog and the model-facing `skill` loader tool | registers on `ctx.tools` |
+| [`skill-catalog-buckets/`](skill-catalog-buckets/README.md) | Groups discovery into brief categories and pages summaries on demand | registers on `ctx.tools` |
 
 -----
 

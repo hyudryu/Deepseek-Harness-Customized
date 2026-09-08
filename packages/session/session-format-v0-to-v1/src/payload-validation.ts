@@ -562,9 +562,22 @@ function messageSourceValue(
       literalValue(source['form'], ['instructions'], `${label} form`)
       return
     case 'skill-catalog':
-      assertReleasedV0Keys(source, ['kind', 'form', 'entries'], ['update'], label)
+      // Released v3 admits the optional presentation-digest identity on the
+      // durable catalog source; v0/v1/v2 reject it as an unknown member.
+      assertReleasedV0Keys(
+        source,
+        ['kind', 'form', 'entries'],
+        version >= 3 ? ['update', 'presentationDigest'] : ['update'],
+        label,
+      )
       literalValue(source['form'], ['catalog'], `${label} form`)
       if (source['update'] !== undefined) literalValue(source['update'], [true], `${label} update`)
+      if (source['presentationDigest'] !== undefined) {
+        const digest = source['presentationDigest']
+        if (typeof digest !== 'string' || !/^[a-f0-9]{64}$/u.test(digest)) {
+          throw new SessionFormatError(`${label} presentationDigest must be a lowercase SHA-256 digest`)
+        }
+      }
       arrayValue(source['entries'], `${label} entries`, (member, memberLabel) => {
         const entry = exactRecord(member, memberLabel, ['name', 'description'])
         nonEmptyString(entry['name'], `${memberLabel} name`)

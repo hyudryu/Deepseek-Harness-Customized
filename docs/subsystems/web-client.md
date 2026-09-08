@@ -136,7 +136,7 @@ subscribe(sessionId: SessionId, listener: (snapshot: BrowserSnapshot) => void): 
  * Ensure an open context and page for one session, navigating to the optional url.
  * @param sessionId - session whose browser is opened.
  * @param url - optional navigation destination.
- * @throws Navigation failures; the remaining open context is published and can be closed.
+ * @throws Navigation failures close newly created contexts; existing contexts remain open. Cleanup failures retain the context for retry.
  */
 open(sessionId: SessionId, url?: string): Promise<void>
 

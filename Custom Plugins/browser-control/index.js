@@ -196,6 +196,7 @@ export function apply(ctx, rawConfig = {}) {
   const config = normalizeConfig(rawConfig)
   const states = new Map()
   const pendingStates = new Map()
+  const pendingLifecycle = new Map()
   const subscribers = new Map()
   let browserPromise
 
@@ -314,13 +315,12 @@ export function apply(ctx, rawConfig = {}) {
 
   async function getState(key) {
     const existing = states.get(key)
-    if (existing?.open) return existing
-    let pending = pendingStates.get(key)
-    if (!pending) {
-      pending = createStateFor(key).finally(() => pendingStates.delete(key))
-      pendingStates.set(key, pending)
-    }
-    return pending
+    if (existing?.open) return { state: existing, created: false }
+    const pending = pendingStates.get(key)
+    if (pending) return { state: await pending, created: false }
+    const created = createStateFor(key).finally(() => pendingStates.delete(key))
+    pendingStates.set(key, created)
+    return { state: await created, created: true }
   }
 
   async function closeState(key) {
@@ -332,10 +332,48 @@ export function apply(ctx, rawConfig = {}) {
     state.open = false
   }
 
+  async function queueLifecycle(key, operation) {
+    const preceding = pendingLifecycle.get(key)
+    const current = (async () => {
+      await preceding?.catch(() => {})
+      return operation()
+    })()
+    pendingLifecycle.set(key, current)
+    try {
+      return await current
+    } finally {
+      if (pendingLifecycle.get(key) === current) pendingLifecycle.delete(key)
+    }
+  }
+
+  // Initial navigation and rollback settle before another lifecycle call can reuse this session's state.
+  async function openState(key, url) {
+    const { state, created } = await getState(key)
+    if (typeof url === 'string' && url.trim() !== '') {
+      try {
+        await state.page.goto(url, { waitUntil: 'domcontentloaded', timeout: config.navigationTimeoutMs })
+      } catch (error) {
+        if (created) {
+          try { await closeState(key) }
+          catch (cleanupError) {
+            await refreshAndNotify(state)
+            throw new AggregateError([error, cleanupError], 'Initial navigation and browser cleanup failed')
+          }
+        } else {
+          await refreshAndNotify(state)
+        }
+        throw error
+      }
+    }
+    state.open = true
+    await refreshAndNotify(state)
+  }
+
   ctx.effect(() => {
     return async () => {
       subscribers.clear()
       await Promise.allSettled([...pendingStates.values()])
+      await Promise.allSettled([...pendingLifecycle.values()])
       const results = await Promise.allSettled([...states.keys()].map(closeState))
       const instance = browserPromise ? await browserPromise.catch(() => undefined) : undefined
       if (instance) results.push(...await Promise.allSettled([instance.close()]))
@@ -370,24 +408,14 @@ export function apply(ctx, rawConfig = {}) {
       }
     },
     async open(sessionId, url) {
-      const state = await getState(sessionId)
-      if (typeof url === 'string' && url.trim() !== '') {
-        try {
-          await state.page.goto(url, { waitUntil: 'domcontentloaded', timeout: config.navigationTimeoutMs })
-        } catch (error) {
-          await refreshAndNotify(state)
-          throw error
-        }
-      }
-      state.open = true
-      await refreshAndNotify(state)
+      await queueLifecycle(sessionId, () => openState(sessionId, url))
     },
     async close(sessionId) {
-      await closeState(sessionId)
+      await queueLifecycle(sessionId, () => closeState(sessionId))
     },
   }))
 
-  ctx.effect(() => ctx.tools.register({
+  const browserTool = {
     name: 'browser',
     description: 'Control a persistent Playwright Chromium context for the current agent. Prefer semantic locators. Use snapshot to inspect UI, assert for deterministic pass/fail, diagnostics for console/network failures, and screenshot for visual evidence.',
     parameters: {
@@ -429,15 +457,19 @@ export function apply(ctx, rawConfig = {}) {
       schema: outputSchema(),
       render: (_args, value) => [{ type: 'text', text: JSON.stringify(value) }],
     },
-    async execute(args, exec) {
+    async execute(args, exec, lifecycleQueued = false) {
       if (exec.signal?.aborted) throw new Error('browser call aborted')
       const action = args.action
       const key = sessionKey(exec)
+      if (!lifecycleQueued && (action === 'open' || action === 'close')) {
+        return await queueLifecycle(key, () => browserTool.execute(args, exec, true))
+      }
       if (action === 'close') {
         await closeState(key)
         return { ok: true, action }
       }
-      const state = await getState(key)
+      if (!lifecycleQueued) await pendingLifecycle.get(key)?.catch(() => {})
+      const { state } = await getState(key)
       const page = state.page
       const timeoutMs = Number.isFinite(args.timeout_ms) && args.timeout_ms > 0
         ? Math.floor(args.timeout_ms)
@@ -615,5 +647,6 @@ export function apply(ctx, rawConfig = {}) {
       await refreshAndNotify(state).catch(() => {})
       return result
     },
-  }))
+  }
+  ctx.effect(() => ctx.tools.register(browserTool))
 }

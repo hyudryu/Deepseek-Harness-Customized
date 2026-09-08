@@ -53,12 +53,15 @@ test('failed context cleanup rejects both callers and leaves the browser availab
 test('open state remains visible while context cleanup is pending', async t => {
   const { context, control } = fixture(t)
   await control.open('session')
+  let cleanupStarted
+  const started = new Promise(resolve => { cleanupStarted = resolve })
   let finish
   context.close.mock.mockImplementation(() => new Promise(resolve => {
+    cleanupStarted()
     finish = () => { context.emit('close'); resolve() }
   }))
   const closing = control.close('session')
-  await Promise.resolve()
+  await started
   assert.equal(control.snapshot('session').open, true)
   finish()
   await closing
@@ -74,16 +77,117 @@ test('disposal still closes the browser when context cleanup fails', async t => 
   context.close.mock.mockImplementation(async () => { context.emit('close') })
 })
 
-test('a failed initial navigation publishes the open browser so a subscriber can stop it', async t => {
-  const { page, control } = fixture(t)
+test('a failed initial navigation closes the new context before rejecting', async t => {
+  const { page, context, control } = fixture(t)
   const updates = []
   control.subscribe('session', value => updates.push(value))
   page.goto = async () => { throw new Error('navigation failed') }
-  await assert.rejects(control.open('session', 'https://unreachable.invalid'), /navigation failed/)
-  assert.equal(updates.at(-1).open, true)
-  assert.equal(control.snapshot('session').open, true)
-  await control.close('session')
+  let finishClose
+  const closing = new Promise(resolve => { finishClose = resolve })
+  context.close.mock.mockImplementation(async () => { await closing; context.emit('close') })
+  let settled = false
+  const opening = control.open('session', 'https://unreachable.invalid')
+  const rejected = assert.rejects(opening, /navigation failed/).then(() => { settled = true })
+  await new Promise(resolve => setImmediate(resolve))
+  assert.equal(settled, false)
+  assert.equal(context.close.mock.callCount(), 1)
+  finishClose()
+  await rejected
+  assert.equal(context.close.mock.callCount(), 1)
   assert.equal(updates.at(-1).open, false)
+  assert.equal(control.snapshot('session').open, false)
+})
+
+test('failed navigation preserves an already open context', async t => {
+  const { page, context, control } = fixture(t)
+  await control.open('session')
+  page.goto = async () => { throw new Error('navigation failed') }
+  await assert.rejects(control.open('session', 'https://unreachable.invalid'), /navigation failed/)
+  assert.equal(context.close.mock.callCount(), 0)
+  assert.equal(control.snapshot('session').open, true)
+})
+
+test('failed initial navigation reports rollback failure and permits cleanup retry', async t => {
+  const { page, context, control } = fixture(t)
+  page.goto = async () => { throw new Error('navigation failed') }
+  context.close.mock.mockImplementation(async () => { throw new Error('close failed') })
+  await assert.rejects(control.open('session', 'https://unreachable.invalid'), error => {
+    assert.ok(error instanceof AggregateError)
+    assert.deepEqual(error.errors.map(cause => cause.message), ['navigation failed', 'close failed'])
+    return true
+  })
+  assert.equal(control.snapshot('session').open, true)
+  context.close.mock.mockImplementation(async () => { context.emit('close') })
+  await control.close('session')
+  assert.equal(control.snapshot('session').open, false)
+})
+
+test('failed initial navigation rolls back before a concurrent open adopts the context', async t => {
+  const { page, context, control } = fixture(t)
+  let navigationStarted
+  const started = new Promise(resolve => { navigationStarted = resolve })
+  let failNavigation
+  page.goto = async () => {
+    navigationStarted()
+    await new Promise((_, reject) => { failNavigation = () => reject(new Error('navigation failed')) })
+  }
+  const first = control.open('session', 'https://unreachable.invalid')
+  await started
+  let peerSettled = false
+  const peer = control.open('session').then(() => { peerSettled = true })
+  await new Promise(resolve => setImmediate(resolve))
+  assert.equal(peerSettled, false)
+  failNavigation()
+  await assert.rejects(first, /navigation failed/)
+  await peer
+  assert.equal(context.close.mock.callCount(), 1)
+  assert.equal(control.snapshot('session').open, true)
+})
+
+test('a close issued after a queued open leaves the session closed', async t => {
+  const { page, context, control } = fixture(t)
+  let navigationStarted
+  const started = new Promise(resolve => { navigationStarted = resolve })
+  let failNavigation
+  page.goto = async () => {
+    navigationStarted()
+    await new Promise((_, reject) => { failNavigation = () => reject(new Error('navigation failed')) })
+  }
+  const first = control.open('session', 'https://unreachable.invalid')
+  await started
+  const peer = control.open('session')
+  const closing = control.close('session')
+  failNavigation()
+  await assert.rejects(first, /navigation failed/)
+  await peer
+  await closing
+  assert.equal(context.close.mock.callCount(), 2)
+  assert.equal(control.snapshot('session').open, false)
+})
+
+test('concurrent browser tool opens navigate in issued order', async t => {
+  const { page, tool } = fixture(t)
+  let firstStarted
+  const started = new Promise(resolve => { firstStarted = resolve })
+  let releaseFirst
+  const blocked = new Promise(resolve => { releaseFirst = resolve })
+  let gotoCalls = 0
+  page.goto = async () => {
+    gotoCalls += 1
+    if (gotoCalls === 1) {
+      firstStarted()
+      await blocked
+    }
+  }
+  const exec = { agent: { session: { id: 'session' } } }
+  const first = tool.execute({ action: 'open', url: 'https://first.invalid' }, exec)
+  await started
+  const second = tool.execute({ action: 'open', url: 'https://second.invalid' }, exec)
+  await new Promise(resolve => setImmediate(resolve))
+  assert.equal(gotoCalls, 1)
+  releaseFirst()
+  await Promise.all([first, second])
+  assert.equal(gotoCalls, 2)
 })
 
 for (const quality of [0, 60, 100]) {

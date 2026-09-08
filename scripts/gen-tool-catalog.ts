@@ -58,6 +58,7 @@ import * as ToolSchedule from '@deepseek-ai/dsh-schedule'
 import Lsp from '@deepseek-ai/dsh-lsp'
 import * as ToolLsp from '@deepseek-ai/dsh-tool-lsp'
 import * as ToolSkill from '@deepseek-ai/dsh-tool-skill'
+import * as SkillCatalogBuckets from '@deepseek-ai/dsh-skill-catalog-buckets'
 import * as ToolSessionQuery from '@deepseek-ai/dsh-tool-session-query'
 import * as ToolTasks from '@deepseek-ai/dsh-tool-jobs'
 import type TeamService from '@deepseek-ai/dsh-experimental-agent-team'
@@ -164,6 +165,8 @@ export interface ToolPackage {
   /** Plug the injected seams + the tool plugin onto a context that already
    * carries `systemPrompt` + `tools`. */
   mount: (ctx: Context) => Promise<void>
+  /** Mount companion tools whose unchanged registrations belong to their own catalog entries. */
+  mountDependencies?: (ctx: Context) => Promise<void>
   /** Agent-like scope key whose tool view is catalogued instead of the global view. */
   scope?: (ctx: Context) => Agent
   /**
@@ -469,6 +472,21 @@ const TOOL_PACKAGES: ToolPackage[] = [
     },
   },
   {
+    pkg: '@deepseek-ai/dsh-skill-catalog-buckets',
+    dir: 'skill-catalog-buckets',
+    source: 'packages/skill/skill-catalog-buckets/src/index.ts',
+    requires: ['ctx.tools', 'ctx.skills', 'an exact caller-visible skill loader'],
+    writes: ['tool/call', 'tool/result'],
+    async mountDependencies(ctx) {
+      await ctx.plugin(AgentRegistry)
+      await ctx.plugin(SkillRegistry)
+      await ctx.plugin(ToolSkill)
+    },
+    async mount(ctx) {
+      await ctx.plugin(SkillCatalogBuckets)
+    },
+  },
+  {
     pkg: '@deepseek-ai/dsh-tool-session-query',
     dir: 'tool-session-query',
     source: 'packages/session-query/tool-session-query/src/index.ts',
@@ -699,8 +717,13 @@ export async function collectToolCatalog(packages: ToolPackage[] = TOOL_PACKAGES
       await ctx.plugin(SessionProjectionRegistry)
       await ctx.plugin(SystemPrompt)
       await ctx.plugin(ToolRuntime, entry.toolsConfig ?? {})
+      await entry.mountDependencies?.(ctx)
+      const dependencies = new Set(entry.mountDependencies === undefined ? []
+        : ctx.tools.schemas(entry.scope?.(ctx)).map(schema => ctx.tools.get(schema.name, entry.scope?.(ctx))))
       await entry.mount(ctx)
-      const schemas = ctx.tools.schemas(entry.scope?.(ctx)).sort((a, b) => a.name.localeCompare(b.name))
+      const schemas = ctx.tools.schemas(entry.scope?.(ctx))
+        .filter(schema => !dependencies.has(ctx.tools.get(schema.name, entry.scope?.(ctx))))
+        .sort((a, b) => a.name.localeCompare(b.name))
       assertToolsHarvested(entry, schemas.length)
       catalog.push({
         pkg: entry.pkg,

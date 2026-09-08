@@ -28,6 +28,7 @@ skill 组让 agent（智能体）和用户按需使用可复用的任务专项�
 | [`skill-filesystem/`](skill-filesystem/README.zh.md) | 从项目、自定义与用户目录发现 skill，并监视其变更 | 注册到 `ctx.skills` |
 | [`skill-badge/`](skill-badge/README.zh.md) | 随包附带官方「powered by dsh」徽章 skill，默认禁用 | 注册到 `ctx.skills` |
 | [`tool-skill/`](tool-skill/README.zh.md) | 发布会话 skill 目录与面向模型的 `skill` 加载工具 | 注册到 `ctx.tools` |
+| [`skill-catalog-buckets/`](skill-catalog-buckets/README.zh.md) | 以简短类别组织发现过程，按需分页列出摘要 | 注册到 `ctx.tools` |
 
 -----
 

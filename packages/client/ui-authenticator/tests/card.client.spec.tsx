@@ -150,3 +150,14 @@ it('shows a localized error when the account endpoint rejects access', async () 
   expect(screen.getByRole('alert').textContent).toBe(en.failed)
   expect(screen.queryByLabelText('alice')).toBeNull()
 })
+
+
+it('reports a concurrent deletion as account not found without a success notice', async () => {
+  vi.stubGlobal('fetch', vi.fn(async (path: string) => path === '/authenticator/delete'
+    ? response({ removed: false }) : response({ accounts: [account] })))
+  await open()
+  fireEvent.click(screen.getByRole('button', { name: 'Delete alice' }))
+  await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Delete' })) })
+  expect(screen.getByRole('alert').textContent).toMatchInlineSnapshot('"This authenticator account no longer exists. Refresh the account list."')
+  expect(screen.queryByText(en.deleted)).toBeNull()
+})

@@ -47,6 +47,9 @@
     path: /mcp
 
 - insert:
+    - id: skill-catalog-buckets
+      name: '@deepseek-ai/dsh-skill-catalog-buckets'
+
     # Host-owned opt-in sampled when a new Web session receives its preset
     # delegation tools. The Plugins page edits this settings namespace.
     - id: subagent-model-selection-settings

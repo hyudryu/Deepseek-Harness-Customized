@@ -78,3 +78,12 @@
       name: '@deepseek-ai/dsh-hooks-codex'
       config:
         configPath: ./codex-hooks.json
+
+# Discover only skills seeded into this isolated snapshot workspace.
+- id: skill-filesystem
+  config:
+    includeDefaultRoots: false
+    customSkillDirs:
+      - !!js process.cwd() + "/.dsh/skills"
+      - !!js process.cwd() + "/.agents/skills"
+    watch: false

@@ -228,11 +228,45 @@ interface Config {
 
 ## Session catalog and tool contract
 
+The scoped `skill/catalog` waterfall allows a presentation plugin to replace catalog text before the consumer publishes it. [Skill catalog buckets](../../packages/skill/skill-catalog-buckets/README.md) uses this extension for category discovery and paged summaries; the default full-list presentation follows below. Provider discovery and body loading remain unchanged.
+
 `dsh-tool-skill` injects the initial durable user-role `<system-reminder>` at the first `agent/pre-step` of a live session that observes a non-empty complete view. The catalog contains sorted skill `name` and normalized, XML-escaped `description` only; it omits bodies, paths, sources, providers, and routing hints. Discovery forwards the step's abort signal through `SkillLookupOptions`. `catalogDescriptionMaxLength` is the consumer config for the description bound, with default `500` and integer minimum `3`.
 
-Before each later model step, the consumer applies exact tool visibility and digests the exact rendered entries between the `<available_skills>` tags from a complete snapshot. It derives the comparison baseline from the same entries in the newest recognizable visible catalog message sourced by the plugin. A changed digest appends a durable full replacement through `agent.inject()`; deleting every skill appends an explicit empty replacement. Incomplete snapshots preserve the last-good model view. If compaction hides every historical catalog message, the next complete snapshot re-establishes the current catalog; an empty view with no prior catalog emits nothing. These catalog messages are session history, not World State.
+Before each later model step, the consumer applies exact tool visibility to a complete snapshot. The default presentation digests published entries only; its standard prose is excluded. A custom `skill/catalog` presentation also digests supplied `text` and `revision`, so either can trigger a replacement without changing entries. The baseline comes from the entries and optional `presentationDigest` in the newest recognizable visible catalog message. Supplied text is emitted verbatim for both initial and replacement catalogs; omission uses standard prose. A changed digest appends a durable full replacement through `agent.inject()`; deleting every skill appends an explicit empty replacement. Incomplete snapshots preserve the last-good model view. If compaction hides every historical catalog message, the next complete snapshot re-establishes the current catalog; an empty view with no prior catalog emits nothing. These catalog messages are session history, not World State.
 
 The model-facing `skill({ name })` tool validates the kebab-case name, finds the summary in the invocation-neutral catalog, rejects it before loading unless `isModelInvocable` permits access, then rereads the complete definition for the calling agent cwd and rechecks the policy before returning content. It reports an unresolved skill as unknown or no longer available and returns a tool result containing `<skill_content name="...">`, `<skill_resources>`, and `<skill_instructions>`. `resourceBase` resolves explicitly referenced scripts, references, and assets only as needed; the loaded result does not enumerate a skill directory. Body-only edits therefore change later tool calls without producing catalog messages or rewriting earlier tool results.
+
+```ts type-equiv
+/**
+ * Durable provider and item records for one published session skill catalog. The catalog is a
+ * `catalog`-form context, so it records the entries it published beside the
+ * model-facing prose: a consumer presenting the list must not re-parse the
+ * `<available_skills>` block, whose framing exists for the model.
+ */
+interface SkillCatalogSource {
+  readonly kind: 'skill-catalog'
+  readonly form: 'catalog'
+  /** Marks a replacement catalog rather than this session's first publication. */
+  readonly update?: true
+  /** Exactly the entries this message published, in catalog order. */
+  readonly entries: readonly { readonly name: string; readonly description: string }[]
+  /** Identity of a custom presentation, including its unpublished membership revision. */
+  readonly presentationDigest?: string
+}
+
+```
+
+```ts type-equiv
+/** Model-facing catalog projection supplied by an optional discovery plugin. */
+interface SkillCatalogPresentation {
+  /** Exactly the names and descriptions rendered by this presentation. */
+  readonly entries: SkillCatalogSource['entries']
+  /** Complete message text used verbatim for initial and replacement catalogs; omission retains standard prose. */
+  readonly text?: string
+  /** Additional identity for membership changes not visible in the summary rows. */
+  readonly revision?: string
+}
+```
 
 ## Browser Session catalog
 
@@ -328,6 +362,31 @@ async get(name: string, options: SkillViewOptions = {}): Promise<SkillDefinition
 ```
 
 Source: [`packages/skill/skill/src/index.ts`](../../packages/skill/skill/src/index.ts)
+
+<a id="skill-events"></a>
+
+### `skill/*` events
+
+<a id="skillcatalog--waterfall"></a>
+
+#### `skill/catalog` — waterfall
+
+Project a complete model-invocable skill snapshot before durable catalog publication. Scope-filtered dispatch selects listeners visible to the subject agent.
+
+```ts cordis-catalog
+/**
+ * Project a complete model-invocable skill snapshot before durable catalog publication.
+ * Scope-filtered dispatch selects listeners visible to the subject agent.
+ * @mode waterfall
+ * @param payload - subject agent and complete visible skill metadata.
+ * @param next - delegated presentation, defaulting to the standard full catalog.
+ */
+'skill/catalog'(this: Scoped<Agent>, payload: { agent: Agent; skills: readonly SkillSummary[] }, next: () => Promise<SkillCatalogPresentation>): Promise<SkillCatalogPresentation>
+```
+
+Types: [Agent](core.md) · [Scoped](scope.md)
+
+Source: [`packages/skill/tool-skill/src/index.ts`](../../packages/skill/tool-skill/src/index.ts)
 
 <a id="skills-events"></a>
 
