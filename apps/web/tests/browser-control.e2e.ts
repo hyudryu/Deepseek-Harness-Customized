@@ -13,7 +13,7 @@ import { newEnglishPage, saveFailureShot } from './support.ts'
 
 const bundle = fileURLToPath(new URL('../../../Custom Plugins/browser-control/cordis.patch.yml', import.meta.url))
 const manifest = fileURLToPath(new URL('../../../Custom Plugins/browser-control/package.json', import.meta.url))
-const seed = fileURLToPath(new URL('../../../snapshots/web/seeded-history/session.v2.jsonl', import.meta.url))
+const seed = fileURLToPath(new URL('../../../snapshots/web/seeded-history/session.v3.jsonl', import.meta.url))
 const sessionId = SessionId('browser-control-web-e2e')
 let scaffold: WebScaffold
 let browser: Browser

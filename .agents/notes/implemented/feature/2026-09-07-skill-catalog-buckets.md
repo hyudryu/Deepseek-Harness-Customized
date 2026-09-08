@@ -14,7 +14,7 @@ A full catalog of installed skill names and descriptions consumes model input ev
 
 The Web bundle enables this presentation. Other compositions opt in by mounting the plugin. Configurable ordered keyword rules assign each model-invocable skill to its first matching category, with `other` as the fallback. This groups provider metadata without moving files or requiring AWS storage; the AWS category describes a topic.
 
-The catalog publisher retains append-only session history and publishes replacement discovery text through its existing lifecycle. A saved full catalog remains historical input until a fresh session or normal compaction removes it from the active request. Enabling the plugin never deletes or rewrites session logs, provider files, or prior tool results.
+The catalog publisher retains append-only session history and publishes replacement discovery text through its existing lifecycle. A saved full catalog remains historical input until a fresh session or normal compaction removes it from the active request. Enabling the plugin never deletes or rewrites session logs, provider files, or prior tool results. Session format v3 records the optional presentation digest, and the adjacent v2-to-v3 edge preserves prior artifacts while the snapshot corpus keeps one declared v2 scenario for direct migration coverage.
 
 ## Alternatives considered
 

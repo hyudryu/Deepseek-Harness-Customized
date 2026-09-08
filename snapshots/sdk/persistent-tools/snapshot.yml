@@ -3,6 +3,9 @@ scenario: persistent-tools
 profile: sdk
 composition: sdk-minimal
 recording: live
+sessionFormat:
+  version: 2
+  coverage: [adjacent-migration]
 header:
   class: sdk-minimal
   pin: true

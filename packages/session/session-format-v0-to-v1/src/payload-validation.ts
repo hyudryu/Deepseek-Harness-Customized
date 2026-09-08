@@ -572,7 +572,12 @@ function messageSourceValue(
       )
       literalValue(source['form'], ['catalog'], `${label} form`)
       if (source['update'] !== undefined) literalValue(source['update'], [true], `${label} update`)
-      if (source['presentationDigest'] !== undefined) stringValue(source['presentationDigest'], `${label} presentationDigest`)
+      if (source['presentationDigest'] !== undefined) {
+        const digest = source['presentationDigest']
+        if (typeof digest !== 'string' || !/^[a-f0-9]{64}$/u.test(digest)) {
+          throw new SessionFormatError(`${label} presentationDigest must be a lowercase SHA-256 digest`)
+        }
+      }
       arrayValue(source['entries'], `${label} entries`, (member, memberLabel) => {
         const entry = exactRecord(member, memberLabel, ['name', 'description'])
         nonEmptyString(entry['name'], `${memberLabel} name`)

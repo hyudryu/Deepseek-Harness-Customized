@@ -171,7 +171,7 @@ describe('released v3 event envelopes and payloads', () => {
 
   it('admits an optional presentationDigest on a v3 skill-catalog source', () => {
     expect(() => { assertReleasedV3Artifact(artifact([
-      event('user/message', 0, skillCatalogData('abc123'), { surfaceOp: 'append' }),
+      event('user/message', 0, skillCatalogData('a'.repeat(64)), { surfaceOp: 'append' }),
     ])) }).not.toThrow()
     expect(() => { assertReleasedV3Artifact(artifact([
       event('user/message', 0, skillCatalogData(), { surfaceOp: 'append' }),
@@ -179,6 +179,11 @@ describe('released v3 event envelopes and payloads', () => {
     expect(() => { assertReleasedV3Artifact(artifact([
       event('user/message', 0, skillCatalogData(1 as unknown as string), { surfaceOp: 'append' }),
     ])) }).toThrow(/presentationDigest/)
+    for (const digest of ['abc123', 'A'.repeat(64), 'g'.repeat(64), 'a'.repeat(63), 'a'.repeat(65)]) {
+      expect(() => { assertReleasedV3Artifact(artifact([
+        event('user/message', 0, skillCatalogData(digest), { surfaceOp: 'append' }),
+      ])) }).toThrow(/lowercase SHA-256 digest/)
+    }
   })
 
   it.each([
