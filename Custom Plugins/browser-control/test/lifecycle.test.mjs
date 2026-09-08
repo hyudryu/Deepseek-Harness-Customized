@@ -119,6 +119,20 @@ test('failed initial navigation reports rollback failure and permits cleanup ret
   assert.equal(control.snapshot('session').open, false)
 })
 
+test('concurrent failed opens roll back a newly created context exactly once', async t => {
+  const { page, context, control } = fixture(t)
+  page.goto = async () => { throw new Error('navigation failed') }
+  const results = await Promise.allSettled([
+    control.open('session', 'https://a.invalid'),
+    control.open('session', 'https://b.invalid'),
+  ])
+  assert.equal(results.every(result => result.status === 'rejected'), true)
+  // Only the call that created the state owns the rollback; the racing peer
+  // must not close the shared context a second time.
+  assert.equal(context.close.mock.callCount(), 1)
+  assert.equal(control.snapshot('session').open, false)
+})
+
 for (const quality of [0, 60, 100]) {
   test(`JPEG quality ${quality} reaches the screenshot request`, async t => {
     const { page, control } = fixture(t, { frameQuality: quality })

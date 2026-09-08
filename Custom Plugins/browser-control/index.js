@@ -314,13 +314,12 @@ export function apply(ctx, rawConfig = {}) {
 
   async function getState(key) {
     const existing = states.get(key)
-    if (existing?.open) return existing
-    let pending = pendingStates.get(key)
-    if (!pending) {
-      pending = createStateFor(key).finally(() => pendingStates.delete(key))
-      pendingStates.set(key, pending)
-    }
-    return pending
+    if (existing?.open) return { state: existing, created: false }
+    const pending = pendingStates.get(key)
+    if (pending) return { state: await pending, created: false }
+    const created = createStateFor(key).finally(() => pendingStates.delete(key))
+    pendingStates.set(key, created)
+    return { state: await created, created: true }
   }
 
   async function closeState(key) {
@@ -370,13 +369,14 @@ export function apply(ctx, rawConfig = {}) {
       }
     },
     async open(sessionId, url) {
-      const existing = states.get(sessionId)?.open === true
-      const state = await getState(sessionId)
+      const { state, created } = await getState(sessionId)
       if (typeof url === 'string' && url.trim() !== '') {
         try {
           await state.page.goto(url, { waitUntil: 'domcontentloaded', timeout: config.navigationTimeoutMs })
         } catch (error) {
-          if (!existing) {
+          // Only the call that created the state may roll it back; a racing
+          // caller must not close a context a peer created and put in use.
+          if (created) {
             try { await closeState(sessionId) }
             catch (cleanupError) {
               await refreshAndNotify(state)
@@ -446,7 +446,7 @@ export function apply(ctx, rawConfig = {}) {
         await closeState(key)
         return { ok: true, action }
       }
-      const state = await getState(key)
+      const { state } = await getState(key)
       const page = state.page
       const timeoutMs = Number.isFinite(args.timeout_ms) && args.timeout_ms > 0
         ? Math.floor(args.timeout_ms)

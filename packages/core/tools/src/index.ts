@@ -1190,7 +1190,18 @@ export class ToolRuntime extends Service {
     }
     const baseView = new Map(visible)
     for (const [name, definition] of baseView) {
-      if (definition.availableWhen !== undefined && !definition.availableWhen(baseView)) visible.delete(name)
+      if (definition.availableWhen === undefined) continue
+      let available: boolean
+      try {
+        available = definition.availableWhen(baseView)
+      } catch (error) {
+        // A failing extension predicate must not abort the shared tool view;
+        // hide only the tool whose own callback throws and keep the rest.
+        this.ctx.logger.warn(`tools: availability predicate failed for "${name}"; hiding the tool: ${errorMessage(error)}`)
+        visible.delete(name)
+        continue
+      }
+      if (!available) visible.delete(name)
     }
     return { visible, knownNames, restrictableNames }
   }

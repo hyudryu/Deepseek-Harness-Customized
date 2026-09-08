@@ -15,7 +15,10 @@
       "path": "../../../vendor/cordis"
     },
     {
-      "path": "../../core/session"
+      "path": "../../llm/llm"
+    },
+    {
+      "path": "../../util/values"
     },
     {
       "path": "../session-format"
@@ -25,9 +28,6 @@
     },
     {
       "path": "../session-format-v1-to-v2"
-    },
-    {
-      "path": "../session-format-v2-to-v3"
     }
   ]
 }

@@ -753,3 +753,18 @@ it('availability predicates observe base definitions without recursive filtering
     await ctx.fiber.dispose()
   }
 })
+
+it('contains a throwing availability predicate to the single failing tool', async () => {
+  const ctx = await mount()
+  try {
+    const warn = vi.spyOn(ctx.logger, 'warn').mockImplementation(() => ctx.logger)
+    ctx.tools.register({ ...tool('broken'), availableWhen: () => { throw new Error('boom') } })
+    ctx.tools.register(tool('healthy'))
+    expect(ctx.tools.schemas().map(schema => schema.name)).toEqual(['healthy'])
+    expect(warn).toHaveBeenCalledTimes(1)
+    expect(String(warn.mock.calls[0]?.[0])).toContain('availability predicate failed for "broken"')
+    expect(await run(ctx, 'healthy')).toBe('ran:healthy')
+  } finally {
+    await ctx.fiber.dispose()
+  }
+})
