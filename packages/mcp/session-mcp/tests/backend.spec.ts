@@ -1,8 +1,12 @@
-import type { Context } from '@deepseek-ai/cordis'
-import { SESSION_FORMAT_VERSION, SessionId, SessionSeq } from '@deepseek-ai/dsh-session'
-import type { SessionEvent, SessionHeader } from '@deepseek-ai/dsh-session'
+import { Context } from '@deepseek-ai/cordis'
+import AgentRegistry, { Inbox } from '@deepseek-ai/dsh-agent'
+import type { Agent } from '@deepseek-ai/dsh-agent'
+import { Session, SESSION_FORMAT_VERSION, SessionId, SessionSeq } from '@deepseek-ai/dsh-session'
+import type { SessionEvent, SessionHeader, UserMessage } from '@deepseek-ai/dsh-session'
 import type { SessionTitleObservationResult } from '@deepseek-ai/dsh-session-query'
+import { releasedV2SessionFormatCodec } from '@deepseek-ai/dsh-session-format-v1-to-v2'
 import { foldSessionTitle } from '@deepseek-ai/dsh-session-title'
+import { requireDirectHuman } from '@deepseek-ai/dsh-tool-goal/src/authority.ts'
 import { describe, expect, it, vi } from 'vitest'
 import { SessionManagement } from '../src/sessions.ts'
 
@@ -29,9 +33,32 @@ function fixture(maxResponseBytes = 10000, cwd: string | null = '/projects/first
   // This isolated Consumer test supplies only the service methods it calls; Loader coverage owns the complete host composition.
   const registry = { list: vi.fn(() => [{ path: '/empty', title: 'Empty project' }]) }
   const get = vi.fn((): typeof registry | undefined => registry)
-  const ctx = { sessionQuery: query, agents: { get: (id: SessionId) => agents.get(id) }, get } as unknown as Context
+  const ctx = {
+    sessionQuery: query,
+    agents: { get: (id: SessionId) => agents.get(id), roots: () => [...agents.values()] },
+    get,
+  } as unknown as Context
   const management = new SessionManagement(ctx, { maxPageSize: 20, maxResponseBytes })
   return { management, query, records, events, dispose, agent, agents, header, get, registry }
+}
+
+function registryAgent(ctx: Context, id: string) {
+  const session = Session.create(SessionId(id))
+  return {
+    id: session.id,
+    session,
+    options: {},
+    status: 'running' as const,
+    ctx,
+    inbox: new Inbox(session, { inserted: () => {}, discarded: () => {}, claimed: () => {} }),
+    send: vi.fn(),
+    followup: vi.fn<(message: UserMessage) => void>(),
+    steer: vi.fn(),
+    inject: vi.fn(),
+    cancel: vi.fn(),
+    whenIdle: () => Promise.resolve(),
+    runMaintenance: task => task(new AbortController().signal),
+  } satisfies Agent
 }
 
 describe('session management', () => {
@@ -160,7 +187,7 @@ describe('session management', () => {
     expect(admitted.accepted).toBe(true)
     expect(typeof admitted.messageId).toBe('string')
     management.sendMessage({ sessionId: 'first', text: 'Adjust course', mode: 'steer' })
-    expect(agent.followup).toHaveBeenCalledWith(expect.objectContaining({ content: [{ type: 'text', text: 'Continue' }], source: { kind: 'user' } }))
+    expect(agent.followup).toHaveBeenCalledWith(expect.objectContaining({ content: [{ type: 'text', text: 'Continue' }], source: { kind: 'session-mcp' } }))
     expect(agent.steer).toHaveBeenCalledOnce()
     expect(management.stopSession({ sessionId: 'first' })).toMatchObject({ cancellationRequested: true })
     expect(agent.cancel).toHaveBeenCalledWith({ kind: 'user' }, { keepInbox: true })
@@ -175,5 +202,56 @@ describe('session management', () => {
     expect(() => management.stopSession({ sessionId: 'first' })).toThrow('does not resume')
     expect(() => management.stopSession({ sessionId: 'first' }, AbortSignal.abort())).toThrow()
     expect(agent.cancel).not.toHaveBeenCalled()
+  })
+
+  it('rejects runtime child ownership even when durable origin is unset', async () => {
+    const ctx = new Context()
+    await ctx.plugin(AgentRegistry)
+    const root = registryAgent(ctx, 'root')
+    const child = registryAgent(ctx, 'extension-child')
+    const detachRoot = ctx.agents.enter(root, undefined)
+    const detachChild = ctx.agents.enter(child, root)
+    const management = new SessionManagement(ctx, { maxPageSize: 20, maxResponseBytes: 10000 })
+    try {
+      expect(child.session.header.origin).toBeUndefined()
+      expect(ctx.agents.roots()).toEqual([root])
+      expect(() => management.sendMessage({ sessionId: child.id, text: 'Override parent', mode: 'steer' })).toThrow('owning agent')
+      expect(() => management.stopSession({ sessionId: child.id })).toThrow('owning agent')
+      expect(child.steer).not.toHaveBeenCalled()
+      expect(child.cancel).not.toHaveBeenCalled()
+    } finally {
+      detachChild()
+      detachRoot()
+      await ctx.fiber.dispose()
+    }
+  })
+
+  it('preserves durable MCP provenance without granting direct-human goal authority', async () => {
+    const ctx = new Context()
+    await ctx.plugin(AgentRegistry)
+    const agent = registryAgent(ctx, 'supervised')
+    const detach = ctx.agents.enter(agent, undefined)
+    const management = new SessionManagement(ctx, { maxPageSize: 20, maxResponseBytes: 10000 })
+    try {
+      management.sendMessage({ sessionId: agent.id, text: 'Create a goal', mode: 'queue' })
+      const message = vi.mocked(agent.followup).mock.calls[0]?.[0]
+      if (message === undefined) throw new Error('MCP did not deliver a message')
+      agent.session.append('turn/start', { turn: 1 })
+      agent.session.append('user/message', message, { surfaceOp: 'append' })
+      expect(message.source).toEqual({ kind: 'session-mcp' })
+      expect(() => {
+        requireDirectHuman(ctx, {
+          agent, events: agent.session.snapshotEvents(), openTurnStartSeq: SessionSeq(0),
+        })
+      }).toThrow('requires a direct human turn')
+      agent.session.append('turn/end', { turn: 1, reason: { kind: 'completed' } })
+      const decoded = releasedV2SessionFormatCodec.decodeArtifact(
+        { type: 'session', delegationDepth: 0, ...agent.session.header }, agent.session.snapshotEvents(),
+      )
+      expect(decoded.events[1]?.data).toMatchObject({ source: { kind: 'session-mcp' } })
+    } finally {
+      detach()
+      await ctx.fiber.dispose()
+    }
   })
 })

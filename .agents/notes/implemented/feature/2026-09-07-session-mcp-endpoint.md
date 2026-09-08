@@ -12,7 +12,9 @@ The [session MCP plugin](../../../../packages/mcp/session-mcp/README.md) exposes
 
 History reads open persistence in read mode and never resume an agent. Live status reports only the serving process's observation; a saved conversation outside its agent registry is `not_active_here`. Exact title lookup returns candidates when several conversations match. Pagination and explicit oversized-event previews let clients inspect long transcripts without receiving an unbounded response.
 
-Control calls accept only live, top-level agents. Sending a message uses the agent's queue or steering behavior; stopping requests cancellation and preserves pending messages. Neither operation creates or resumes a saved conversation. Disabling control prevents execution even if a client calls a known control tool directly.
+Control calls require membership in the agent registry's runtime root set and reject durably classified subagents; an extension-owned child remains ineligible when its durable origin is unset. Sending a message uses the agent's queue or steering behavior and records the distinct `session-mcp` source, which grants no direct-human goal authority. The released Session reader already accepts merge-extensible source kinds, so these messages remain readable without changing a frozen migration. Stopping requests cancellation and preserves pending messages. Neither operation creates or resumes a saved conversation. Disabling control prevents execution even if a client calls a known control tool directly.
+
+The SDK server announces child lineage before forwarding the child's first event, including events appended by creation listeners registered before the server. Waiting for the MCP listener can change plugin registration order; lineage must already be visible when either SDK filters a child's initial events. [SDK server regressions](../../../../packages/sdk/server/tests/server.spec.ts) cover creation-time events and nested descendants without changing the recorded SDK outputs.
 
 ## Alternatives considered
 

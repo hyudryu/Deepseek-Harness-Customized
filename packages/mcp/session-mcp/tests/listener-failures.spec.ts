@@ -38,7 +38,7 @@ it('contains unexpected handler rejection before and after headers have been sen
   await ctx.plugin(SessionMcpServer, Config({ port: 0 } as Config))
   const endpoint = ctx.sessionMcp.endpoint
   expect((await fetch(endpoint)).status).toBe(500)
-  await expect(fetch(endpoint.replace('/MCP', '/partial')).then(response => response.text())).rejects.toThrow()
+  await expect(fetch(endpoint.replace('/mcp', '/partial')).then(response => response.text())).rejects.toThrow()
   expect(warn).toHaveBeenCalledTimes(2)
 })
 
@@ -49,7 +49,7 @@ it('releases an IPv6 loopback listener', async () => {
     async close() {},
   })
   await ctx.plugin(SessionMcpServer, Config({ host: '::1', port: 0 } as Config))
-  expect(ctx.sessionMcp.endpoint).toMatch(/^http:\/\/\[::1\]:\d+\/MCP$/u)
+  expect(ctx.sessionMcp.endpoint).toMatch(/^http:\/\/\[::1\]:\d+\/mcp$/u)
   expect(await (await fetch(ctx.sessionMcp.endpoint)).text()).toBe('ready')
 })
 

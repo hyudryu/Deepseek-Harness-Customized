@@ -26,6 +26,8 @@ describe('dsh-sdk-minimal bundle', () => {
     expect(patches).toHaveLength(1)
     const rows = patches[0]?.insert ?? []
     expect(rows.map(row => [row.id, row.name])).toEqual([
+      ['session-mcp', '@deepseek-ai/dsh-session-mcp'],
+      ['session-query-sqlite', '@deepseek-ai/dsh-session-query-sqlite'],
       ['sdk-app-startup', '@deepseek-ai/dsh-sdk-app'],
       ['sdk-jsonrpc-server', '@deepseek-ai/dsh-sdk-jsonrpc-server'],
       ['deepseek-llm-api-extensions', '@deepseek-ai/dsh-deepseek-llm-api-extensions'],
@@ -60,9 +62,21 @@ describe('dsh-sdk-minimal bundle', () => {
       ['str-replace-editor', '@deepseek-ai/dsh-tool-str-replace-editor'],
       ['sessions', '@deepseek-ai/dsh-session-persistence-jsonl'],
     ])
+    expect(rows.find(row => row.id === 'session-mcp')).toMatchObject({
+      inject: ['sdkAppStartup'],
+      config: {
+        transport: 'standalone',
+        port: { __jsExpr: 'Number(process.env.DSH_SESSION_MCP_PORT ?? 3080)' },
+        path: '/mcp',
+      },
+    })
+    expect(rows.find(row => row.id === 'session-query-sqlite')?.config).toEqual({
+      path: ':memory:',
+      openAt: 'never',
+    })
     expect(rows.find(row => row.id === 'sdk-app-startup')?.config).toEqual({ profile: 'sdk-minimal' })
     expect(rows.find(row => row.id === 'sdk-jsonrpc-server')).toMatchObject({
-      inject: ['sdkAppStartup', 'loader'],
+      inject: ['sdkAppStartup', 'loader', 'sessionMcp'],
       config: { maxTokensAsSuccess: false },
     })
     expect(rows.find(row => row.id === 'llm-deepseek')?.config).toEqual({

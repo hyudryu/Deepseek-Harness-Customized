@@ -20,7 +20,7 @@ Connect an external MCP client to inspect Harness projects, saved conversations,
 
 ## Use this package
 
-Point an MCP client that supports Streamable HTTP at `http://127.0.0.1:3080/MCP`. The path is case-sensitive. With the Web profile, a CLI `--port` override changes the UI and MCP port together. Shipped standalone profiles take their port from `DSH_SESSION_MCP_PORT` when set, or use `3080`; a profile patch can replace that configuration.
+Point an MCP client that supports Streamable HTTP at `http://127.0.0.1:3080/mcp`. The path is case-sensitive. With the Web profile, a CLI `--port` override changes the UI and MCP port together. Shipped standalone profiles take their port from `DSH_SESSION_MCP_PORT` when set, or use `3080`; a profile patch can replace that configuration.
 
 ### Configuration
 
@@ -32,7 +32,7 @@ The shipped profile already mounts the `session-mcp` row. Change its configurati
   config:
     transport: standalone
     port: 3080
-    path: /MCP
+    path: /mcp
 ```
 
 A custom composition selecting `transport: web-server` must add `inject: [webServer]` to the `session-mcp` entry so the listener is available before the plugin starts. The shipped Web entry already declares this dependency.
@@ -42,11 +42,11 @@ A custom composition selecting `transport: web-server` must add `inject: [webSer
 | `transport` | `standalone` | Own a listener or use `web-server` to share the Web server |
 | `host` | `127.0.0.1` | Standalone loopback address; `::1` selects IPv6 loopback |
 | `port` | `3080` | Standalone listener port; Web uses its server's port |
-| `path` | `/MCP` | Exact endpoint path |
+| `path` | `/mcp` | Exact endpoint path |
 | `maxPageSize` | `100` | Maximum items or events requested per page |
 | `maxResponseBytes` | `65536` | Maximum complete tool response, including protocol wrappers |
 | `maxRequestBytes` | `65536` | Maximum incoming request body |
-| `requestTimeoutMs` | `30000` | Maximum time allowed for a request |
+| `requestTimeoutMs` | `30000` | Maximum request lifetime in milliseconds, up to `2147483647` |
 | `maxConcurrentRequests` | `32` | Maximum simultaneous requests |
 | `allowControl` | `true` | Permit live-session message and cancellation tools |
 
@@ -66,7 +66,7 @@ Status is `running` or `idle` only for an agent observed in this process. `not_a
 
 ### Control a live conversation
 
-`send_message` accepts `sessionId`, `text`, and optional `mode`: the default `queue` submits the next message, while `steer` uses the agent's steering behavior. Acceptance means the message entered that agent's input path; it does not mean the resulting work has finished. `stop_session` requests cancellation and preserves pending messages. Both tools reject saved-only sessions and subagent-owned sessions. Set `allowControl: false` to expose reads without permitting either operation.
+`send_message` accepts `sessionId`, `text`, and optional `mode`: the default `queue` submits the next message, while `steer` uses the agent's steering behavior. Messages retain the durable `session-mcp` source and do not grant direct-human authority for goal operations. Acceptance means the message entered that agent's input path; it does not mean the resulting work has finished. `stop_session` requests cancellation and preserves pending messages. Both tools require a runtime root agent and reject saved-only sessions and durably classified subagents, including extension-owned children whose durable origin is unset. Set `allowControl: false` to expose reads without permitting either operation.
 
 ## Understand the implementation
 

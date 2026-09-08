@@ -13,18 +13,18 @@ import { createMcpHandler } from '../src/http.ts'
 const cleanup: (() => Promise<void>)[] = []
 afterEach(async () => { await Promise.all(cleanup.splice(0).map(close => close())) })
 
-async function endpoint(overrides: Partial<McpConfig> = {}, management = {} as SessionManagement) {
+async function endpoint(overrides: Partial<McpConfig> = {}, management = {} as SessionManagement, reportedPort?: number) {
   // Schema input accepts omitted defaulted fields; its callable type describes the resolved config.
   const config = Config(overrides as McpConfig)
   const server = createServer((req, res) => { void handler.handle(req, res) })
-  const handler = createMcpHandler(management, config, () => (server.address() as AddressInfo).port)
+  const handler = createMcpHandler(management, config, () => reportedPort ?? (server.address() as AddressInfo).port)
   await new Promise<void>(resolve => server.listen(0, '127.0.0.1', resolve))
   cleanup.push(async () => {
     await handler.close()
     await new Promise<void>((resolve) => { server.close(() => { resolve() }); server.closeAllConnections() })
   })
   const port = (server.address() as AddressInfo).port
-  return { handler, url: `http://127.0.0.1:${String(port)}/MCP` }
+  return { handler, url: `http://127.0.0.1:${String(port)}/mcp` }
 }
 
 const headers = { 'Content-Type': 'application/json', Accept: 'application/json, text/event-stream' }
@@ -37,7 +37,7 @@ it('initializes a stateless MCP connection over the exact configured pathname', 
   const response = await fetch(url, { method: 'POST', headers, body: initialize })
   expect(response.status).toBe(200)
   expect(await response.json()).toMatchObject({ jsonrpc: '2.0', id: 1, result: { serverInfo: { name: 'dsh-session-management' } } })
-  expect((await fetch(url.replace('/MCP', '/mcp'))).status).toBe(404)
+  expect((await fetch(url.replace('/mcp', '/MCP'))).status).toBe(404)
   const get = await fetch(url)
   expect(get.status).toBe(405)
   expect(get.headers.get('Allow')).toBe('POST')
@@ -207,7 +207,7 @@ it('terminates an already committed response when shared middleware precedes a r
   await new Promise<void>(resolve => server.listen(0, '127.0.0.1', resolve))
   try {
     await handler.close()
-    const url = `http://127.0.0.1:${String((server.address() as AddressInfo).port)}/MCP`
+    const url = `http://127.0.0.1:${String((server.address() as AddressInfo).port)}/mcp`
     await expect(fetch(url).then(response => response.text())).rejects.toThrow()
   } finally {
     await new Promise<void>((resolve) => { server.close(() => { resolve() }); server.closeAllConnections() })
@@ -225,4 +225,25 @@ it('bounds the serialized RPC id so escaped IDs cannot exceed the response budge
   const accepted = await call('\0'.repeat(21))
   expect(accepted.status).toBe(200)
   expect(Buffer.byteLength(await accepted.text())).toBeLessThanOrEqual(4096)
+})
+
+it('accepts equivalent default-port authorities without admitting other hosts or ports', async () => {
+  const { url } = await endpoint({}, {} as SessionManagement, 80)
+  const post = (host: string, origin: string) => new Promise<number | undefined>((resolve, reject) => {
+    const request = httpRequest(url, { method: 'POST', headers: { ...headers, Host: host, Origin: origin } }, (response) => {
+      response.resume()
+      response.once('end', () => { resolve(response.statusCode) })
+    })
+    request.once('error', reject)
+    request.end(initialize)
+  })
+  for (const host of ['localhost', '127.0.0.1', '[::1]']) {
+    expect(await post(host, `http://${host}`)).toBe(200)
+    expect(await post(`${host}:80`, `http://${host}`)).toBe(200)
+    expect(await post(host, `http://${host}:80`)).toBe(200)
+  }
+  expect(await post('localhost:81', 'http://localhost')).toBe(403)
+  expect(await post('localhost', 'http://localhost:81')).toBe(403)
+  expect(await post('evil.example', 'http://localhost')).toBe(403)
+  expect(await post('localhost', 'http://evil.example')).toBe(403)
 })

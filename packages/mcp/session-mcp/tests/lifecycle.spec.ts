@@ -74,15 +74,15 @@ async function initialize(endpoint: string) {
 }
 
 describe('MCP lifecycle through Loader', () => {
-  it('publishes an assigned port and serves initialization at the exact uppercase path', async () => {
+  it('publishes an assigned port and serves initialization at the exact lowercase path', async () => {
     const context = await load()
     const endpoint = context.sessionMcp.endpoint
-    expect(new URL(endpoint).pathname).toBe('/MCP')
+    expect(new URL(endpoint).pathname).toBe('/mcp')
     expect(Number(new URL(endpoint).port)).toBeGreaterThan(0)
     const initialized = await initialize(endpoint)
     expect(initialized.status).toBe(200)
     expect(initialized.body).toContain('protocolVersion')
-    const missing = await fetch(endpoint.replace('/MCP', '/mcp'))
+    const missing = await fetch(endpoint.replace('/mcp', '/MCP'))
     expect(missing.status).toBe(404)
     await missing.text()
   })
@@ -98,9 +98,15 @@ describe('MCP lifecycle through Loader', () => {
   })
 
   it('rejects malformed pathnames during Loader activation', async () => {
-    for (const path of ['MCP', '//MCP', '/MCP/', '/MCP?query', '/MCP#fragment', '/a/../MCP']) {
+    for (const path of ['mcp', '//mcp', '/mcp/', '/mcp?query', '/mcp#fragment', '/a/../mcp']) {
       await expect(load({ path })).rejects.toThrow('pathname')
     }
+  })
+
+  it('rejects timer-overflow configurations before starting a listener', async () => {
+    await expect(load({ requestTimeoutMs: 2147483648 })).rejects.toThrow('2147483647')
+    const context = await load({ requestTimeoutMs: 2147483647 })
+    expect((await initialize(context.sessionMcp.endpoint)).status).toBe(200)
   })
 
   it('rejects web transport without its host service', async () => {
@@ -118,7 +124,7 @@ describe('MCP lifecycle through Loader', () => {
     const response = await fetch(endpoint)
     expect(response.status).toBe(404)
     await response.text()
-    const unregister = context.webServer.register({ kind: 'exact', path: '/MCP', handler: (_request, reply) => {
+    const unregister = context.webServer.register({ kind: 'exact', path: '/mcp', handler: (_request, reply) => {
       reply.writeHead(200).end('released')
     } })
     try {

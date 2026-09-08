@@ -9,7 +9,7 @@
       config:
         transport: standalone
         port: !!js Number(process.env.DSH_SESSION_MCP_PORT ?? 3080)
-        path: /MCP
+        path: /mcp
 
     - id: session-query-sqlite
       name: '@deepseek-ai/dsh-session-query-sqlite'

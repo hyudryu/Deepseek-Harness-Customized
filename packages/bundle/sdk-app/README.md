@@ -11,7 +11,7 @@ English | [中文](README.zh.md)
 
 The SDK stdio application as a `dsh` profile bundle over [`dsh-base`](../base/README.md). It inherits the base's disabled module-HMR policy; its patch sets the coding-agent persona, mounts an app-owned zero-option command provider, and starts [`dsh-sdk-jsonrpc-server`](../../sdk/server/README.md) only after that provider accepts the invocation. `dsh --profile sdk --help` therefore writes help and exits without claiming stdin or stdout. The standalone [`sdk-minimal`](../sdk-minimal/README.md) bundle reuses the same startup provider with its own profile name.
 
-The [session MCP server](../../mcp/session-mcp/README.md) starts automatically at `http://127.0.0.1:3080/MCP` and closes with the profile. App help exits before the MCP listener starts.
+The [session MCP server](../../mcp/session-mcp/README.md) starts automatically at `http://127.0.0.1:3080/mcp` and closes with the profile. App help exits before the MCP listener starts.
 
 ## Table of Contents
 

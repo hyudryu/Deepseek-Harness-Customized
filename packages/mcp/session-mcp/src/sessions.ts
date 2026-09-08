@@ -7,6 +7,7 @@ import type { SessionEvent, UserMessage } from '@deepseek-ai/dsh-session'
 import type { SessionRecord } from '@deepseek-ai/dsh-session-query'
 import { foldSessionTitle } from '@deepseek-ai/dsh-session-title'
 import type {} from '@deepseek-ai/dsh-workspace'
+import type {} from './types.ts'
 
 interface Page<T> {
   items: T[]
@@ -208,7 +209,7 @@ export class SessionManagement {
     signal?.throwIfAborted()
     if (request.text.trim().length === 0) throw new Error('Message text must not be empty.')
     const agent = this.liveAgent(request.sessionId)
-    const message = createUserMessage({ content: [{ type: 'text', text: request.text }], source: { kind: 'user' } })
+    const message = createUserMessage({ content: [{ type: 'text', text: request.text }], source: { kind: 'session-mcp' } })
     const result = this.bounded({ sessionId: SessionId(request.sessionId), accepted: true, messageId: message.id, mode: request.mode })
     if (request.mode === 'steer') agent.steer(message)
     else agent.followup(message)
@@ -232,7 +233,9 @@ export class SessionManagement {
   private liveAgent(id: string) {
     const agent = this.ctx.agents.get(SessionId(id))
     if (agent === undefined) throw new Error('Session has no active agent in this harness process. MCP does not resume stored sessions.')
-    if (agent.session.header.origin === 'subagent') throw new Error('Subagent sessions are controlled by their owning agent.')
+    if (agent.session.header.origin === 'subagent' || !this.ctx.agents.roots().includes(agent)) {
+      throw new Error('Subagent sessions are controlled by their owning agent.')
+    }
     return agent
   }
 

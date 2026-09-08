@@ -81,7 +81,9 @@ export function createMcpHandler(management: SessionManagement, config: Config, 
       if (closed) { reply(response, 503, 'MCP server is closing'); return }
       if (request.url?.split('?', 1)[0] !== config.path) { reply(response, 404, 'Not found'); return }
       const remote = request.socket.remoteAddress
-      const authorities = ['localhost', '127.0.0.1', '[::1]'].map(host => `${host}:${String(getPort())}`)
+      const port = getPort()
+      const authorities = ['localhost', '127.0.0.1', '[::1]'].flatMap(host =>
+        port === 80 ? [host, `${host}:80`] : [`${host}:${String(port)}`])
       const host = request.headers.host
       const origin = request.headers.origin
       if (!['127.0.0.1', '::1', '::ffff:127.0.0.1'].includes(remote ?? '')

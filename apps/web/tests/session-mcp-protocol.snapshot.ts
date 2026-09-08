@@ -94,7 +94,7 @@ describe('session MCP recorded protocol', () => {
     expect(scaffold.ctx.agents.get(SESSION_ID)).toBeUndefined()
     const exchanges: ProtocolExchange[] = []
     const invoke = async (method: string, params: unknown): Promise<unknown> => {
-      const response = await scaffold.hostFetch('/MCP', {
+      const response = await scaffold.hostFetch('/mcp', {
         method: 'POST',
         headers: {
           'content-type': 'application/json',

@@ -44,7 +44,7 @@
   inject: [webStartup, webServer, workspaceRegistry]
   config:
     transport: web-server
-    path: /MCP
+    path: /mcp
 
 - insert:
     # Host-owned opt-in sampled when a new Web session receives its preset

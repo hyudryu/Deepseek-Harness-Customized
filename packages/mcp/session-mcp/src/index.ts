@@ -7,6 +7,8 @@ import z from '@deepseek-ai/schemastery'
 import { createMcpHandler } from './http.ts'
 import { SessionManagement } from './sessions.ts'
 
+export type { SessionMcpMessageSource } from './types.ts'
+
 /** Session MCP deployment settings; Web transport uses the existing UI listener. */
 export interface Config {
   /** Own a listener or register on the composed Web server. @default 'standalone' */
@@ -15,7 +17,7 @@ export interface Config {
   host: '127.0.0.1' | '::1'
   /** Standalone port; zero requests an OS-assigned port. @default 3080 */
   port: number
-  /** Case-sensitive MCP pathname. @default '/MCP' */
+  /** Case-sensitive MCP pathname. @default '/mcp' */
   path: string
   /** Maximum entries in one list or transcript page. @default 100 */
   maxPageSize: number
@@ -23,7 +25,7 @@ export interface Config {
   maxResponseBytes: number
   /** Maximum UTF-8 bytes in an incoming HTTP request body. @default 65536 */
   maxRequestBytes: number
-  /** Maximum request lifetime, including session reads. @default 30000 */
+  /** Maximum request lifetime, including session reads; capped at the Node timer maximum. @default 30000 */
   requestTimeoutMs: number
   /** Maximum simultaneous MCP requests. @default 32 */
   maxConcurrentRequests: number
@@ -36,11 +38,11 @@ export const Config: z<Config> = z.object({
   transport: z.union([z.const('standalone'), z.const('web-server')]).default('standalone'),
   host: z.union([z.const('127.0.0.1'), z.const('::1')]).default('127.0.0.1'),
   port: z.natural().max(65535).default(3080),
-  path: z.string().default('/MCP'),
+  path: z.string().default('/mcp'),
   maxPageSize: z.natural().min(1).default(100),
   maxResponseBytes: z.natural().min(4096).default(65536),
   maxRequestBytes: z.natural().min(1024).default(65536),
-  requestTimeoutMs: z.natural().min(1).default(30000),
+  requestTimeoutMs: z.natural().min(1).max(2147483647).default(30000),
   maxConcurrentRequests: z.natural().min(1).default(32),
   allowControl: z.boolean().default(true),
 })

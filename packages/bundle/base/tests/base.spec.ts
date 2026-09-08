@@ -110,7 +110,7 @@ describe('session MCP profile startup', () => {
   it('shares the Web listener and waits for its workspace registry', () => {
     expect(patches('web-app').find(row => row.id === 'session-mcp')).toMatchObject({
       inject: ['webStartup', 'webServer', 'workspaceRegistry'],
-      config: { transport: 'web-server', path: '/MCP' },
+      config: { transport: 'web-server', path: '/mcp' },
     })
   })
 
@@ -118,7 +118,7 @@ describe('session MCP profile startup', () => {
     const rows = patches('sdk-minimal').flatMap(row => row.insert ?? [])
     expect(rows.find(row => row.id === 'session-mcp')).toMatchObject({
       name: '@deepseek-ai/dsh-session-mcp', inject: ['sdkAppStartup'],
-      config: { transport: 'standalone', path: '/MCP' },
+      config: { transport: 'standalone', path: '/mcp' },
     })
     expect(rows.find(row => row.id === 'session-query-sqlite')).toMatchObject({
       name: '@deepseek-ai/dsh-session-query-sqlite', config: { openAt: 'never' },
