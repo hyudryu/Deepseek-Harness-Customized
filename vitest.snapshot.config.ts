@@ -42,6 +42,8 @@ export default defineConfig({
   // this (the root tsconfig is a solution file with no paths).
   plugins: [tsconfigPaths({ projects: ['./tsconfig.base.json'] }), standardDecoratorPlugin()],
   test: {
+    // Concurrent profile subprocesses keep MCP enabled on independent OS-assigned ports.
+    env: { DSH_SESSION_MCP_PORT: '0' },
     execArgv: vitestExecArgv,
     setupFiles: ['./scripts/test-proxy-environment.ts', './scripts/test-invariants.ts'],
     include: [

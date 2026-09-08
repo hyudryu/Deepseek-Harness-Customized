@@ -1,5 +1,5 @@
 # The dsh-headless bundle patch: one-shot task mode directly over dsh-base.
-# It mounts no Host, HTTP server, Web runtime, or browser plugin. An ordinary
+# It inherits session MCP without a Web runtime or browser plugin. An ordinary
 # provider plugin injects `cmdlineArgs`, parses the task positional
 # (`dsh --profile headless "<task>"`) and this app's --help, then the direct
 # driver creates an Agent through the core registry and prints its durable result.
@@ -14,6 +14,9 @@
     # Keep the same temporary process-wide PTC mode opt-in as the Web surface.
     mode: !!js process.env.DSH_TOOLS_MODE
 
+- id: session-mcp
+  inject: [headlessStartup]
+
 - insert:
     # PTC mode is a core execution capability, not a Web component.
     - id: code-runtime
@@ -25,6 +28,6 @@
     # Reads its task from the ordinary headlessStartup provider.
     - id: headless-runner
       name: '@deepseek-ai/dsh-headless'
-      inject: [headlessStartup]
+      inject: [headlessStartup, sessionMcp]
       config:
         task: !!js ctx.headlessStartup.task

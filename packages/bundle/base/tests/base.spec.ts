@@ -83,3 +83,53 @@ describe('dsh-base bundle', () => {
     expect(existsSync(resolve(root, 'windows.cordis.patch.yml'))).toBe(false)
   })
 })
+
+/** App rows wait for the MCP listener after command-line acceptance. */
+describe('session MCP profile startup', () => {
+  function patches(bundle: string): {
+    id?: string
+    inject?: string[]
+    config?: Record<string, unknown>
+    insert?: { id?: string; name?: string; inject?: string[]; config?: Record<string, unknown> }[]
+  }[] {
+    return yaml.load(readFileSync(new URL(`../../${bundle}/cordis.patch.yml`, import.meta.url), 'utf8'), {
+      schema: entryListSchema,
+    }) as ReturnType<typeof patches>
+  }
+
+  it.each([
+    ['headless', 'headlessStartup', 'headless-runner'],
+    ['sdk-app', 'sdkAppStartup', 'sdk-jsonrpc-server'],
+    ['acp-app', 'acpAppStartup', 'acp'],
+  ])('gates %s MCP and its application on accepted startup', (bundle, startup, app) => {
+    const rows = patches(bundle)
+    expect(rows.find(row => row.id === 'session-mcp')?.inject).toContain(startup)
+    expect(rows.flatMap(row => row.insert ?? []).find(row => row.id === app)?.inject).toContain('sessionMcp')
+  })
+
+  it('shares the Web listener and waits for its workspace registry', () => {
+    expect(patches('web-app').find(row => row.id === 'session-mcp')).toMatchObject({
+      inject: ['webStartup', 'webServer', 'workspaceRegistry'],
+      config: { transport: 'web-server', path: '/mcp' },
+    })
+  })
+
+  it('mounts standalone MCP and exact session reads in SDK minimal', () => {
+    const rows = patches('sdk-minimal').flatMap(row => row.insert ?? [])
+    expect(rows.find(row => row.id === 'session-mcp')).toMatchObject({
+      name: '@deepseek-ai/dsh-session-mcp', inject: ['sdkAppStartup'],
+      config: { transport: 'standalone', path: '/mcp' },
+    })
+    expect(rows.find(row => row.id === 'session-query-sqlite')).toMatchObject({
+      name: '@deepseek-ai/dsh-session-query-sqlite', config: { openAt: 'never' },
+    })
+    expect(rows.find(row => row.id === 'sdk-jsonrpc-server')?.inject).toContain('sessionMcp')
+  })
+
+  it('defaults to port 3080 and accepts an explicit OS-assigned port', () => {
+    const row = patches('base').flatMap(patch => patch.insert ?? []).find(candidate => candidate.id === 'session-mcp')
+    const expression = (row?.config?.port as { __jsExpr: string }).__jsExpr
+    expect(evaluate({ process: { env: {} } }, expression)).toBe(3080)
+    expect(evaluate({ process: { env: { DSH_SESSION_MCP_PORT: '0' } } }, expression)).toBe(0)
+  })
+})

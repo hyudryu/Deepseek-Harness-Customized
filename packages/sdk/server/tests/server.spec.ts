@@ -405,6 +405,66 @@ describe('HarnessSdkJsonRpcServer', () => {
     }
   })
 
+  it('announces child lineage before events appended by earlier creation listeners', async () => {
+    const ctx = new Context()
+    await ctx.plugin(SessionStore)
+    await ctx.plugin(AgentRegistry)
+    ctx.on('session/created', (session) => {
+      session.append('user/message', createUserMessage({
+        content: [{ type: 'text', text: 'creation input' }], source: { kind: 'user' },
+      }), { surfaceOp: 'append' })
+    })
+    const transport = new FakeTransport()
+    const server = new HarnessSdkJsonRpcServer(ctx, transport)
+    try {
+      const child = ctx.sessions.create(SessionId('early-child'), { meta: { parentSession: SessionId('parent') } })
+      child.append('user/message', createUserMessage({
+        content: [{ type: 'text', text: 'later input' }], source: { kind: 'user' },
+      }), { surfaceOp: 'append' })
+      expect(transport.notifications.map(notification => notification.method)).toEqual([
+        'subagent.started', 'session.event', 'session.event',
+      ])
+      expect(transport.notifications[0]?.params).toEqual({ parentSessionId: 'parent', childSessionId: 'early-child' })
+      expect(transport.notifications[1]?.params).toMatchObject({ sessionId: 'early-child', event: { type: 'user/message' } })
+      await server.shutdown()
+      const notificationCount = transport.notifications.length
+      ctx.sessions.create(SessionId('after-shutdown'), { meta: { parentSession: SessionId('parent') } })
+      expect(transport.notifications).toHaveLength(notificationCount)
+    } finally {
+      await server.shutdown()
+      await ctx.fiber.dispose()
+    }
+  })
+
+  it('announces attached ancestors before a nested creation listener emits a grandchild event', async () => {
+    const ctx = new Context()
+    await ctx.plugin(SessionStore)
+    await ctx.plugin(AgentRegistry)
+    ctx.on('session/created', (session) => {
+      if (session.id === SessionId('child')) {
+        ctx.sessions.create(SessionId('grandchild'), { meta: { parentSession: session.id } })
+      }
+      session.append('user/message', createUserMessage({
+        content: [{ type: 'text', text: 'creation input' }], source: { kind: 'user' },
+      }), { surfaceOp: 'append' })
+    })
+    const transport = new FakeTransport()
+    const server = new HarnessSdkJsonRpcServer(ctx, transport)
+    try {
+      ctx.sessions.create(SessionId('child'), { meta: { parentSession: SessionId('root') } })
+      expect(transport.notifications.map(notification => notification.method)).toEqual([
+        'subagent.started', 'subagent.started', 'session.event', 'session.event',
+      ])
+      expect(transport.notifications.slice(0, 2).map(notification => notification.params)).toEqual([
+        { parentSessionId: 'root', childSessionId: 'child' },
+        { parentSessionId: 'child', childSessionId: 'grandchild' },
+      ])
+    } finally {
+      await server.shutdown()
+      await ctx.fiber.dispose()
+    }
+  })
+
   it('creates an SDK session without an optional system prompt', { timeout: 15_000 }, async () => {
     const storageDir = await mkdtemp(join(tmpdir(), 'dsh-jsonrpc-no-system-'))
     const llmServer = await mockCompletionServer()

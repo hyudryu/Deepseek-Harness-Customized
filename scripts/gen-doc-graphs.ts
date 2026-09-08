@@ -355,6 +355,13 @@ const SERVICE_ROLES: ServiceRole[] = [
     note: 'Projects bounded current-surface conversation snapshots into durable untrusted message context; host adapters own mention syntax.',
   },
   {
+    key: 'sessionMcp',
+    pkg: 'session-mcp',
+    title: 'Local MCP session supervision',
+    mode: 'core',
+    note: 'Exposes passive project and session reads plus explicit process-local agent controls over HTTP.',
+  },
+  {
     key: 'sessionTitle',
     pkg: 'session-title',
     title: 'Log-backed session titles',

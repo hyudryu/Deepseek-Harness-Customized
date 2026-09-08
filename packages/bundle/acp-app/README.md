@@ -11,6 +11,8 @@ English | [中文](README.zh.md)
 
 The automation-only ACP stdio application as a `dsh` profile bundle over [`dsh-base`](../base/README.md). It inherits the base's disabled module-HMR policy; its patch sets the coding-agent persona and default model route, mounts an app-owned zero-option command provider, and starts [`dsh-acp`](../../acp/acp/README.md) only after that provider accepts the invocation. `dsh --profile acp --help` therefore writes help and exits without claiming stdin or stdout.
 
+The [session MCP server](../../mcp/session-mcp/README.md) starts automatically at `http://127.0.0.1:3080/mcp` and closes with the profile. App help exits before the MCP listener starts.
+
 ## Table of Contents
 
 - [Use this package](#use-this-package)

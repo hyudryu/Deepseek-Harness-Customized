@@ -12,7 +12,7 @@ import type { Agent, AgentHandle } from '@deepseek-ai/dsh-agent'
 import { admitEncodedImages, type EncodedImageAttachment, type ImageAttachmentRef } from '@deepseek-ai/dsh-attachment'
 import { createUserMessage, ReasoningEffortId, type ContentBlock, type LlmRuntime } from '@deepseek-ai/dsh-llm'
 import { carrierKeyOf, type Scoped } from '@deepseek-ai/dsh-scope'
-import type { SessionId } from '@deepseek-ai/dsh-session'
+import type { Session, SessionId } from '@deepseek-ai/dsh-session'
 import type SubagentRuntime from '@deepseek-ai/dsh-subagent'
 import type { SubagentRunEndInfo } from '@deepseek-ai/dsh-subagent'
 import * as LlmDeepSeek from '@deepseek-ai/dsh-llm-deepseek'
@@ -70,7 +70,8 @@ function successStatus(reason: string, options: HarnessSdkJsonRpcServerOptions):
 /**
  * SDK server over one booted harness context and transport peer. Construction
  * subscribes to session, agent, and subagent lifecycle events until shutdown;
- * reinitialization is unsupported.
+ * child lineage precedes its first event notification regardless of plugin
+ * listener registration order. Reinitialization is unsupported.
  */
 export class HarnessSdkJsonRpcServer {
   private cwd = process.cwd()
@@ -81,6 +82,7 @@ export class HarnessSdkJsonRpcServer {
   private llmFiber: { dispose(): Promise<void> } | undefined
   private readonly sessions = new Map<string, SessionRecord>()
   private readonly sessionCreations = new Map<string, Promise<SessionRecord>>()
+  private readonly announcedChildren = new WeakSet<Session>()
   private readonly disposers: (() => void)[] = []
   private shutdownTask: Promise<Record<string, never>> | undefined
   private shuttingDown = false
@@ -93,21 +95,14 @@ export class HarnessSdkJsonRpcServer {
   ) {
     const serverOptions = this.options
     this.disposers.push(ctx.on('session/event', (session, event) => {
+      this.announceChild(session)
       const payload: SessionEventNotification = { sessionId: String(session.id), event }
       this.transport.notify('session.event', payload)
     }))
     this.disposers.push(ctx.on('agent/status', ({ agent, status }) => {
       this.transport.notify('session.status', { sessionId: String(agent.session.id), status })
     }))
-    this.disposers.push(ctx.on('session/created', (session) => {
-      const parentSession = session.header.parentSession
-      if (parentSession === undefined) return
-      const payload: SubagentStartedNotification = {
-        parentSessionId: String(parentSession),
-        childSessionId: String(session.id),
-      }
-      this.transport.notify('subagent.started', payload)
-    }))
+    this.disposers.push(ctx.on('session/created', (session) => { this.announceChild(session) }))
     this.disposers.push(ctx.on('subagent/end', function (this: Scoped<SubagentRuntime>, info: SubagentRunEndInfo) {
       const parent = subagentParentOf(this)
       // This protocol reports only in-process child sessions. The service
@@ -125,6 +120,19 @@ export class HarnessSdkJsonRpcServer {
       }
       transport.notify('subagent.finished', payload)
     }))
+  }
+
+  private announceChild(session: Session): void {
+    const parentSession = session.header.parentSession
+    if (parentSession === undefined || this.announcedChildren.has(session)) return
+    this.announcedChildren.add(session)
+    const parent = this.ctx.get('sessions')?.get(parentSession)
+    if (parent !== undefined) this.announceChild(parent)
+    const payload: SubagentStartedNotification = {
+      parentSessionId: String(parentSession),
+      childSessionId: String(session.id),
+    }
+    this.transport.notify('subagent.started', payload)
   }
 
   /**

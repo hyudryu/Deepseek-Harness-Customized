@@ -92,6 +92,7 @@ export const SERVICE_PAGE: Record<string, string> = {
   sandboxPolicy: 'sandbox.md',
   sessionPersistence: 'persistence.md',
   sessionQuery: 'session-query.md',
+  sessionMcp: 'session.md',
   sessionFileReferences: 'session-reference.md',
   sessionReferenceResolver: 'session-reference.md',
   sessionProjectionCache: 'session-projection.md',

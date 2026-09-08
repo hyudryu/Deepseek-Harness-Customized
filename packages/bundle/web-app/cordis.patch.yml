@@ -40,6 +40,12 @@
 
 # `dsh.client` rows are the browser roster the modules node half scans into
 # window.__DSH_BOOT__; the modules row is simultaneously a host row.
+- id: session-mcp
+  inject: [webStartup, webServer, workspaceRegistry]
+  config:
+    transport: web-server
+    path: /mcp
+
 - insert:
     # Host-owned opt-in sampled when a new Web session receives its preset
     # delegation tools. The Plugins page edits this settings namespace.

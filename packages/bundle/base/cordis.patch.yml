@@ -107,6 +107,13 @@
     - id: llm-pi-ai
       name: '@deepseek-ai/dsh-llm-pi-ai'
 
+    - id: session-mcp
+      name: '@deepseek-ai/dsh-session-mcp'
+      config:
+        transport: standalone
+        port: !!js Number(process.env.DSH_SESSION_MCP_PORT ?? 3080)
+        path: /mcp
+
     - id: session-persistence-jsonl
       name: '@deepseek-ai/dsh-session-persistence-jsonl'
       config:

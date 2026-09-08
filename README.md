@@ -12,9 +12,18 @@ Documentation: [https://deepseek-harness.github.io/deepseek-harness/](https://de
 
 > **⚠️ Disclaimer:** These are **not** official DeepSeek features or plugins. They are personal additions to this fork, built for coding-agent workflows. Use them at your own discretion.
 
-This fork adds a custom update to DeepSeek Harness plus a set of installable plugin bundles. Expand each entry below for details.
+This fork adds custom updates to DeepSeek Harness plus a set of installable plugin bundles. Expand each entry below for details.
 
 ### Updates to DeepSeek Harness
+
+<details>
+<summary><b>Session MCP endpoint for external assistants</b> — click to expand</summary>
+
+Connect an MCP client to `http://127.0.0.1:3080/mcp` to browse projects, find saved sessions by title or ID, and read their transcripts and current status. Reading a saved session does not resume it. External clients can also queue or steer a message and request cancellation for a session already active in the same Harness process.
+
+Every shipped profile includes the endpoint, including Web launched through `RUN.bat`. The Web profile shares its HTTP port with the UI, so `--port` changes both addresses; other profiles use a configurable standalone listener. See the [session MCP reference](packages/mcp/session-mcp/README.md) for configuration, pagination, and control limits.
+
+</details>
 
 <details>
 <summary><b>English-only documentation for this custom fork</b> — click to expand</summary>

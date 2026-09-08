@@ -3,6 +3,20 @@
 # User profile, home, and invocation patches still apply above it.
 
 - insert:
+    - id: session-mcp
+      name: '@deepseek-ai/dsh-session-mcp'
+      inject: [sdkAppStartup]
+      config:
+        transport: standalone
+        port: !!js Number(process.env.DSH_SESSION_MCP_PORT ?? 3080)
+        path: /mcp
+
+    - id: session-query-sqlite
+      name: '@deepseek-ai/dsh-session-query-sqlite'
+      config:
+        path: ":memory:"
+        openAt: never
+
     - id: sdk-app-startup
       name: '@deepseek-ai/dsh-sdk-app'
       config:
@@ -10,7 +24,7 @@
 
     - id: sdk-jsonrpc-server
       name: '@deepseek-ai/dsh-sdk-jsonrpc-server'
-      inject: [sdkAppStartup, loader]
+      inject: [sdkAppStartup, loader, sessionMcp]
       config:
         maxTokensAsSuccess: false
 

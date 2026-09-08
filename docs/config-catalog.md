@@ -1855,6 +1855,40 @@ export type SessionLogCompressionLevel = 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9
 
 Source: [`packages/session-query/session-log-export/src/index.ts:45`](../packages/session-query/session-log-export/src/index.ts)
 
+<a id="deepseek-aidsh-session-mcp"></a>
+
+## `@deepseek-ai/dsh-session-mcp`
+
+Requires: `sessions` · `sessionQuery` · `agents`
+
+```ts config-catalog
+/** Session MCP deployment settings; Web transport uses the existing UI listener. */
+export interface Config {
+  /** Own a listener or register on the composed Web server. @default 'standalone' */
+  transport: 'standalone' | 'web-server'
+  /** Standalone loopback address. @default '127.0.0.1' */
+  host: '127.0.0.1' | '::1'
+  /** Standalone port; zero requests an OS-assigned port. @default 3080 */
+  port: number
+  /** Case-sensitive MCP pathname. @default '/mcp' */
+  path: string
+  /** Maximum entries in one list or transcript page. @default 100 */
+  maxPageSize: number
+  /** Maximum UTF-8 bytes in a complete tool response, including JSON-RPC. @default 65536 */
+  maxResponseBytes: number
+  /** Maximum UTF-8 bytes in an incoming HTTP request body. @default 65536 */
+  maxRequestBytes: number
+  /** Maximum request lifetime, including session reads; capped at the Node timer maximum. @default 30000 */
+  requestTimeoutMs: number
+  /** Maximum simultaneous MCP requests. @default 32 */
+  maxConcurrentRequests: number
+  /** Expose follow-up and stop tools for live, top-level sessions. @default true */
+  allowControl: boolean
+}
+```
+
+Source: [`packages/mcp/session-mcp/src/index.ts:13`](../packages/mcp/session-mcp/src/index.ts)
+
 <a id="deepseek-aidsh-session-persistence-jsonl"></a>
 
 ## `@deepseek-ai/dsh-session-persistence-jsonl`

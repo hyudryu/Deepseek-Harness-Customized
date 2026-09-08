@@ -26,6 +26,7 @@ const profiles = ['acp', 'sdk', 'session', 'web'] as const
 const snapshotAdapters = [
   'apps/web/tests/message-feedback-protocol.snapshot.ts',
   'apps/web/tests/minimal-preset.snapshot.ts',
+  'apps/web/tests/session-mcp-protocol.snapshot.ts',
   'snapshots/acp/acp.snapshot.ts',
   'snapshots/sdk/sdk.snapshot.ts',
   'snapshots/session/headless.snapshot.ts',

@@ -1,0 +1,359 @@
+[
+  {
+    "method": "initialize",
+    "params": {
+      "protocolVersion": "2025-03-26",
+      "capabilities": {},
+      "clientInfo": {
+        "name": "session-mcp-snapshot",
+        "version": "1.0.0"
+      }
+    },
+    "status": 200,
+    "response": {
+      "result": {
+        "protocolVersion": "2025-03-26",
+        "capabilities": {
+          "tools": {
+            "listChanged": true
+          }
+        },
+        "serverInfo": {
+          "name": "dsh-session-management",
+          "version": "0.1.3-alpha.1"
+        }
+      },
+      "jsonrpc": "2.0",
+      "id": 1
+    }
+  },
+  {
+    "method": "tools/list",
+    "params": {},
+    "status": 200,
+    "response": {
+      "result": {
+        "tools": [
+          {
+            "name": "list_projects",
+            "description": "List projects with their directories and session counts, including registered empty projects. Use a directory to narrow session discovery.",
+            "inputSchema": {
+              "$schema": "http://json-schema.org/draft-07/schema#",
+              "type": "object",
+              "properties": {
+                "offset": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 9007199254740991
+                },
+                "limit": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 100
+                }
+              }
+            },
+            "annotations": {
+              "readOnlyHint": true,
+              "destructiveHint": false,
+              "openWorldHint": false
+            },
+            "execution": {
+              "taskSupport": "forbidden"
+            }
+          },
+          {
+            "name": "list_sessions",
+            "description": "Find live and saved sessions by project directory and case-insensitive title or ID substring. Results include exact IDs, titles, availability, and activity in this harness process. Page through all candidates before choosing an ambiguous feature name.",
+            "inputSchema": {
+              "$schema": "http://json-schema.org/draft-07/schema#",
+              "type": "object",
+              "properties": {
+                "offset": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 9007199254740991
+                },
+                "limit": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 100
+                },
+                "projectDirectory": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 65536
+                },
+                "query": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 65536
+                }
+              }
+            },
+            "annotations": {
+              "readOnlyHint": true,
+              "destructiveHint": false,
+              "openWorldHint": false
+            },
+            "execution": {
+              "taskSupport": "forbidden"
+            }
+          },
+          {
+            "name": "get_session",
+            "description": "Read a session by exact ID or an unambiguous exact title without resuming it. Returns chronological events after afterSeq, a next-page cursor, and current activity. Use the ID returned by list_sessions when titles are ambiguous. Truncated events are explicitly marked.",
+            "inputSchema": {
+              "$schema": "http://json-schema.org/draft-07/schema#",
+              "type": "object",
+              "properties": {
+                "sessionId": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 65536
+                },
+                "title": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 65536
+                },
+                "projectDirectory": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 65536
+                },
+                "afterSeq": {
+                  "type": "integer",
+                  "minimum": -1,
+                  "maximum": 9007199254740991
+                },
+                "limit": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 100
+                }
+              }
+            },
+            "annotations": {
+              "readOnlyHint": true,
+              "destructiveHint": false,
+              "openWorldHint": false
+            },
+            "execution": {
+              "taskSupport": "forbidden"
+            }
+          },
+          {
+            "name": "send_message",
+            "description": "Send a follow-up to a top-level session active in this harness process. queue schedules another turn; steer submits input at the next step boundary. Acceptance does not mean completion; inspect get_session to monitor progress. Saved sessions are not resumed.",
+            "inputSchema": {
+              "$schema": "http://json-schema.org/draft-07/schema#",
+              "type": "object",
+              "properties": {
+                "sessionId": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 65536
+                },
+                "text": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 65536
+                },
+                "mode": {
+                  "default": "queue",
+                  "type": "string",
+                  "enum": [
+                    "queue",
+                    "steer"
+                  ]
+                }
+              },
+              "required": [
+                "sessionId",
+                "text"
+              ]
+            },
+            "annotations": {
+              "readOnlyHint": false,
+              "destructiveHint": false,
+              "openWorldHint": false
+            },
+            "execution": {
+              "taskSupport": "forbidden"
+            }
+          },
+          {
+            "name": "stop_session",
+            "description": "Request cancellation of the current work while preserving queued input for a top-level session active in this harness process. This does not delete the session. Read its status afterward to observe completion of cancellation.",
+            "inputSchema": {
+              "$schema": "http://json-schema.org/draft-07/schema#",
+              "type": "object",
+              "properties": {
+                "sessionId": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 65536
+                }
+              },
+              "required": [
+                "sessionId"
+              ]
+            },
+            "annotations": {
+              "readOnlyHint": false,
+              "destructiveHint": true,
+              "openWorldHint": false
+            },
+            "execution": {
+              "taskSupport": "forbidden"
+            }
+          }
+        ]
+      },
+      "jsonrpc": "2.0",
+      "id": 2
+    }
+  },
+  {
+    "method": "tools/call",
+    "params": {
+      "name": "list_projects",
+      "arguments": {
+        "limit": 1
+      }
+    },
+    "status": 200,
+    "response": {
+      "result": {
+        "content": [
+          {
+            "type": "text",
+            "text": "{\"items\":[{\"directory\":\"{{cwd}}\",\"title\":\"{{projectTitle}}\",\"sessionCount\":1}],\"total\":1,\"nextOffset\":null}"
+          }
+        ]
+      },
+      "jsonrpc": "2.0",
+      "id": 3
+    }
+  },
+  {
+    "method": "tools/call",
+    "params": {
+      "name": "list_sessions",
+      "arguments": {
+        "projectDirectory": "{{cwd}}",
+        "query": "inspection",
+        "limit": 1
+      }
+    },
+    "status": 200,
+    "response": {
+      "result": {
+        "content": [
+          {
+            "type": "text",
+            "text": "{\"items\":[{\"sessionId\":\"session-mcp-protocol\",\"title\":\"Session MCP inspection\",\"projectDirectory\":\"{{cwd}}\",\"createdAt\":1786406400000,\"status\":\"not_active_here\",\"attached\":false,\"persisted\":true}],\"total\":1,\"nextOffset\":null}"
+          }
+        ]
+      },
+      "jsonrpc": "2.0",
+      "id": 4
+    }
+  },
+  {
+    "method": "tools/call",
+    "params": {
+      "name": "get_session",
+      "arguments": {
+        "title": "Session MCP inspection",
+        "limit": 3
+      }
+    },
+    "status": 200,
+    "response": {
+      "result": {
+        "content": [
+          {
+            "type": "text",
+            "text": "{\"sessionId\":\"session-mcp-protocol\",\"title\":\"Session MCP inspection\",\"projectDirectory\":\"{{cwd}}\",\"status\":\"not_active_here\",\"capturedThroughSeq\":6,\"events\":[{\"type\":\"session/title\",\"data\":{\"title\":\"Session MCP inspection\",\"messageSeqs\":[],\"source\":{\"kind\":\"user\"}},\"seq\":0,\"time\":1786406400000},{\"type\":\"turn/start\",\"data\":{\"turn\":1},\"seq\":1,\"time\":1786406400001},{\"type\":\"user/message\",\"data\":{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"text\":\"Explain passive session inspection.\"}],\"source\":{\"kind\":\"user\"},\"id\":\"{{message:1}}\"},\"surfaceOp\":\"append\",\"seq\":2,\"time\":1786406400002}],\"nextAfterSeq\":2,\"hasMore\":true}"
+          }
+        ]
+      },
+      "jsonrpc": "2.0",
+      "id": 5
+    }
+  },
+  {
+    "method": "tools/call",
+    "params": {
+      "name": "get_session",
+      "arguments": {
+        "sessionId": "session-mcp-protocol",
+        "afterSeq": 2,
+        "limit": 100
+      }
+    },
+    "status": 200,
+    "response": {
+      "result": {
+        "content": [
+          {
+            "type": "text",
+            "text": "{\"sessionId\":\"session-mcp-protocol\",\"title\":\"Session MCP inspection\",\"projectDirectory\":\"{{cwd}}\",\"status\":\"not_active_here\",\"capturedThroughSeq\":6,\"events\":[{\"type\":\"step/start\",\"data\":{\"turn\":1,\"step\":1},\"seq\":3,\"time\":1786406400003},{\"type\":\"assistant/message\",\"data\":{\"turn\":1,\"step\":1,\"message\":{\"role\":\"assistant\",\"content\":[{\"type\":\"text\",\"text\":\"Read the saved conversation without resuming its agent.\"}],\"source\":{\"kind\":\"model\",\"provider\":\"fixture\",\"model\":\"fixture\"},\"id\":\"{{message:2}}\"},\"usage\":{\"inputTokens\":4,\"outputTokens\":12},\"stream\":[]},\"surfaceOp\":\"append\",\"seq\":4,\"time\":1786406400004},{\"type\":\"step/end\",\"data\":{\"turn\":1,\"step\":1},\"seq\":5,\"time\":1786406400005},{\"type\":\"turn/end\",\"data\":{\"turn\":1,\"reason\":{\"kind\":\"completed\"}},\"seq\":6,\"time\":1786406400006}],\"nextAfterSeq\":6,\"hasMore\":false}"
+          }
+        ]
+      },
+      "jsonrpc": "2.0",
+      "id": 6
+    }
+  },
+  {
+    "method": "tools/call",
+    "params": {
+      "name": "send_message",
+      "arguments": {
+        "sessionId": "session-mcp-protocol",
+        "text": "Do not resume this saved conversation.",
+        "mode": "queue"
+      }
+    },
+    "status": 200,
+    "response": {
+      "result": {
+        "content": [
+          {
+            "type": "text",
+            "text": "Session has no active agent in this harness process. MCP does not resume stored sessions."
+          }
+        ],
+        "isError": true
+      },
+      "jsonrpc": "2.0",
+      "id": 7
+    }
+  },
+  {
+    "method": "tools/call",
+    "params": {
+      "name": "stop_session",
+      "arguments": {
+        "sessionId": "session-mcp-protocol"
+      }
+    },
+    "status": 200,
+    "response": {
+      "result": {
+        "content": [
+          {
+            "type": "text",
+            "text": "Session has no active agent in this harness process. MCP does not resume stored sessions."
+          }
+        ],
+        "isError": true
+      },
+      "jsonrpc": "2.0",
+      "id": 8
+    }
+  }
+]

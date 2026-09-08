@@ -22,8 +22,12 @@ describe('dsh-sdk-app bundle', () => {
     ) as Array<{ id?: string; disabled?: boolean; insert?: Array<{ id?: string; inject?: string[]; name?: string }> }>
     expect(patches.find(patch => patch.id === 'hmr')).toBeUndefined()
     expect(patches.find(patch => patch.id === 'session-title-llm')).toMatchObject({ disabled: true })
+    expect(patches.find(patch => patch.id === 'session-mcp')).toEqual({
+      id: 'session-mcp',
+      inject: ['sdkAppStartup'],
+    })
     const rows = patches.flatMap(patch => patch.insert ?? [])
     expect(rows.find(row => row.id === 'sdk-app-startup')?.name).toBe('@deepseek-ai/dsh-sdk-app')
-    expect(rows.find(row => row.id === 'sdk-jsonrpc-server')?.inject).toEqual(['sdkAppStartup', 'loader'])
+    expect(rows.find(row => row.id === 'sdk-jsonrpc-server')?.inject).toEqual(['sdkAppStartup', 'loader', 'sessionMcp'])
   })
 })

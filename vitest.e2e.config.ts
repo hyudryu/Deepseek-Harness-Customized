@@ -38,6 +38,8 @@ export default defineConfig({
   // entirely.
   plugins: [tsconfigPaths({ projects: ['./tsconfig.base.json'] }), standardDecoratorPlugin()],
   test: {
+    // Concurrent profile subprocesses keep MCP enabled on independent OS-assigned ports.
+    env: { DSH_SESSION_MCP_PORT: '0' },
     execArgv: vitestExecArgv,
     setupFiles: ['./scripts/test-proxy-environment.ts', './scripts/test-invariants.ts'],
     // apps/cli only, not apps/*: apps/web/tests/*.e2e.ts needs the built

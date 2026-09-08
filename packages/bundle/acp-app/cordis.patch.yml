@@ -8,13 +8,16 @@
 - id: session-title-llm
   disabled: true
 
+- id: session-mcp
+  inject: [acpAppStartup]
+
 - insert:
     - id: acp-app-startup
       name: '@deepseek-ai/dsh-acp-app'
 
     - id: acp
       name: '@deepseek-ai/dsh-acp'
-      inject: [acpAppStartup]
+      inject: [acpAppStartup, sessionMcp]
       config:
         provider: deepseek-official
         model: deepseek-v4-flash

@@ -41,6 +41,7 @@ if errorlevel 1 goto :fail
 
 echo [3/3] starting dsh web (leave this window open; Ctrl+C to stop) ...
 echo When you see a http://127.0.0.1:%PORT%/?token=... line, open it in your browser.
+echo Session MCP endpoint: http://127.0.0.1:%PORT%/mcp
 call pnpm dsh web
 set EC=%errorlevel%
 echo.
