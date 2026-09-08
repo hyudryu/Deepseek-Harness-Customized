@@ -4,16 +4,16 @@
  * follows the user's pointer over the viewport. All data arrives through the
  * injected session verbs; the component holds only transient viewing state.
  */
-import { useEffect, useRef, useState } from 'react'
-import type { PropsLocale, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
-import type { BrowserSnapshot, BrowserActionEntry } from '@deepseek-ai/dsh-api-browser-controller/types'
+import { useLayoutEffect, useRef, useState } from 'react'
+import type { PropsLocale, PropsRuntime, InjectFace } from '@deepseek-ai/dsh-client-ui-slots'
+import type { BrowserActionEntry } from '@deepseek-ai/dsh-api-browser-controller/types'
 import type { BrowserInjected } from './index.ts'
 import css from './BrowserPanel.module.css'
 
 export type BrowserPanelProps =
   & PropsRuntime<'browser'>
   & PropsLocale<'browser'>
-  & BrowserInjected
+  & InjectFace<BrowserInjected>
 
 /** Screen-space cursor position over the viewport; fromUser distinguishes the agent vs the pointer. */
 interface CursorState { x: number; y: number; fromUser: boolean }
@@ -42,8 +42,8 @@ function ActionRow({ entry, t }: { entry: BrowserActionEntry; t: BrowserPanelPro
 }
 
 /** The browser panel occupant of the layout's 'browser' column. */
-export function BrowserPanel({ t, stream, start, navigate, stop }: BrowserPanelProps) {
-  const [snapshot, setSnapshot] = useState<BrowserSnapshot>({ open: false, url: '', title: '', actions: [] })
+export function BrowserPanel({ t, useBrowser, start, navigate, stop }: BrowserPanelProps) {
+  const { snapshot, error: streamError } = useBrowser(value => value)
   const [urlInput, setUrlInput] = useState('')
   const [cursor, setCursor] = useState<CursorState | null>(null)
   const [showActions, setShowActions] = useState(false)
@@ -51,39 +51,31 @@ export function BrowserPanel({ t, stream, start, navigate, stop }: BrowserPanelP
   const [pending, setPending] = useState(false)
   const viewportRef = useRef<HTMLDivElement | null>(null)
 
-  useEffect(() => {
-    const cancellation = new AbortController()
-    const iterator = stream()
-    void (async () => {
-      try {
-        for await (const snap of iterator) {
-          if (cancellation.signal.aborted) break
-          setSnapshot(snap)
-        }
-      } catch (cause) {
-        if (!cancellation.signal.aborted) setError(cause instanceof Error ? cause.message : String(cause))
-      }
-    })()
-    return () => {
-      cancellation.abort()
-      void iterator.dispose().catch(() => {
-        // The panel has unmounted; disposal failures have no remaining UI recipient.
-      })
+  const [viewport, setViewport] = useState({ width: 0, height: 0 })
+  useLayoutEffect(() => {
+    const element = viewportRef.current
+    if (element === null) return
+    const measure = () => {
+      const rect = element.getBoundingClientRect()
+      setViewport({ width: rect.width, height: rect.height })
     }
-    // The injected stream is stable for the session; run once per panel mount.
-  }, [stream])
+    measure()
+    const observer = new ResizeObserver(measure)
+    observer.observe(element)
+    return () => { observer.disconnect() }
+  }, [snapshot.open])
 
   const clickTarget = latestClick(snapshot.actions)
-  const agentCursor = (() => {
-    if (clickTarget?.clickX === undefined || clickTarget.clickY === undefined || viewportRef.current === null
-      || snapshot.frameWidth === undefined || snapshot.frameWidth === 0) return null
-    const rect = viewportRef.current.getBoundingClientRect()
-    return {
-      x: (clickTarget.clickX / snapshot.frameWidth) * rect.width,
-      y: (clickTarget.clickY / (snapshot.frameHeight ?? 1)) * rect.height,
+  const frameWidth = snapshot.frameWidth ?? 0
+  const frameHeight = snapshot.frameHeight ?? 0
+  const scale = frameWidth > 0 && frameHeight > 0
+    ? Math.min(viewport.width / frameWidth, viewport.height / frameHeight) : 0
+  const agentCursor = clickTarget?.clickX !== undefined && clickTarget.clickY !== undefined && scale > 0
+    ? {
+      x: (viewport.width - frameWidth * scale) / 2 + clickTarget.clickX * scale,
+      y: (viewport.height - frameHeight * scale) / 2 + clickTarget.clickY * scale,
       fromUser: false,
-    } satisfies CursorState
-  })()
+    } satisfies CursorState : null
   const shownCursor = cursor ?? agentCursor
 
   const onPointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
@@ -132,7 +124,7 @@ export function BrowserPanel({ t, stream, start, navigate, stop }: BrowserPanelP
         </button>
         {snapshot.open && <button type="button" className={css.button} disabled={pending} onClick={() => void run(stop)}>{t('stop')}</button>}
       </div>
-      {error !== '' && <div role="alert" className={css.error}>{error}</div>}
+      {(error !== '' || streamError !== '') && <div role="alert" className={css.error}>{error || streamError}</div>}
 
       {snapshot.open ? (
         <div

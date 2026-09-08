@@ -498,6 +498,8 @@ export interface DefineToolOptions<S extends ParameterSchemaSpec, O extends Valu
   }
   /** Optional positive cooperative timeout budget in milliseconds. */
   readonly timeoutMs?: number
+  /** Registry availability evaluated against the caller's resolved base definitions. */
+  availableWhen?: ToolDefinition['availableWhen']
   /**
    * Pure classifier for sibling overlap.
    * @param args - typed validated arguments.
@@ -568,6 +570,7 @@ export function defineTool<const S extends ParameterSchemaSpec, const O extends 
   const validate = (args: unknown): string[] => validateJsonSchemaValue(parameters, args, '')
   const tool: ToolDefinition = {
     name: options.name,
+    ...(options.availableWhen !== undefined ? { availableWhen: options.availableWhen } : {}),
     description: options.description,
     parameters: parameters as unknown as Record<string, unknown>,
     output: {

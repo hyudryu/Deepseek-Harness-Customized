@@ -4,6 +4,8 @@ Status: implemented
 
 English | [中文](2026-08-18-localized-bilingual-links.zh.md)
 
+The [English-only fork decision](2026-09-07-english-only-fork-documentation.md) supersedes this record's bilingual maintenance requirements. Its translation mechanics and original rationale remain historical context; they impose no Chinese document, sidecar, or translation-update obligation on this fork.
+
 ## Problem
 
 GitHub resolves repository Markdown links directly, without the documentation website's locale projector. Requiring both sides of a bilingual pair to retain the same raw `.md` destination therefore sends readers from Chinese source files to English pages even when a reviewed `.zh.md` sibling exists. The website masks this error by routing ordinary links through the current locale, so the repository source and the published site previously produced different navigation results.

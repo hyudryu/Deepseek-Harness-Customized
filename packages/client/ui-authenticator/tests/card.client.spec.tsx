@@ -3,6 +3,7 @@
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { makeTranslate } from '@deepseek-ai/dsh-client-test-runtime'
+import { createAuthenticatorActions } from '../src/client/actions.ts'
 import { AuthenticatorCard } from '../src/client/AuthenticatorCard.tsx'
 import { readAuthenticatorQr } from '../src/client/qr.ts'
 import { en } from '../src/client/locales.ts'
@@ -14,13 +15,13 @@ const response = (value: unknown, status = 200) => new Response(JSON.stringify(v
 beforeEach(() => { vi.useFakeTimers(); vi.setSystemTime(10000) })
 afterEach(() => { cleanup(); vi.useRealTimers(); vi.unstubAllGlobals(); vi.resetAllMocks() })
 async function open() {
-  render(<AuthenticatorCard t={t} />)
+  render(<AuthenticatorCard t={t} {...createAuthenticatorActions()} />)
   await act(async () => { fireEvent.click(screen.getByRole('button', { name: /Authenticator MCP/ })) })
 }
 it('loads only after expansion and pins the empty account view', async () => {
   const fetch = vi.fn(async () => response({ accounts: [] }))
   vi.stubGlobal('fetch', fetch)
-  const { container } = render(<AuthenticatorCard t={t} />)
+  const { container } = render(<AuthenticatorCard t={t} {...createAuthenticatorActions()} />)
   expect(fetch).not.toHaveBeenCalled()
   await act(async () => { fireEvent.click(screen.getByRole('button', { name: /Authenticator MCP/ })) })
   expect(container.textContent).toMatchInlineSnapshot('"Authenticator MCPImport authenticator QR codes and share current verification codes with session agents.Import QR codeNo authenticator accounts saved."')
@@ -121,4 +122,42 @@ it.each([
   await act(async () => { fireEvent.change(screen.getByLabelText('Import QR code'), { target: { files: [new File(['qr'], 'qr.png', { type: 'image/png' })] } }) })
   expect(screen.getByRole('alert').textContent).toBe(message)
   expect(screen.queryByText('raw server details')).toBeNull()
+})
+
+it('renders and mutates through injected callbacks without browser transport', async () => {
+  const loadAccounts = vi.fn(async () => [account])
+  const deleteAccount = vi.fn(async () => {})
+  const importAccount = vi.fn(async () => {})
+  const fetch = vi.fn(() => { throw new Error('presentation must not fetch') })
+  vi.stubGlobal('fetch', fetch)
+  render(<AuthenticatorCard t={t} loadAccounts={loadAccounts} importAccount={importAccount} deleteAccount={deleteAccount} />)
+  await act(async () => { fireEvent.click(screen.getByRole('button', { name: /Authenticator MCP/ })) })
+  expect(screen.getByLabelText('alice').textContent).toBe('123456')
+  fireEvent.click(screen.getByRole('button', { name: 'Delete alice' }))
+  await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Delete' })) })
+  expect(deleteAccount).toHaveBeenCalledWith(account.id)
+  vi.mocked(readAuthenticatorQr).mockResolvedValue('otpauth://totp/test?secret=TEST')
+  await act(async () => { fireEvent.change(screen.getByLabelText('Import QR code'), {
+    target: { files: [new File(['qr'], 'qr.png', { type: 'image/png' })] },
+  }) })
+  expect(importAccount).toHaveBeenCalledWith('otpauth://totp/test?secret=TEST')
+  expect(fetch).not.toHaveBeenCalled()
+})
+
+it('shows a localized error when the account endpoint rejects access', async () => {
+  vi.stubGlobal('fetch', vi.fn(async () => response({ error: 'forbidden' }, 403)))
+  await open()
+  expect(screen.getByRole('alert').textContent).toBe(en.failed)
+  expect(screen.queryByLabelText('alice')).toBeNull()
+})
+
+
+it('reports a concurrent deletion as account not found without a success notice', async () => {
+  vi.stubGlobal('fetch', vi.fn(async (path: string) => path === '/authenticator/delete'
+    ? response({ removed: false }) : response({ accounts: [account] })))
+  await open()
+  fireEvent.click(screen.getByRole('button', { name: 'Delete alice' }))
+  await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Delete' })) })
+  expect(screen.getByRole('alert').textContent).toMatchInlineSnapshot('"This authenticator account no longer exists. Refresh the account list."')
+  expect(screen.queryByText(en.deleted)).toBeNull()
 })

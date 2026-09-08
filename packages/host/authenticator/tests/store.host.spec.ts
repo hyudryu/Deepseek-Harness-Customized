@@ -4,6 +4,8 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, expect, it, vi } from 'vitest'
 import { Secret } from 'otpauth'
+import { Context } from '@deepseek-ai/cordis'
+import { Config, apply } from '../src/index.ts'
 import { AuthenticatorStore } from '../src/store.ts'
 
 const paths: string[] = []
@@ -14,7 +16,7 @@ async function fixture() {
   const directory = await mkdtemp(join(tmpdir(), 'dsh-authenticator-'))
   paths.push(directory)
   const filename = join(directory, 'private', 'accounts.json')
-  return { filename, store: new AuthenticatorStore(filename) }
+  return { filename, store: new AuthenticatorStore(filename, Config({ maxAccounts: 100, maxMetadataBytes: 256 })) }
 }
 
 it('matches RFC 6238 SHA1 vectors truncated to six digits and preserves leading zeroes', async () => {
@@ -32,7 +34,7 @@ it('matches RFC 6238 SHA1 vectors truncated to six digits and preserves leading 
 it('persists imports across instances, refuses duplicates, and permanently removes an account', async () => {
   const { store, filename } = await fixture()
   const account = await store.importUri(uri)
-  const reopened = new AuthenticatorStore(filename)
+  const reopened = new AuthenticatorStore(filename, Config({ maxAccounts: 100, maxMetadataBytes: 256 }))
   expect(await reopened.list()).toEqual([account])
   await expect(reopened.importUri(uri)).rejects.toThrow('already stored')
   expect(await reopened.remove(account.id)).toBe(true)
@@ -70,7 +72,7 @@ it('samples the clock after asynchronous storage work so rollover does not retur
 
 it('serializes concurrent writers without dropping accounts', async () => {
   const { store, filename } = await fixture()
-  const other = new AuthenticatorStore(filename)
+  const other = new AuthenticatorStore(filename, Config({ maxAccounts: 100, maxMetadataBytes: 256 }))
   await Promise.all([store.importUri(uri), other.importUri('otpauth://totp/Other:bob?secret=JBSWY3DPEHPK3PXP&issuer=Other')])
   expect(await store.list()).toHaveLength(2)
 })
@@ -108,4 +110,42 @@ it('preserves invalid durable input and redacts schema diagnostics', async () =>
   await expect(store.list()).rejects.toThrow('existing file was preserved')
   await expect(store.importUri(uri)).rejects.toThrow('existing file was preserved')
   expect(await readFile(filename, 'utf8')).toContain('DO-NOT-ECHO')
+})
+
+
+it('bounds count and UTF-8 metadata without replacing oversized existing storage', async () => {
+  const { filename, store } = await fixture()
+  await store.importUri(uri)
+  const original = await readFile(filename, 'utf8')
+  const bounded = new AuthenticatorStore(filename, { maxAccounts: 1, maxMetadataBytes: 7 })
+  expect(await bounded.list()).toHaveLength(1)
+  await expect(bounded.importUri('otpauth://totp/bob?secret=JBSWY3DPEHPK3PXP')).rejects.toThrow('configured limits')
+  expect(await readFile(filename, 'utf8')).toBe(original)
+  const narrow = new AuthenticatorStore(filename, { maxAccounts: 1, maxMetadataBytes: 6 })
+  await expect(narrow.codes()).rejects.toThrow('existing file was preserved')
+  await expect(narrow.importUri(uri)).rejects.toThrow('configured limits')
+  expect(await readFile(filename, 'utf8')).toBe(original)
+  const other = await fixture()
+  const unicode = new AuthenticatorStore(other.filename, { maxAccounts: 1, maxMetadataBytes: 3 })
+  await unicode.importUri('otpauth://totp/%E7%95%8C?secret=JBSWY3DPEHPK3PXP')
+  await expect(unicode.importUri('otpauth://totp/%E7%95%8Ca?secret=JBSWY3DPEHPK3PXP')).rejects.toThrow('configured limits')
+})
+
+it('rejects invalid account limits at plugin load', () => {
+  for (const value of [0, -1, 1.5, Infinity, NaN]) {
+    expect(() => { apply(new Context(), { maxAccounts: value, maxMetadataBytes: 256 }) }).toThrow()
+    expect(() => { apply(new Context(), { maxAccounts: 100, maxMetadataBytes: value }) }).toThrow()
+  }
+})
+
+
+it('rejects an existing account count above the configured limit without truncating it', async () => {
+  const { store, filename } = await fixture()
+  await store.importUri(uri)
+  await store.importUri('otpauth://totp/bob?secret=JBSWY3DPEHPK3PXP')
+  const original = await readFile(filename, 'utf8')
+  const bounded = new AuthenticatorStore(filename, { maxAccounts: 1, maxMetadataBytes: 256 })
+  await expect(bounded.list()).rejects.toThrow('existing file was preserved')
+  await expect(bounded.codes()).rejects.toThrow('existing file was preserved')
+  expect(await readFile(filename, 'utf8')).toBe(original)
 })

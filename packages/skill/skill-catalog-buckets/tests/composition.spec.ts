@@ -29,7 +29,7 @@ afterEach(async () => {
   directory = undefined
 })
 
-async function boot(): Promise<{ context: Context; agent: Agent }> {
+async function boot(descriptionMaxLength = 160): Promise<{ context: Context; agent: Agent }> {
   directory = await mkdtemp(join(tmpdir(), 'dsh-skill-buckets-'))
   for (const [name, description, body, invocation] of [
     ['aws-alpha', 'AWS deployment', 'Inspect the requested AWS resource.', ''],
@@ -53,7 +53,7 @@ async function boot(): Promise<{ context: Context; agent: Agent }> {
   await writeFile(configFile, [...plugins.keys()].map((name) => {
     const extra = name === 'agent-loop' ? '  config:\n    agents: []\n'
       : name === 'skill-filesystem' ? `  config:\n    includeDefaultRoots: false\n    customSkillDirs: [${JSON.stringify(join(directory!, '.dsh', 'skills'))}]\n    watch: false\n`
-        : name === 'skill-buckets' ? '  config:\n    pageSize: 1\n' : ''
+        : name === 'skill-buckets' ? `  config:\n    pageSize: 1\n    descriptionMaxLength: ${descriptionMaxLength}\n` : ''
     return `- id: ${name}\n  name: ${name}\n${extra}`
   }).join(''))
   const context = ctx = new Context()
@@ -140,7 +140,8 @@ it('projects the agent-scoped skill consumer through the global bucket plugin', 
   await scope.ctx.plugin(ToolSkill)
   expect(context.tools.get('skill')).toBeUndefined()
   expect(context.tools.get('skill', agent)).toBeDefined()
-  expect(context.tools.get('skill_catalog', agent)).toBe(context.tools.get('skill_catalog'))
+  expect(context.tools.get('skill_catalog')).toBeUndefined()
+  expect(context.tools.get('skill_catalog', agent)).toBeDefined()
   const catalog = await publish(context, agent)
   expect(catalog).toContain('available_skill_buckets')
   expect(catalog).toContain('aws')
@@ -229,4 +230,37 @@ it('refreshes equal-sized bucket membership changes without injecting the full s
   expect(second).not.toContain('aws-second')
   expect(second).not.toContain('First body')
   expect(await publish(context, agent)).toBe('[]')
+})
+
+it.each(['omitted', 'denied', 'shadowed'] as const)('denies discovery when the exact loader is %s', async (mode) => {
+  const { context, agent } = await boot()
+  let scope!: Scope
+  await context.plugin(Object.assign((inner: Context) => { scope = createScope(inner, agent) }, { inject: ['tools'] }))
+  if (mode === 'omitted') {
+    await Array.from(context.loader.entries()).find(entry => entry.options.id === 'tool-skill')!.fiber!.dispose()
+  } else if (mode === 'denied') {
+    scope.ctx.tools.restrict({ deny: ['skill'] })
+  } else {
+    scope.ctx.tools.register(defineContentToolFixture({
+      name: 'skill', description: 'Unrelated scoped tool', parameters: {}, execute: async () => [],
+    }))
+  }
+  expect(await publish(context, agent)).not.toContain('available_skill_buckets')
+  const result = await context.tools.execute({
+    name: 'skill_catalog', arguments: { bucket: 'aws' }, agent,
+    callId: ToolCallId('unavailable-loader'), signal: new AbortController().signal,
+  })
+  expect(result.isError).toBe(true)
+  expect(context.tools.schemas(agent).map(schema => schema.name)).not.toContain('skill_catalog')
+  expect(context.tools.get('skill_catalog', agent)).toBeUndefined()
+  expect(JSON.stringify(result.content)).not.toContain('aws-alpha')
+})
+
+it.each([3, 12, 160])('bounds complete durable bucket summaries to %i characters', async (limit) => {
+  const { context, agent } = await boot(limit)
+  await publish(context, agent)
+  const catalog = agent.session.snapshotEvents().find(event =>
+    event.type === 'user/message' && event.data.source.kind === 'skill-catalog')
+  if (catalog?.type !== 'user/message' || catalog.data.source.kind !== 'skill-catalog') throw new Error('Missing catalog')
+  for (const entry of catalog.data.source.entries) expect(entry.description.length).toBeLessThanOrEqual(limit)
 })

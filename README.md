@@ -1,6 +1,6 @@
 # DeepSeek Harness
 
-English | [中文](README.zh.md)
+This personal fork maintains documentation in English only. Existing translations are legacy material and may be outdated; updates do not require translated counterparts. See the [documentation language policy](docs/i18n/README.md).
 
 DeepSeek Harness (`dsh`) is an open-source agent harness developed by [DeepSeek AI](https://deepseek.com).
 
@@ -15,6 +15,13 @@ Documentation: [https://deepseek-harness.github.io/deepseek-harness/](https://de
 This fork adds a custom update to DeepSeek Harness plus a set of installable plugin bundles. Expand each entry below for details.
 
 ### Updates to DeepSeek Harness
+
+<details>
+<summary><b>English-only documentation for this custom fork</b> — click to expand</summary>
+
+Maintain READMEs, documentation, and contributor templates in English without creating Chinese counterparts or translation records. Documentation checks and website publishing accept English sources independently; existing translations remain optional legacy references. Every feature, improvement, and plugin is documented in an expandable entry in this section so users can find this fork's additions and their usage or setup.
+
+</details>
 
 <details>
 <summary><b>ui-workspace: `sidebar.workspaces.actions` slot for feature plugins</b> — click to expand</summary>

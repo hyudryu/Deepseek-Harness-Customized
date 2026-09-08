@@ -2,5 +2,5 @@
 # side as of the last confirmed-consistent state. Both languages carry equal authority;
 # after editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write .agents/notes/implemented/feature/2026-09-07-tailscale-mobile-access.md
-2026-09-07-tailscale-mobile-access.md: 9a26775709f4499ef33ce33d81ecf61f68ecdf76
-2026-09-07-tailscale-mobile-access.zh.md: 81d50a7993b3313208b6bc9ddb9e5004608b7a1d
+2026-09-07-tailscale-mobile-access.md: de483fb4c6cfd48b4f438918aadec15add83ece3
+2026-09-07-tailscale-mobile-access.zh.md: 8a1b099479e308a5d5301238dadafe799a8c2b5c

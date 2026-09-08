@@ -717,3 +717,39 @@ describe('scoped execution dispatch', () => {
     ]))
   })
 })
+
+it('uses one resolved base view for availability in schemas, lookup, and dispatch', async () => {
+  const ctx = await mount()
+  try {
+    const loader = tool('loader')
+    const disposeLoader = ctx.tools.register(loader)
+    ctx.tools.register({ ...tool('discovery'), availableWhen: definitions => definitions.get('loader') === loader })
+    const { scope, key } = await mintAgentScope(ctx, 'restricted')
+    expect(ctx.tools.schemas(key).map(schema => schema.name)).toContain('discovery')
+    const undo = scope.ctx.tools.restrict({ deny: ['loader'] })
+    expect(ctx.tools.get('discovery', key)).toBeUndefined()
+    expect(ctx.tools.schemas(key).map(schema => schema.name)).not.toContain('discovery')
+    expect(await run(ctx, 'discovery', key)).not.toContain('ran:discovery')
+    undo()
+    const unshadow = scope.ctx.tools.register(tool('loader'))
+    expect(ctx.tools.get('discovery', key)).toBeUndefined()
+    unshadow()
+    expect(ctx.tools.get('discovery', key)).toBeDefined()
+    disposeLoader()
+    expect(ctx.tools.get('discovery', key)).toBeUndefined()
+  } finally {
+    await ctx.fiber.dispose()
+  }
+})
+
+it('availability predicates observe base definitions without recursive filtering', async () => {
+  const ctx = await mount()
+  try {
+    const hidden = { ...tool('hidden'), availableWhen: () => false }
+    ctx.tools.register(hidden)
+    ctx.tools.register({ ...tool('observer'), availableWhen: definitions => definitions.get('hidden') === hidden })
+    expect(ctx.tools.schemas().map(schema => schema.name)).toEqual(['observer'])
+  } finally {
+    await ctx.fiber.dispose()
+  }
+})

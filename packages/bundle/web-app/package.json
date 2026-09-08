@@ -81,7 +81,6 @@
     "@deepseek-ai/dsh-client-ui-reference": "workspace:^",
     "@deepseek-ai/dsh-client-ui-subagent": "workspace:^",
     "@deepseek-ai/dsh-client-ui-jobs": "workspace:^",
-    "@deepseek-ai/dsh-client-ui-browser": "workspace:^",
     "@deepseek-ai/dsh-client-ui-theme": "workspace:^",
     "@deepseek-ai/dsh-client-ui-tool": "workspace:^",
     "@deepseek-ai/dsh-client-ui-workflow-run": "workspace:^",
@@ -107,7 +106,6 @@
     "@deepseek-ai/dsh-session-stats": "workspace:^",
     "@deepseek-ai/dsh-session-turn-outline": "workspace:^",
     "@deepseek-ai/dsh-api-session-controller": "workspace:^",
-    "@deepseek-ai/dsh-api-browser-controller": "workspace:^",
     "@deepseek-ai/dsh-api-settings-controller": "workspace:^",
     "@deepseek-ai/dsh-api-workspace-controller": "workspace:^",
     "@deepseek-ai/dsh-subprocess": "workspace:^",
@@ -118,7 +116,9 @@
     "@deepseek-ai/dsh-host-mobile-access": "workspace:^",
     "@deepseek-ai/dsh-host-authenticator": "workspace:^",
     "@deepseek-ai/dsh-client-ui-mobile-access": "workspace:^",
-    "@deepseek-ai/dsh-client-ui-authenticator": "workspace:^"
+    "@deepseek-ai/dsh-client-ui-authenticator": "workspace:^",
+    "@deepseek-ai/dsh-api-usage-controller": "workspace:^",
+    "@deepseek-ai/dsh-client-ui-settings-usage": "workspace:^"
   },
   "peerDependencies": {
     "@deepseek-ai/cordis-plugin-loader": "workspace:^",

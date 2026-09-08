@@ -27,6 +27,8 @@ Reference for local six-digit TOTP accounts. The plugin mounts in the Web profil
 
 Imports accept standard `otpauth://totp/` URIs with six digits, SHA1/SHA256/SHA512 and a positive period of at most 3600 seconds. Duplicate secrets or issuer/label pairs are rejected. Deletion removes the account from the committed document; it does not promise forensic erasure from backups or filesystem history.
 
+`maxAccounts` (100 by default) bounds every account list; `maxMetadataBytes` (256 by default) bounds each label and issuer in UTF-8 bytes. Both must be positive safe integers. Imports enforce these limits under the writer lock, and reads reject oversized existing documents without overwriting or truncating them. The combined count and metadata limits bound complete native-tool, MCP and Settings account projections, including JSON escaping and fixed metadata. Raise the configured limits to access an existing larger store.
+
 <a id="authenticated-operations"></a>
 ## Authenticated operations
 
@@ -50,7 +52,7 @@ No invariant companion is published: account projections and codes are computed 
 
 #### Token effect
 
-Two tool definitions add a fixed prompt cost. Account discovery grows with the stored account count; code retrieval returns one account. The plugin adds no system prompt section and performs no background model requests.
+Two tool definitions add a fixed prompt cost. Account discovery grows within the configured account and metadata limits; code retrieval returns one account. The plugin adds no system prompt section and performs no background model requests.
 
 #### KV Cache effect
 

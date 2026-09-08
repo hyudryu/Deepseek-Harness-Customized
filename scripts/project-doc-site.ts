@@ -148,6 +148,8 @@ function githubTarget(
 
 /**
  * Rewrite repository-relative links without reserializing Markdown.
+ * Declared self-translation aliases may target an absent legacy translation;
+ * other relative targets must exist in the repository.
  *
  * @param source Markdown text from the canonical file.
  * @param options Source, route, manifest, and repository context.
@@ -163,7 +165,19 @@ export function rewriteMarkdown(source: string, options: RewriteMarkdownOptions)
     if (isExternalOrAbsoluteMarkdownUrl(node.url)) return
     const { path, suffix } = splitMarkdownUrlTarget(node.url)
     if (path === '') return
-    const { absPath, line } = resolveRepositoryTarget(sourceAbs, path, options.repoRoot)
+    const candidate = resolve(dirname(sourceAbs), decodePath(path))
+    const candidatePath = repoPath(candidate, options.repoRoot)
+    const aliasLocale = options.locale === 'root' ? 'en' : 'root'
+    const aliasPage = published.get(candidatePath)?.get(aliasLocale)
+    // Legacy self-translation aliases resolve to this English source even when
+    // the optional translated file is absent. Other targets still need files.
+    const optionalTranslation = node.type !== 'image'
+      && !options.sourcePath.endsWith('.zh.md')
+      && candidatePath === counterpartSource(options.sourcePath)
+      && aliasPage?.source === options.sourcePath
+    const { absPath, line } = optionalTranslation
+      ? { absPath: candidate, line: undefined }
+      : resolveRepositoryTarget(sourceAbs, path, options.repoRoot)
     const targetPath = repoPath(absPath, options.repoRoot)
     const isLanguageSwitcher = targetPath === counterpartSource(options.sourcePath)
     const targetLocale: DocsLocale = isLanguageSwitcher
@@ -541,8 +555,8 @@ export interface LlmsTxtSite {
 
 /** Locale groups llms.txt lists, in the order the site's navigation presents them. */
 const llmsTxtLocales: readonly { heading: string; locale: DocsLocale }[] = [
-  { heading: '简体中文', locale: 'root' },
-  { heading: 'English', locale: 'en' },
+  { heading: 'English (root routes)', locale: 'root' },
+  { heading: 'English (/en/ compatibility routes)', locale: 'en' },
 ]
 
 /**
@@ -553,7 +567,7 @@ const llmsTxtLocales: readonly { heading: string; locale: DocsLocale }[] = [
  * agent-facing entry point itself.
  *
  * @param site Site identity and base path.
- * @returns llms.txt content listing both locale trees.
+ * @returns llms.txt content listing both English route trees.
  */
 export function llmsTxt(site: LlmsTxtSite): string {
   const lines = [
@@ -561,7 +575,7 @@ export function llmsTxt(site: LlmsTxtSite): string {
     '',
     `> ${site.description}`,
     '',
-    '页面 URL 去掉末尾斜杠再加 `.md` 即为该页原始 Markdown(根路径用 `/index.md`);下方列表是各页精确地址。Drop any trailing slash and append `.md` to a page URL for its raw Markdown (the site root is `/index.md`); the list below carries the exact addresses.',
+    'Drop any trailing slash and append `.md` to a page URL for its raw Markdown (the site root is `/index.md`); the list below carries the exact addresses.',
   ]
   for (const { heading, locale } of llmsTxtLocales) {
     lines.push('', `## ${heading}`, '')

@@ -11,6 +11,8 @@ kind: "package-reference"
 
 此插件允许经过身份验证的桌面用户通过 Tailscale 启用移动访问。它在计算机的 Tailscale IPv4 地址上使用桌面端口提供现有应用，共享会话、设置、路由和浏览器身份验证。
 
+公布的主机地址遵循 URL 规范化规则，省略 HTTP 默认端口 80。
+
 ## 目录
 
 - [使用此包](#use-this-package)

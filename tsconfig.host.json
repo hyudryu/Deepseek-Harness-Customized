@@ -8,6 +8,7 @@
     "rewriteRelativeImportExtensions": false
   },
   "include": [
+    "apps/web/tests/browser-control.e2e.ts",
     "apps/web/tests/scaffold.ts",
     "apps/web/tests/scaffold-generation.spec.ts",
     "apps/web/tests/default-model.e2e.ts",
@@ -32,8 +33,10 @@
     "apps/web/tests/details-session-lifecycle.e2e.ts",
     "apps/web/tests/plugin-config.e2e.ts",
     "apps/web/tests/settings-chrome.e2e.ts",
+    "apps/web/tests/usage-settings.e2e.ts",
     "apps/web/tests/models-settings.e2e.ts",
     "apps/web/tests/mobile-authenticator.e2e.ts",
+    "apps/web/tests/browser-optional.e2e.ts",
     "apps/web/tests/onboarding-deepseek-config.e2e.ts",
     "apps/web/tests/onboarding-usable-provider.e2e.ts",
     "apps/web/tests/remote-welcome.e2e.ts",
@@ -160,6 +163,7 @@
     { "path": "./packages/api/remotes/tsconfig.host.json" },
     { "path": "./packages/api/session-controller/tsconfig.host.json" },
     { "path": "./packages/api/settings-controller" },
+    { "path": "./packages/api/usage-controller" },
     { "path": "./packages/api/workspace-controller/tsconfig.host.json" },
     { "path": "./packages/api/browser-controller/tsconfig.host.json" },
     { "path": "./packages/typert/loader" },

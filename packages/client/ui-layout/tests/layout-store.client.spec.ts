@@ -8,6 +8,7 @@
 import { beforeEach, describe, expect, it } from 'vitest'
 import { createLayoutStore } from '@deepseek-ai/dsh-client-ui-layout/src/client/stores.ts'
 import {
+  BROWSER_DEFAULT, BROWSER_MAX, BROWSER_MIN,
   DETAILS_DEFAULT, DETAILS_MAX, DETAILS_MIN,
   SIDEBAR_DEFAULT, SIDEBAR_MAX, SIDEBAR_MIN,
 } from '@deepseek-ai/dsh-client-ui-layout/src/client/columns.ts'
@@ -103,6 +104,8 @@ describe('createLayoutStore', () => {
     first.actions.setSidebar(400)
     first.actions.openDetails()
     first.actions.setDetails(500)
+    first.actions.openBrowser()
+    first.actions.setBrowser(600)
     expect(localStorage.getItem(PERSIST_KEY)).toBeNull()
 
     const second = createLayoutStore().create()
@@ -113,5 +116,21 @@ describe('createLayoutStore', () => {
       narrow: false,
       narrowExpanded: false,
     })
+  })
+
+  it('clamps browser drag widths and preserves an open width until explicitly closed', () => {
+    const { store, actions } = createLayoutStore().create()
+    actions.openBrowser()
+    expect(store.getSnapshot().browser).toBe(BROWSER_DEFAULT)
+    actions.setBrowser(1)
+    expect(store.getSnapshot().browser).toBe(BROWSER_MIN)
+    actions.setBrowser(9999)
+    expect(store.getSnapshot().browser).toBe(BROWSER_MAX)
+    actions.openBrowser()
+    expect(store.getSnapshot().browser).toBe(BROWSER_MAX)
+    actions.closeBrowser()
+    expect(store.getSnapshot().browser).toBe(0)
+    actions.openBrowser()
+    expect(store.getSnapshot().browser).toBe(BROWSER_DEFAULT)
   })
 })

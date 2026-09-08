@@ -42,7 +42,7 @@ Mount this plugin alongside the registry, a provider, and the existing loader:
 |---|---|---|
 | `buckets` | AWS, MCP, reviews, security | Ordered categories with unique kebab-case `name`, nonempty `description`, and nonempty keyword phrases; `other` is reserved |
 | `pageSize` | `20` | Summaries per response, integer from 1 to 100 |
-| `descriptionMaxLength` | `160` | Normalized description character limit, integer from 3 to 2000 |
+| `descriptionMaxLength` | `160` | Complete normalized summary character limit including count suffix and ellipsis, integer from 3 to 2000 |
 
 The generated [configuration catalog](../../../docs/config-catalog.md#deepseek-aidsh-skill-catalog-buckets) lists accepted fields. Set these fields on the plugin row in the profile configuration. Custom categories replace the default category rules; the fallback remains available.
 
@@ -50,7 +50,7 @@ The generated [configuration catalog](../../../docs/config-catalog.md#deepseek-a
 
 The model selects a category and calls `skill_catalog` with its exact name. A result contains a page of names and summaries, the filtered total, and `nextOffset` when another page exists. The optional `query` filters text within the category; the model passes `nextOffset` as `offset` to continue. Full instructions still require `skill`, and explicit user `/name` invocation continues to load instructions directly.
 
-An unknown category or invalid offset fails the call. Incomplete provider discovery reports an error and asks for a retry; it does not publish a partial category list. Hidden or shadowed `skill_catalog` registrations leave the loader's default catalog presentation available.
+Discovery requires the exact skill loader to be available in the calling agent scope; omitting, denying, or shadowing that loader prevents enumeration. An unknown category or invalid offset fails the call. Incomplete provider discovery reports an error and asks for a retry; it does not publish a partial category list. Hidden or shadowed `skill_catalog` registrations leave the loader's default catalog presentation available.
 
 -----
 
@@ -85,7 +85,7 @@ The scoped `skill/catalog` listener delegates before supplying category text to 
 
 #### What the model sees
 
-The initial durable message contains this template, with one row per nonempty category. The `skill_catalog` tool schema is defined in the [generated tool catalog](../../../docs/tool-catalog.md#deepseek-aidsh-skill-catalog-buckets).
+The initial durable message contains this template, with one row per nonempty category. Each description and its count suffix are truncated together to `descriptionMaxLength`; tiny limits can omit the count. The `skill_catalog` tool schema is defined in the [generated tool catalog](../../../docs/tool-catalog.md#deepseek-aidsh-skill-catalog-buckets).
 
 ##### Category catalog template
 

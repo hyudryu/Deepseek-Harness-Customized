@@ -5,6 +5,7 @@
       name: '@deepseek-ai/dsh-skill-catalog-buckets'
       config:
         pageSize: 2
+        descriptionMaxLength: 40
 
 - id: skill-filesystem
   config:

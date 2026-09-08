@@ -32,7 +32,7 @@ The desktop listener must bind to loopback. Discovery uses an active Tailscale-n
 <a id="understand-the-implementation"></a>
 ## Understand the implementation
 
-The desktop-only `/mobile-access` endpoint accepts authenticated GET state reads and POST boolean updates. Listener updates are serialized, and successful replies describe committed listener state. The additional listener shares the [Web server](../webserver/README.md) dispatcher. It checks the exact Tailscale Host and same-origin browser headers before dispatch, and requires [browser authentication](../../client/connection/README.md) for assets, API calls, and upgrades; only the root token exchange precedes cookie authentication. Its authority grant applies only to requests received on that interface and is revoked on disable or plugin unload.
+The desktop-only `/mobile-access` endpoint accepts authenticated GET state reads and POST boolean updates. Listener updates are serialized, and successful replies describe committed listener state. The additional listener shares the [Web server](../webserver/README.md) dispatcher. The advertised authority follows URL canonicalization, omitting the default HTTP port 80. It checks the exact Tailscale Host and same-origin browser headers before dispatch, and requires [browser authentication](../../client/connection/README.md) for assets, API calls, and upgrades; only the root token exchange precedes cookie authentication. Its authority grant applies only to requests received on that interface and is revoked on disable or plugin unload.
 
 <a id="further-exploration"></a>
 ## Further Exploration

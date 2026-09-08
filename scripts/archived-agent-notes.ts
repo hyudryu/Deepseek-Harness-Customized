@@ -94,7 +94,7 @@ function pairMeta(content: string): Map<string, string> | undefined {
   return entries
 }
 
-function validateHeader(path: string, content: Buffer, sourceBase: string, chinese: boolean): string[] {
+function validateHeader(path: string, content: Buffer, sourceBase: string, chinese?: boolean): string[] {
   const errors: string[] = []
   const lines = content.toString('utf8').split('\n')
   if (!/^# Agent Note: \S/.test(lines[0] ?? '')) errors.push(`${path}: line 1 must be \`# Agent Note: <title>\``)
@@ -107,6 +107,7 @@ function validateHeader(path: string, content: Buffer, sourceBase: string, chine
     errors.push(`${path}: archive date ${archived} predates the note filename`)
   }
   if (lines[4] !== '') errors.push(`${path}: line 5 must be blank`)
+  if (chinese === undefined) return errors
   const switcher = chinese
     ? `[English](${sourceBase}.md) | 中文`
     : `English | [中文](${sourceBase}.zh.md)`
@@ -114,7 +115,7 @@ function validateHeader(path: string, content: Buffer, sourceBase: string, chine
   return errors
 }
 
-/** Validate the closed kind tree, implemented/archive headers, and complete bilingual triplets. */
+/** Validate the closed kind tree, implemented/archive headers, and English notes with optional legacy bilingual triplets. */
 export function validateArchiveArtifacts(artifacts: ReadonlyMap<string, Buffer>): string[] {
   const errors: string[] = []
   const triplets = new Map<string, Triplet>()
@@ -141,6 +142,10 @@ export function validateArchiveArtifacts(artifacts: ReadonlyMap<string, Buffer>)
     const zhPath = `${key}.zh.md`
     const metaPath = `${key}.i18n.yaml`
     const { source, zh, meta } = triplet
+    if (source !== undefined && zh === undefined && meta === undefined) {
+      errors.push(...validateHeader(sourcePath, source, basename(key)))
+      continue
+    }
     const missing = [
       source === undefined ? sourcePath : undefined,
       zh === undefined ? zhPath : undefined,

@@ -14,6 +14,10 @@ The [layout](../../../../packages/client/ui-layout/README.md) owns a top-right `
 
 The [controller](../../../../packages/api/browser-controller/README.md) subscribes before reading its opening snapshot and awaits context closure before acknowledging a close. The browser-control provider tracks Playwright context closure through its close event and shares in-progress context creation between callers. Snapshot frames and action history come from that same context.
 
+The optional browser-control bundle mounts the provider, controller, and UI together. Opening requires a live Session; the stream retains only the latest pending replacement snapshot. A framework-bound observable owns client subscriptions across closed and reopened browser contexts. Failed context closure propagates and retains retryable provider state. Screenshot cursor coordinates account for letterboxing, and each resize handle follows its own panel edge.
+
+Initial navigation failure awaits closure of a newly created context before rejecting, because a failed open leaves the panel collapsed. Existing contexts survive navigation failures; failed cleanup retains the context for an explicit retry. The default Web profile has no browser controls without the optional provider, and internal presentation components remain private.
+
 ## Alternatives considered
 
 **Keep the composer control.** The browser is application viewing state, so its toggle belongs with panel controls rather than message input.

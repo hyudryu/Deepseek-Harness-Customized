@@ -599,26 +599,28 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
     description: 'Live browser facts and control provided by the browser-control plugin.',
     methods: [
       {
-        signature: 'snapshot(sessionId: string): BrowserSnapshot',
+        signature: 'snapshot(sessionId: SessionId): BrowserSnapshot',
         description: 'Read the current replaceable snapshot for one session.',
         parameters: [{ name: 'sessionId', description: 'session whose browser is observed.' }],
-        returns: 'the current browser snapshot, including closed state for an unknown session.',
+        returns: 'the current browser snapshot, including closed state before its browser is opened.',
       },
       {
-        signature: 'subscribe(sessionId: string, listener: (snapshot: BrowserSnapshot) => void): () => void',
-        description: 'Be notified on every new snapshot for one session.',
+        signature: 'subscribe(sessionId: SessionId, listener: (snapshot: BrowserSnapshot) => void): () => void',
+        description: 'Observe replacement snapshots across browser close and reopen transitions.',
         parameters: [{ name: 'sessionId', description: 'session whose snapshots are observed.' }, { name: 'listener', description: 'snapshot callback.' }],
-        returns: 'unsubscribe function; a no-op when the session is unknown.',
+        returns: 'unsubscribe function; the subscription stays active when no browser is open.',
       },
       {
-        signature: 'open(sessionId: string, url?: string): Promise<void>',
+        signature: 'open(sessionId: SessionId, url?: string): Promise<void>',
         description: 'Ensure an open context and page for one session, navigating to the optional url.',
         parameters: [{ name: 'sessionId', description: 'session whose browser is opened.' }, { name: 'url', description: 'optional navigation destination.' }],
+        throws: ['Navigation failures close newly created contexts; existing contexts remain open. Cleanup failures retain the context for retry.'],
       },
       {
-        signature: 'close(sessionId: string): Promise<void>',
-        description: 'Close one session\'s browser context, if any.',
+        signature: 'close(sessionId: SessionId): Promise<void>',
+        description: 'Close one session\'s browser context, if any; retain any still-open context if cleanup fails.',
         parameters: [{ name: 'sessionId', description: 'session whose browser is closed.' }],
+        throws: ['Context cleanup failures; callers may retry.'],
       },
     ],
   },
@@ -2735,6 +2737,20 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
         description: 'Open one live stream Remote method without assuming a physical carrier.',
         parameters: [{ name: 'request', description: 'decoded endpoint and named wire arguments.' }],
         returns: 'a cancellation-aware iterable over the business results.',
+      },
+    ],
+  },
+  {
+    key: 'usageController',
+    summary: 'Host owner of the historical `usage` Remote namespace.',
+    description: 'Host owner of the historical `usage` Remote namespace.',
+    methods: [
+      {
+        signature: '@Remote async summary(): Promise<UsageSummary>',
+        description: 'Read persisted sessions sequentially without activating agents or taking write ownership.',
+        parameters: [],
+        returns: 'UTC daily model totals and all-time summary statistics.',
+        throws: ['RemoteError when Session persistence is unavailable.', 'If persistence list, open, read, or close fails; no partial summary is returned.'],
       },
     ],
   },
@@ -5958,7 +5974,7 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'ToolDefinition',
-    declaration: 'export interface ToolDefinition extends ToolSchema {\n    readonly output: ToolOutputDefinition;\n    execute(args: unknown, exec: ToolRunContext): Promise<unknown>;\n    finalizeContent?(exec: Readonly<ToolExecution>, result: Readonly<ToolExecutionResult>): ContentBlock[] | undefined;\n    timeoutMs?: number;\n    isConcurrencySafe?(args: unknown): boolean;\n    presentCall?(args: unknown): ToolCallView | undefined;\n    presentResult?(args: unknown, result: ToolResult): ToolResultView | undefined;\n}',
+    declaration: 'export interface ToolDefinition extends ToolSchema {\n    availableWhen?(definitions: ReadonlyMap<string, ToolDefinition>): boolean;\n    readonly output: ToolOutputDefinition;\n    execute(args: unknown, exec: ToolRunContext): Promise<unknown>;\n    finalizeContent?(exec: Readonly<ToolExecution>, result: Readonly<ToolExecutionResult>): ContentBlock[] | undefined;\n    timeoutMs?: number;\n    isConcurrencySafe?(args: unknown): boolean;\n    presentCall?(args: unknown): ToolCallView | undefined;\n    presentResult?(args: unknown, result: ToolResult): ToolResultView | undefined;\n}',
   },
   {
     name: 'ToolDispatchExecution',
@@ -6167,6 +6183,14 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   {
     name: 'UpdateTeamTaskRequest',
     declaration: 'export interface UpdateTeamTaskRequest {\n    readonly taskId: TeamTaskId;\n    readonly expectedRevision: number;\n    readonly action: TeamTaskAction;\n    readonly subject?: string;\n    readonly description?: string;\n    readonly blockedBy?: readonly TeamTaskId[];\n    readonly writeScopes?: readonly string[];\n    readonly owner?: string;\n}',
+  },
+  {
+    name: 'UsageDay',
+    declaration: 'export interface UsageDay {\n    readonly date: string;\n    readonly provider: string;\n    readonly model: string;\n    readonly tokens: number;\n}',
+  },
+  {
+    name: 'UsageSummary',
+    declaration: 'export interface UsageSummary {\n    readonly days: readonly UsageDay[];\n    readonly totalTokens: number;\n    readonly peakDailyTokens: number;\n    readonly longestSessionMs: number;\n    readonly sessions: number;\n    readonly missingUsageAttempts: number;\n}',
   },
   {
     name: 'UserMessage',

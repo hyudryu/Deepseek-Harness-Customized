@@ -31,6 +31,10 @@ Connection 拥有 request correlation、`/api` carrier、trust check、精确 Fe
 
 内部 `$events` logical stream 是 Connection generation source。它的 opening `ready` frame 携带用于路径显示的 Host home，并在 Host listener 已挂载、任何 controller 开始 baseline read 之前建立 generation。`ctx.remote.$on()` 把 allowlist 内的普通 event 交付给 root Client Context，并把 scoped waterfall event 交付给已解析的 Session Context；waterfall listener 可以返回结果、调用 `next()` 或拒绝。
 
+### 用量
+
+[用量控制器](../../packages/api/usage-controller/README.zh.md) 通过 `ctx.remote.usage.summary()` 提供 `UsageSummary`。其 `UsageDay` 记录包含 UTC 日期、提供方、模型和 token 数。汇总包含保留历史的 token 总量、每日峰值 token 数、最长会话的已完成轮次活动时间、会话数和缺少用量的尝试数。[用量设置插件](../../packages/client/ui-settings-usage/README.zh.md) 投影这些值，不维护第二份计数存储。
+
 ## Client models
 
 每个 API controller 包都拥有配对的 Host face 与 Client face。Host 侧拥有权威 mutation 与 stream 生产；Client 侧基于相同的生成 wire type 维护 identity 稳定、与 React 无关的 model，并公开 observable snapshot 与 command。UI 包消费这些 Client service，不在 component store 中复制 transport state。
@@ -116,31 +120,53 @@ Live browser facts and control provided by the browser-control plugin.
 /**
  * Read the current replaceable snapshot for one session.
  * @param sessionId - session whose browser is observed.
- * @returns the current browser snapshot, including closed state for an unknown session.
+ * @returns the current browser snapshot, including closed state before its browser is opened.
  */
-snapshot(sessionId: string): BrowserSnapshot
+snapshot(sessionId: SessionId): BrowserSnapshot
 
 /**
- * Be notified on every new snapshot for one session.
+ * Observe replacement snapshots across browser close and reopen transitions.
  * @param sessionId - session whose snapshots are observed.
  * @param listener - snapshot callback.
- * @returns unsubscribe function; a no-op when the session is unknown.
+ * @returns unsubscribe function; the subscription stays active when no browser is open.
  */
-subscribe(sessionId: string, listener: (snapshot: BrowserSnapshot) => void): () => void
+subscribe(sessionId: SessionId, listener: (snapshot: BrowserSnapshot) => void): () => void
 
 /**
  * Ensure an open context and page for one session, navigating to the optional url.
  * @param sessionId - session whose browser is opened.
  * @param url - optional navigation destination.
+ * @throws Navigation failures; the remaining open context is published and can be closed.
  */
-open(sessionId: string, url?: string): Promise<void>
+open(sessionId: SessionId, url?: string): Promise<void>
 
 /**
- * Close one session's browser context, if any.
+ * Close one session's browser context, if any; retain any still-open context if cleanup fails.
  * @param sessionId - session whose browser is closed.
+ * @throws Context cleanup failures; callers may retry.
  */
-close(sessionId: string): Promise<void>
+close(sessionId: SessionId): Promise<void>
 ```
 
+Types: [SessionId](core.zh.md)
+
 Source: [`packages/api/browser-controller/src/index.ts`](../../packages/api/browser-controller/src/index.ts)
+
+<a id="ctxusagecontroller--usagecontroller"></a>
+
+### `ctx.usageController` — `UsageController`
+
+Host owner of the historical `usage` Remote namespace.
+
+```ts cordis-catalog
+/**
+ * Read persisted sessions sequentially without activating agents or taking write ownership.
+ * @returns UTC daily model totals and all-time summary statistics.
+ * @throws RemoteError when Session persistence is unavailable.
+ * @throws If persistence list, open, read, or close fails; no partial summary is returned.
+ */
+@Remote async summary(): Promise<UsageSummary>
+```
+
+Source: [`packages/api/usage-controller/src/index.ts`](../../packages/api/usage-controller/src/index.ts)
 <!-- END GENERATED cordis-surface -->

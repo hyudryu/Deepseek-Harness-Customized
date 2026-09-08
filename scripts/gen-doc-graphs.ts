@@ -201,6 +201,13 @@ const SERVICE_ROLES: ServiceRole[] = [
     note: 'Projects the user-settings seam onto the generated Remote namespace: the read is always redacted and every refusal is classified here, not on the seam Definition.',
   },
   {
+    key: 'usageController',
+    pkg: 'api-usage-controller',
+    title: 'Host usage Remote controller',
+    mode: 'core',
+    note: 'Derives historical token usage and completed-turn activity from persisted sessions.',
+  },
+  {
     key: 'workspaceController',
     pkg: 'api-workspace-controller',
     title: 'Host Workspace Remote controller',

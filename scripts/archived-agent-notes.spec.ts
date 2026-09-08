@@ -33,6 +33,20 @@ describe('archived Agent Notes', () => {
     expect(validateArchiveArtifacts(fixture())).toEqual([])
   })
 
+  it('accepts and seals an English-only archive without a switcher or sidecar', () => {
+    const path = 'process/2026-09-07-english-only.md'
+    const artifacts = new Map([[path, Buffer.from('# Agent Note: English only\n\nStatus: implemented\nArchived: 2026-09-07\n\n## Problem\n\nExample.\n')]])
+    expect(validateArchiveArtifacts(artifacts)).toEqual([])
+    const sealed = extendArchiveManifest({ version: 1, files: {} }, artifacts)
+    expect(sealed.errors).toEqual([])
+    expect(sealed.added).toEqual([path])
+    artifacts.set(path, Buffer.from('changed'))
+    expect(extendArchiveManifest({ version: 1, files: sealed.files }, artifacts).errors).toEqual([
+      `${path}: sealed content hash changed`,
+    ])
+    expect(validateArchiveArtifacts(artifacts).join('\n')).toContain('Status: implemented')
+  })
+
   it('rejects incomplete triplets and invalid archive headers', () => {
     const artifacts = fixture()
     artifacts.delete('process/2026-07-26-example.i18n.yaml')

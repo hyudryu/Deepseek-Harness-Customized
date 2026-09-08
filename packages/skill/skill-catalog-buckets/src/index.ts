@@ -3,7 +3,7 @@ import type { Context } from '@deepseek-ai/cordis'
 import z from '@deepseek-ai/schemastery'
 import { defineTool } from '@deepseek-ai/dsh-tools'
 import { escapeText, isModelInvocable } from '@deepseek-ai/dsh-skill'
-import type {} from '@deepseek-ai/dsh-tool-skill'
+import { isSkillLoader } from '@deepseek-ai/dsh-tool-skill'
 import { catalogRevision, classifySkills, DEFAULT_BUCKETS, resolveCatalogSpec, shortDescription } from './catalog.ts'
 
 /** Ordered category definition; the first matching category wins. */
@@ -22,7 +22,7 @@ export interface Config {
   buckets?: Bucket[]
   /** Maximum skill summaries per listing page; integer 1 through 100, default 20. */
   pageSize?: number
-  /** Maximum normalized summary characters including ellipsis; integer 3 through 2000, default 160. */
+  /** Maximum normalized summary characters including count suffix and ellipsis; integer 3 through 2000, default 160. */
   descriptionMaxLength?: number
 }
 
@@ -47,6 +47,7 @@ export function apply(ctx: Context, config: Config = {}): void {
   const spec = resolveCatalogSpec(config)
   const tool = defineTool({
     name: 'skill_catalog',
+    availableWhen: definitions => isSkillLoader(definitions.get('skill')),
     description: 'List skill names and summaries in an available skill bucket. Discover relevant skills here, then load their full instructions with the skill tool before acting.',
     parameters: {
       bucket: { type: 'string', required: true, description: 'Exact bucket name from the current skill catalog.' },
@@ -89,7 +90,10 @@ export function apply(ctx: Context, config: Config = {}): void {
     const classified = classifySkills(skills, spec)
     const entries = classified.flatMap(({ bucket, skills: members }) => {
       const count = members.length
-      return count === 0 ? [] : [{ name: bucket.name, description: `${shortDescription(bucket.description, spec.descriptionMaxLength)} (${String(count)} skills)` }]
+      return count === 0 ? [] : [{
+        name: bucket.name,
+        description: shortDescription(`${bucket.description} (${String(count)} skills)`, spec.descriptionMaxLength),
+      }]
     })
     return {
       entries,

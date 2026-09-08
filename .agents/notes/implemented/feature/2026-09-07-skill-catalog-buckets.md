@@ -10,7 +10,7 @@ A full catalog of installed skill names and descriptions consumes model input ev
 
 ## Decision
 
-[Skill catalog buckets](../../../../packages/skill/skill-catalog-buckets/README.md) publishes brief category descriptions and counts through the scoped `skill/catalog` presentation extension in [tool-skill](../../../../packages/skill/tool-skill/README.md). The `skill_catalog` tool returns a bounded page of summaries for a category, optionally filtered by a query. The existing `skill` tool loads full instructions, and explicit `/name` invocation remains independent of category discovery.
+[Skill catalog buckets](../../../../packages/skill/skill-catalog-buckets/README.md) publishes brief category descriptions and counts through the scoped `skill/catalog` presentation extension in [tool-skill](../../../../packages/skill/tool-skill/README.md). The `skill_catalog` tool returns a bounded page of summaries for a category, optionally filtered by a query. The complete category summary, including its count suffix, obeys the configured description limit. Discovery requires an exact loader registration in the calling scope, so unrelated same-name tools cannot authorize enumeration. The existing `skill` tool loads full instructions, and explicit `/name` invocation remains independent of category discovery.
 
 The Web bundle enables this presentation. Other compositions opt in by mounting the plugin. Configurable ordered keyword rules assign each model-invocable skill to its first matching category, with `other` as the fallback. This groups provider metadata without moving files or requiring AWS storage; the AWS category describes a topic.
 

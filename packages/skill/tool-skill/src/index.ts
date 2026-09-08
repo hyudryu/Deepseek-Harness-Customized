@@ -9,7 +9,7 @@ import type { Context } from '@deepseek-ai/cordis'
 import z from '@deepseek-ai/schemastery'
 import { agentEvents, type Agent, type PreStepDecision } from '@deepseek-ai/dsh-agent'
 import type { Scoped } from '@deepseek-ai/dsh-scope'
-import { defineTool } from '@deepseek-ai/dsh-tools'
+import { defineTool, type ToolDefinition } from '@deepseek-ai/dsh-tools'
 import { createUserMessage } from '@deepseek-ai/dsh-llm'
 import { SessionSeq, type UserMessage } from '@deepseek-ai/dsh-session'
 import {
@@ -24,6 +24,17 @@ import {
 
 export const name = 'tool-skill'
 export const inject = ['agents', 'tools', 'skills']
+
+const skillLoaders = new WeakSet<ToolDefinition>()
+
+/**
+ * Identify an exact live loader registration, excluding unrelated same-name tools.
+ * @param tool - definition resolved in the calling agent's scope.
+ * @returns whether tool-skill owns this active registration.
+ */
+export function isSkillLoader(tool: ToolDefinition | undefined): boolean {
+  return tool !== undefined && skillLoaders.has(tool)
+}
 
 const DEFAULT_CATALOG_DESCRIPTION_MAX_LENGTH = 500
 /**
@@ -186,6 +197,10 @@ export function apply(ctx: Context, config: Config = {}): void {
     },
   })
   ctx.tools.register(skillTool)
+  ctx.effect(() => {
+    skillLoaders.add(skillTool)
+    return () => { skillLoaders.delete(skillTool) }
+  })
 
   // User-explicit skill invocation: a claimed user message whose first line
   // starts with `/<name>` naming a user-invocable skill is a deterministic

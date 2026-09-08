@@ -212,6 +212,14 @@ export interface ToolOutputDefinition {
 
 /** A registered tool: its schema plus the execution function. */
 export interface ToolDefinition extends ToolSchema {
+  /**
+   * Pure synchronous availability check after restrictions and scoped shadowing.
+   * Receives the complete base view before availability checks; dependencies are not recursive.
+   * False removes this definition from schemas, lookup, SDKs, and execution.
+   * @param definitions - caller-visible definitions before availability filtering.
+   * @returns whether this definition is available in that base view.
+   */
+  availableWhen?(definitions: ReadonlyMap<string, ToolDefinition>): boolean
   /** Mandatory canonical output declaration. */
   readonly output: ToolOutputDefinition
   /**
@@ -1179,6 +1187,10 @@ export class ToolRuntime extends Service {
     // dispatch table because some other agent in the process presents it.
     if (this.modeFor(scope) !== 'native') {
       visible.set(RUN_CODE_NAME, this.requireCodeTransport())
+    }
+    const baseView = new Map(visible)
+    for (const [name, definition] of baseView) {
+      if (definition.availableWhen !== undefined && !definition.availableWhen(baseView)) visible.delete(name)
     }
     return { visible, knownNames, restrictableNames }
   }

@@ -10,7 +10,7 @@ A loopback-only Web application cannot accept a phone connection. Binding the en
 
 ## Decision
 
-[The host plugin](../../../../packages/host/mobile-access/README.md) owns a second listener on a discovered, locally assigned Tailscale IPv4 address at the desktop port. It shares the existing Web dispatchers and browser-authentication owner. The listener applies its exact Host and Origin policy before every route, and its authority grant applies only to requests received on that interface. The root launch-token exchange establishes an authority-bound browser cookie; assets, API requests, and upgrades require authentication.
+[The host plugin](../../../../packages/host/mobile-access/README.md) owns a second listener on a discovered, locally assigned Tailscale IPv4 address at the desktop port. It shares the existing Web dispatchers and browser-authentication owner. URL canonicalization keeps the advertised authority consistent with browser Host and Origin headers, including the implicit HTTP port 80. The listener applies its exact Host and Origin policy before every route, and its authority grant applies only to requests received on that interface. The root launch-token exchange establishes an authority-bound browser cookie; assets, API requests, and upgrades require authentication.
 
 [The client plugin](../../../../packages/client/ui-mobile-access/README.md) contributes a phone icon beside Settings on the loopback desktop origin. Its switch reflects acknowledged host state. QR encoding stays in the browser and encodes the existing authenticated launch URL rather than publishing it through an external service. The phone opens the same application and durable data.
 

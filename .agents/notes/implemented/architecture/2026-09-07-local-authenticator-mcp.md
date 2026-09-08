@@ -18,6 +18,10 @@ Using the existing application cookie and origin checks keeps mobile access and 
 
 Secrets belong in a dedicated local document rather than the settings namespace, whose values are projected to configuration clients. Atomic replacements and cross-process writer locks prevent partial files and lost concurrent imports. Windows ACLs or POSIX owner-only modes restrict other OS accounts. This does not isolate agents running as the same user or encrypt storage.
 
+The card receives validated read and mutation callbacks from its slot registrant. Keeping HTTP operations outside presentation lets component checks drive account behavior without a browser transport.
+
+The store enforces configured account-count and UTF-8 metadata limits for every consumer. Refusing oversized existing data preserves account identities and secrets instead of silently truncating discovery; operators can raise the limits to regain access.
+
 ## Alternatives considered
 
 Storing provisioning secrets in the shared settings document would expose them through configuration projections. Launching a separate public MCP process would require a new authentication and application launch mechanism. Keeping one private account store behind the existing authenticated Web application avoids both costs.
@@ -26,4 +30,4 @@ Storing provisioning secrets in the shared settings document would expose them t
 
 Importing an account permits every composed session to request its current code. Returned codes become ordinary session tool results and may reach the configured model provider; provisioning secrets do not. Six-digit TOTP is the supported scope, so HOTP, migration exports and other digit lengths receive explicit errors.
 
-Behavior verification covers RFC-derived codes with leading zeroes, restart persistence, concurrent imports, duplicate rejection, deletion, private projections, and malformed durable data preservation. Real Loader compositions exercise cookie and origin rejection, administrative routes, native tool handlers, and official MCP list/call responses. A model-facing snapshot records the two tool definitions; browser verification owns image upload and the expanded Settings card.
+Behavior verification covers RFC-derived codes with leading zeroes, restart persistence, concurrent imports, duplicate rejection, deletion, private projections, and malformed durable data preservation. Real Loader compositions exercise cookie and origin rejection, administrative routes, native tool handlers, and official MCP list/call responses. The [keyless recorded-session scenario](../../../../snapshots/session/authenticator-tools/snapshot.yml) launches the shipped headless profile with the real account plugin and authenticated transport, pinning both tool definitions, the empty account-list result, and the missing-account error; browser verification owns image upload and the expanded Settings card.

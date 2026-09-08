@@ -96,17 +96,15 @@
 
     # Configuration-surface reads and writes over Typert Remote. Each method
     # reports an actionable error when its settings-domain provider is absent.
+    - id: usage-controller
+      name: '@deepseek-ai/dsh-api-usage-controller'
+
     - id: settings-controller
       name: '@deepseek-ai/dsh-api-settings-controller'
 
     # Workspace commands and reconnect-safe projection over Typert Remote.
     - id: workspace-controller
       name: '@deepseek-ai/dsh-api-workspace-controller'
-
-    # Live per-session browser state and control over Typert Remote; consumed
-    # by the browser-control plugin's provided service.
-    - id: browser-controller
-      name: '@deepseek-ai/dsh-api-browser-controller'
 
     - id: cordis-host-runner
       name: '@deepseek-ai/dsh-cordis-host-runner'
@@ -220,6 +218,9 @@
     - id: ui-settings
       name: '@deepseek-ai/dsh-client-ui-settings'
 
+    - id: ui-settings-usage
+      name: '@deepseek-ai/dsh-client-ui-settings-usage'
+
     - id: ui-settings-general
       name: '@deepseek-ai/dsh-client-ui-settings-general'
 
@@ -293,10 +294,6 @@
     # Background jobs: the session-header list over the jobsBySession mirror.
     - id: ui-jobs
       name: '@deepseek-ai/dsh-client-ui-jobs'
-
-    # Live browser: the right-side panel + Start Browser dock over the browser Remote.
-    - id: ui-browser
-      name: '@deepseek-ai/dsh-client-ui-browser'
 
     # Goal surface: GoalBar in the input dock over the goal session projection.
     - id: ui-goal
