@@ -27,6 +27,8 @@ kind: "package-bundle"
 
 启动 GUI、打开浏览器，然后开始与 agent（智能体）对话。flag 用于微调本次调用。
 
+会话浏览器控件是可选功能。`dsh-browser-control` bundle 一起挂载其提供方、Remote 控制器和客户端控件；标准 Web profile 在启用该 bundle 前不显示浏览器控件。本 bundle 保留控制器和 UI 包的安装依赖，使可选 profile 层能够解析它们。
+
 ### 启动 Web GUI
 
 ```sh

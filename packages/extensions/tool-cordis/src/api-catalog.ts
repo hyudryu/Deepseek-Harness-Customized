@@ -602,13 +602,13 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
         signature: 'snapshot(sessionId: SessionId): BrowserSnapshot',
         description: 'Read the current replaceable snapshot for one session.',
         parameters: [{ name: 'sessionId', description: 'session whose browser is observed.' }],
-        returns: 'the current browser snapshot, including closed state for an unknown session.',
+        returns: 'the current browser snapshot, including closed state before its browser is opened.',
       },
       {
         signature: 'subscribe(sessionId: SessionId, listener: (snapshot: BrowserSnapshot) => void): () => void',
-        description: 'Be notified on every new snapshot for one session.',
+        description: 'Observe replacement snapshots across browser close and reopen transitions.',
         parameters: [{ name: 'sessionId', description: 'session whose snapshots are observed.' }, { name: 'listener', description: 'snapshot callback.' }],
-        returns: 'unsubscribe function; a no-op when the session is unknown.',
+        returns: 'unsubscribe function; the subscription stays active when no browser is open.',
       },
       {
         signature: 'open(sessionId: SessionId, url?: string): Promise<void>',

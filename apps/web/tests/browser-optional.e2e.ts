@@ -1,5 +1,5 @@
 /** Optional browser bundle boots its provider and controls together through the real Loader. */
-import { mkdir, mkdtemp, rm, symlink, writeFile } from 'node:fs/promises'
+import { mkdir, mkdtemp, rm, symlink, unlink, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -11,11 +11,26 @@ import { connectFreshWorkspace } from './support.ts'
 it('loads the optional browser bundle and shows its controls for a selected session', async () => {
   const bundle = new URL('../../../Custom Plugins/browser-control/', import.meta.url)
   const installation = await mkdtemp(join(tmpdir(), 'dsh-browser-install-'))
-  onTestFinished(() => rm(installation, { recursive: true, force: true }))
+  const links: string[] = []
+  onTestFinished(async () => {
+    for (const link of links) await unlink(link)
+    await rm(installation, { recursive: true, force: true })
+  })
   await mkdir(join(installation, 'node_modules'))
-  await symlink(fileURLToPath(bundle), join(installation, 'node_modules/dsh-browser-control'), 'junction')
+  const dependencies: Record<string, string> = {}
+  for (const [name, target] of [
+    ['dsh-browser-control', fileURLToPath(bundle)],
+    ['@deepseek-ai/dsh-api-browser-controller', fileURLToPath(new URL('../../../packages/api/browser-controller/', import.meta.url))],
+    ['@deepseek-ai/dsh-client-ui-browser', fileURLToPath(new URL('../../../packages/client/ui-browser/', import.meta.url))],
+  ]) {
+    const link = join(installation, 'node_modules', name!)
+    await mkdir(join(link, '..'), { recursive: true })
+    await symlink(target!, link, 'junction')
+    links.push(link)
+    dependencies[name!] = '*'
+  }
   await writeFile(join(installation, 'package.json'), JSON.stringify({
-    name: 'browser-test-installation', dependencies: { 'dsh-browser-control': '0.1.0' },
+    name: 'browser-test-installation', dependencies,
   }))
   const scaffold = await launchWebScaffold({
     extraOverlayPath: fileURLToPath(new URL('cordis.patch.yml', bundle)),

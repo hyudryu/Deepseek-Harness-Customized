@@ -3360,7 +3360,7 @@ export interface Config {
 
 - `@deepseek-ai/dsh-acp-app` — 需要 `cmdlineArgs`（[`packages/bundle/acp-app/src/index.ts`](../packages/bundle/acp-app/src/index.ts)）
 - `@deepseek-ai/dsh-agent`（[`packages/core/agent/src/index.ts`](../packages/core/agent/src/index.ts)）
-- `@deepseek-ai/dsh-api-browser-controller` — 需要 `typert` · `browserControl` ([`packages/api/browser-controller/src/index.ts`](../packages/api/browser-controller/src/index.ts))
+- `@deepseek-ai/dsh-api-browser-controller` — 需要 `typert` · `browserControl` · `sessions` ([`packages/api/browser-controller/src/index.ts`](../packages/api/browser-controller/src/index.ts))
 - `@deepseek-ai/dsh-api-remotes` — 需要 `typertGateway`（[`packages/api/remotes/src/index.ts`](../packages/api/remotes/src/index.ts)）
 - `@deepseek-ai/dsh-api-usage-controller`（[`packages/api/usage-controller/src/index.ts`](../packages/api/usage-controller/src/index.ts)）
 - `@deepseek-ai/dsh-api-workspace-controller` — 需要 `typert` · `workspaceRegistry`（[`packages/api/workspace-controller/src/index.ts`](../packages/api/workspace-controller/src/index.ts)）

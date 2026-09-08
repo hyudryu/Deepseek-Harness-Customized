@@ -120,15 +120,15 @@ Live browser facts and control provided by the browser-control plugin.
 /**
  * Read the current replaceable snapshot for one session.
  * @param sessionId - session whose browser is observed.
- * @returns the current browser snapshot, including closed state for an unknown session.
+ * @returns the current browser snapshot, including closed state before its browser is opened.
  */
 snapshot(sessionId: SessionId): BrowserSnapshot
 
 /**
- * Be notified on every new snapshot for one session.
+ * Observe replacement snapshots across browser close and reopen transitions.
  * @param sessionId - session whose snapshots are observed.
  * @param listener - snapshot callback.
- * @returns unsubscribe function; a no-op when the session is unknown.
+ * @returns unsubscribe function; the subscription stays active when no browser is open.
  */
 subscribe(sessionId: SessionId, listener: (snapshot: BrowserSnapshot) => void): () => void
 

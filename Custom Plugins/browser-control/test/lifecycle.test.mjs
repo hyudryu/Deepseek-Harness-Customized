@@ -69,8 +69,9 @@ test('disposal still closes the browser when context cleanup fails', async t => 
   const { context, browser, control, dispose } = fixture(t)
   await control.open('session')
   context.close.mock.mockImplementation(async () => { throw new Error('close failed') })
-  await dispose()
+  await assert.rejects(dispose(), /close failed/)
   assert.equal(browser.close.mock.callCount(), 1)
+  context.close.mock.mockImplementation(async () => { context.emit('close') })
 })
 
 test('a failed initial navigation publishes the open browser so a subscriber can stop it', async t => {

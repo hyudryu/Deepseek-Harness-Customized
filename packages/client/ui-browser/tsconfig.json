@@ -9,16 +9,18 @@
     "src/index.ts",
     "src/css-modules.d.ts",
     "src/client/index.ts",
+    "src/client/browser-state.ts",
     "src/client/BrowserPanel.tsx",
     "src/client/StartBrowserDock.tsx",
-    "src/client/locales.ts",
-    "src/client/source.ts"
+    "src/client/locales.ts"
   ],
   "references": [
     { "path": "../../../vendor/cordis" },
     { "path": "../../api/remotes/tsconfig.client.json" },
+    { "path": "../../api/gateway/tsconfig.client.json" },
     { "path": "../../api/browser-controller/tsconfig.client.json" },
     { "path": "../locale" },
+    { "path": "../store" },
     { "path": "../ui-layout" },
     { "path": "../ui-conversation" },
     { "path": "../ui-renderer" },

@@ -328,17 +328,19 @@ export function apply(ctx, rawConfig = {}) {
     const state = states.get(key)
     if (!state) return
     await state.context.close()
-    state.open = false
     if (states.get(key) === state) states.delete(key)
+    state.open = false
   }
 
   ctx.effect(() => {
     return async () => {
       subscribers.clear()
       await Promise.allSettled([...pendingStates.values()])
-      await Promise.allSettled([...states.keys()].map(closeState))
+      const results = await Promise.allSettled([...states.keys()].map(closeState))
       const instance = browserPromise ? await browserPromise.catch(() => undefined) : undefined
-      if (instance) await instance.close().catch(() => { /* disposal attempts every remaining browser resource */ })
+      if (instance) results.push(...await Promise.allSettled([instance.close()]))
+      const failure = results.find(result => result.status === 'rejected')
+      if (failure) throw failure.reason
     }
   })
 
