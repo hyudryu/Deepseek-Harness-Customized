@@ -17,6 +17,13 @@ This fork adds custom updates to DeepSeek Harness plus a set of installable plug
 ### Updates to DeepSeek Harness
 
 <details>
+<summary><b>Restore saved skill-catalog session history</b></summary>
+
+Opening a saved v2 session preserves valid skill-catalog presentation digests while migrating its history to v3. This restores sessions written before the format version caught up with that metadata. Migration creates a successor file beside the unchanged original log; no manual history edits or setup are needed. See the [session migration reference](packages/session/session-format-v2-to-v3/README.md).
+
+</details>
+
+<details>
 <summary><b>SuperGoal: pursue a long-term objective</b></summary>
 
 Start `/supergoal <objective>` to keep the session working toward a long-term result. A highlighted banner at the top of the session shows the objective with its current status underneath. SuperGoal checks the objective whenever a task is about to finish and continues while work remains. Completion requires recorded evidence; a hard blocker opens a multiple-choice question and gives the session a yellow waiting-for-answer indicator. Your answer is recorded before work resumes.

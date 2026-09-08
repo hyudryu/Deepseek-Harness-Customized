@@ -1,7 +1,8 @@
 /**
  * Assembled-app regressions for Session-format lifecycle behavior: released v0
- * migrates before resume without changing its source, while a future format or
- * unknown required event fails loud through the real Loader composition.
+ * and early v2 skill catalogs migrate before resume without changing their
+ * sources. Future formats and unknown required events fail loud through the
+ * real Loader composition.
  * @module session-format-guard-snapshot
  */
 
@@ -9,6 +10,7 @@ import { join, dirname } from 'node:path'
 import { mkdir, readFile, readdir, stat, writeFile } from 'node:fs/promises'
 import { fileURLToPath } from 'node:url'
 import { Context } from '@deepseek-ai/cordis'
+import { createUserMessage } from '@deepseek-ai/dsh-llm'
 import { LOADER_SMOKE_TEST_TIMEOUT_MS, runLoaderSmoke } from '@deepseek-ai/dsh-loader-smoke'
 import {
   SESSION_FORMAT_VERSION,
@@ -39,7 +41,10 @@ async function seedSession(root: string, cwd: string, version: number, events: S
     const path = generationLogPath(root, cwd, sessionId, version, 'none')
     await mkdir(dirname(path), { recursive: true })
     await writeFile(path, [
-      JSON.stringify({ type: 'session', version, id: sessionId, createdAt: 1, cwd, delegationDepth: 0 }),
+      JSON.stringify({
+        type: 'session', version, id: sessionId, createdAt: 1, cwd, delegationDepth: 0,
+        ...(version === 0 ? {} : { isSeeded: false }),
+      }),
       ...events.map(event => JSON.stringify(event)),
       '',
     ].join('\n'))
@@ -72,13 +77,27 @@ function closedTurn(): SessionEvent[] {
 }
 
 describe('session format guard through the assembled app', () => {
-  it('migrates v0 before resume, preserves its source, and appends only to the current generation', async () => {
+  it.each([0, 2])('migrates v%i before resume, preserves its source, and appends only to the current generation', async (version) => {
+    const events = closedTurn()
+    if (version === 2) {
+      events.push({
+        type: 'user/message', seq: SessionSeq(2), time: 3, surfaceOp: 'append',
+        data: createUserMessage({
+          content: [{ type: 'text', text: 'Available skill: sample - Example skill.' }],
+          source: {
+            kind: 'skill-catalog', form: 'catalog',
+            entries: [{ name: 'sample', description: 'Example skill.' }],
+            presentationDigest: 'ab'.repeat(32),
+          },
+        }),
+      })
+    }
     let sourcePath = ''
     let source = Buffer.alloc(0)
     let sourceIdentity: { readonly dev: bigint; readonly ino: bigint } | undefined
     await runLoaderSmoke({
-      label: 'v0 migration before resume',
-      tempDirPrefix: 'dsh-format-migrate-v0-',
+      label: `v${version} migration before resume`,
+      tempDirPrefix: `dsh-format-migrate-v${version}-`,
       binScript,
       libBinScript: binScript,
       configPath,
@@ -86,7 +105,7 @@ describe('session format guard through the assembled app', () => {
       tsconfigPath,
       env: { DSH_SNAPSHOT_FILE: replayFixture },
       prepare: async (runCwd) => {
-        sourcePath = await seedSession(join(runCwd, '.sessions'), runCwd, 0, closedTurn())
+        sourcePath = await seedSession(join(runCwd, '.sessions'), runCwd, version, events)
         source = await readFile(sourcePath)
         const identity = await stat(sourcePath, { bigint: true })
         sourceIdentity = { dev: identity.dev, ino: identity.ino }
@@ -105,11 +124,16 @@ describe('session format guard through the assembled app', () => {
         expect(JSON.parse(current.split('\n')[0] as string)).toMatchObject({
           version: SESSION_FORMAT_VERSION,
         })
-        expect(current.trimEnd().split('\n').length).toBeGreaterThan(closedTurn().length + 1)
-        // `session.lock` is the write handle's kernel lock file, published
-        // with the first materializing write and kept across release.
+        const currentRows: unknown[] = current.trimEnd().split('\n').map((line): unknown => JSON.parse(line))
+        expect(currentRows.slice(1, events.length + 1)).toStrictEqual(events)
+        expect(currentRows.length).toBeGreaterThan(events.length + 1)
+        // POSIX retains its flock file; Windows locks the directory handle.
         expect((await readdir(dirname(sourcePath))).sort())
-          .toEqual(['session.jsonl', 'session.lock', generationLogFilename(SESSION_FORMAT_VERSION, 'none')])
+          .toEqual([
+            generationLogFilename(version, 'none'),
+            ...(process.platform === 'win32' ? [] : ['session.lock']),
+            generationLogFilename(SESSION_FORMAT_VERSION, 'none'),
+          ].sort())
       },
     })
   }, LOADER_SMOKE_TEST_TIMEOUT_MS)

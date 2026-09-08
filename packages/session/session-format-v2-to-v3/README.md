@@ -1,5 +1,5 @@
 ---
-description: "Frozen released-v2 Session reader and identity migration that rereleases the exact v2 artifact as v3 so the durable skill-catalog source can carry an optional presentation digest."
+description: "Adjacent Session migration that preserves v2 events as v3, including valid skill-catalog presentation digests emitted under v2 headers."
 kind: "package-reference"
 ---
 
@@ -9,7 +9,7 @@ English | [中文](README.zh.md)
 
 ## Summary
 
-`dsh-session-format-v2-to-v3` rereleases a complete released-v2 Session as released v3 without changing its event model. The writer version bump is needed because released v3 admits an optional `presentationDigest` identity on the durable `skill-catalog` message source, which the frozen v2 source validator rejects as an unknown member. The migration validates the exact v2 source, stamps the logical and physical header as v3, leaves every event and reference untouched, and validates the exact v3 target. `releasedV3SessionFormatCodec` then encodes or decodes the current physical representation.
+`dsh-session-format-v2-to-v3` rereleases a complete released-v2 Session as released v3 without changing its event model. The writer version bump is needed because released v3 admits an optional `presentationDigest` identity on the durable `skill-catalog` message source, which the frozen v2 source validator rejects as an unknown member. The migration validates the v2 header, stamps the logical and physical header as v3, leaves every event and reference untouched, and validates the exact v3 target. It also accepts a valid digest emitted by an early skill-catalog writer under a v2 header. `releasedV3SessionFormatCodec` then encodes or decodes the current physical representation.
 
 ## Table of Contents
 
@@ -36,9 +36,9 @@ const decodedV2 = releasedV2SessionFormatCodec.decodeArtifact(header, rows)
 const migratedV3 = sessionFormatV2ToV3.migrate(decodedV2)
 ```
 
-`releasedV2SessionFormatCodec` reads the frozen v2 physical language. `sessionFormatV2ToV3` validates that complete source, rereleases it as v3, and validates the exact v3 result. `releasedV3SessionFormatCodec` then encodes or decodes the current physical representation.
+`releasedV2SessionFormatCodec` reads the frozen v2 physical language. `sessionFormatV2ToV3` validates the v2 header and the complete v3 result, including digests in direct messages and queued inbox messages. `releasedV3SessionFormatCodec` then encodes or decodes the current physical representation.
 
-The v3 source semantics match the v2 inventory except that the durable `skill-catalog` source admits an optional `presentationDigest` string alongside `kind`, `form`, and `entries`. v0, v1, and v2 validators continue to reject that member. The v3 physical header, one-event-per-row encoding, provenance ranges, and recoverable prefix decoding are unchanged from v2.
+The v3 source semantics match the v2 inventory except that the durable `skill-catalog` source admits an optional `presentationDigest` lowercase SHA-256 string alongside `kind`, `form`, and `entries`. v0, v1, and v2 validators continue to reject that member. The v3 physical header, one-event-per-row encoding, provenance ranges, and recoverable prefix decoding are unchanged from v2.
 
 -----
 
@@ -48,11 +48,11 @@ The v3 source semantics match the v2 inventory except that the durable `skill-ca
 <details>
 <summary>Implementation internals — click to expand</summary>
 
-The edge validates the exact released-v2 artifact, reuses the frozen v2 event inventory, and returns the identity artifact with its header version set to 3. It then validates the exact released-v3 artifact, whose payload semantics reuse the shared generator with a v3 generation gate on the `skill-catalog` source.
+The edge validates the released-v2 header and returns the unchanged events with the header version set to 3. Exact released-v3 validation retains the v2 event inventory and semantics except for the optional validated digest. Unknown fields, malformed digests, invalid event relationships, and unknown event types still refuse migration. Frozen older validators remain unchanged; the compatibility allowance belongs only to this adjacent migration.
 
 | File | Role |
 |---|---|
-| [`src/migration.ts`](src/migration.ts) | Released-v2 source validation and identity rerelease to v3 |
+| [`src/migration.ts`](src/migration.ts) | Released-v2 header validation and exact-v3 identity migration |
 | [`src/codec.ts`](src/codec.ts) | Released-v3 header, one-event-per-row encoding, provenance ranges, and recoverable prefix decoding |
 | [`src/validation.ts`](src/validation.ts) | Physical v3 envelope/cut validation, exact migration-target policy, and vocabulary-neutral current restoration |
 | [`src/dispositions.ts`](src/dispositions.ts) | Frozen released-v3 event and payload-member inventory |
