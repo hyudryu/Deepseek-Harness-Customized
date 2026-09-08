@@ -11,7 +11,7 @@ from deepseek_harness import DeepSeekHarness
 
 def test_run_preserves_recorded_super_goal_changes(tmp_path: Path) -> None:
     repository = Path(__file__).resolve().parents[3]
-    fixture = repository / "snapshots" / "sdk" / "super-goal" / "session.v2.jsonl"
+    fixture = repository / "snapshots" / "sdk" / "super-goal" / "session.v3.jsonl"
     records = [json.loads(line) for line in fixture.read_text(encoding="utf-8").splitlines() if line.strip()]
     changes = [record for record in records if record.get("type") == "super-goal/change"]
     assert changes, "The real SDK snapshot must contain the SuperGoal lifecycle"
