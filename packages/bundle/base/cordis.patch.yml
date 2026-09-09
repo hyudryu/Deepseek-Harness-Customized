@@ -457,8 +457,12 @@
     - id: web
       name: '@deepseek-ai/dsh-web'
       config:
+        preferredSearchProviders: [searxng]
         searchProvider: deepseek-official
         fetchProvider: http
+
+    - id: web-search-searxng
+      name: '@deepseek-ai/dsh-web-search-searxng'
 
     - id: web-search-deepseek
       name: '@deepseek-ai/dsh-web-search-deepseek'

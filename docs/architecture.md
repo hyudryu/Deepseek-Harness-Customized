@@ -1,6 +1,6 @@
 # DeepSeek Harness Architecture
 
-English | [中文](architecture.zh.md)
+English | [ä¸­æ–‡](architecture.zh.md)
 
 Read this before changing anything under `packages/`. It assumes you know Cordis; if you do not, start with the [primer](cordis-primer.md) or the [tutorial](cordis-tutorial/index.md).
 
@@ -11,6 +11,8 @@ We recommend using an agent to explore the codebase and understand its architect
 [Cordis](cordis-primer.md) is the framework under dsh: plugins contribute services, typed events, and reversible effects to a shared context. Every part of the product is a plugin, including the model adapter, the tool registry, the session log, and the agent loop itself, so each is replaceable from configuration.
 
 There is no privileged core to patch: you extend dsh by mounting a plugin beside the others, and registrations are effects that unwind when their plugin unloads.
+
+The web service resolves search providers at execution time. Its explicit `preferredSearchProviders` list precedes the configured or environment search pin; unavailable preferred providers are skipped, while missing preferred ids fail. The base bundle uses this list to select enabled SearXNG before DeepSeek without relying on registration order. Fetch selection is unchanged.
 
 ## Profiles and bundles
 
@@ -143,7 +145,7 @@ New behavior attaches to a documented extension point. Changing the loop itself 
 | Add durable session state | extend `SessionEventMap`; render and replay from the log |
 | Generate session titles | register the sole `ctx.sessionTitle` provider |
 | Manage a same-session objective | use `ctx.goals`; continue through `agent/*` |
-| Fork a session at a turn boundary | `ctx.agents.create({ sessionId, seed, meta: { parentSession, seedLength } })` — only agent-loop-published sessions persist |
+| Fork a session at a turn boundary | `ctx.agents.create({ sessionId, seed, meta: { parentSession, seedLength } })` â€” only agent-loop-published sessions persist |
 | Store sessions in a new backend | implement `SessionPersistence` (`create`/`open`/`stat`/`list`/`export`) over the shared handle scaffolding |
 | Scope a registration to one agent | use that agent's `agent.ctx` |
 

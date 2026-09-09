@@ -17,6 +17,13 @@ This fork adds custom updates to DeepSeek Harness plus a set of installable plug
 ### Updates to DeepSeek Harness
 
 <details>
+<summary><b>SearXNG web search without a provider API key</b></summary>
+
+Open Settings > Plugins > Plugin configuration, enter your SearXNG instance URL in the SearXNG card, enable it, and save. Enabled SearXNG takes precedence over DeepSeek search, including when no DeepSeek search API key is configured. Disabling it restores the existing search selection. The provider ships with the standard harness; your SearXNG instance must allow JSON search responses. See the [SearXNG setup and provider reference](packages/web/web-search-searxng/README.md).
+
+</details>
+
+<details>
 <summary><b>Restore saved skill-catalog session history</b></summary>
 
 Opening a saved v2 session preserves valid skill-catalog presentation digests while migrating its history to v3. This restores sessions written before the format version caught up with that metadata. Migration creates a successor file beside the unchanged original log; no manual history edits or setup are needed. See the [session migration reference](packages/session/session-format-v2-to-v3/README.md).

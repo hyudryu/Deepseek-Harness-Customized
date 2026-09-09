@@ -213,3 +213,34 @@ describe('WebError', () => {
     expect(error.name).toBe('WebError')
   })
 })
+
+
+describe('explicit preferred search providers', () => {
+  it('uses list order and restores the pin when preferred providers become unavailable', async () => {
+    const { ctx, web } = await mountWeb({ preferredSearchProviders: ['first', 'second'], searchProvider: 'fallback' })
+    let enabled = true
+    web.registerSearchProvider(makeSearchProvider('fallback', true, () => Promise.resolve(searchResult('fallback'))))
+    web.registerSearchProvider(makeSearchProvider('second', true, () => Promise.resolve(searchResult('second'))))
+    web.registerSearchProvider({ id: 'first', available: () => enabled, search: () => Promise.resolve(searchResult('first')) })
+    await expect(web.search({ query: 'q' })).resolves.toMatchObject({ content: 'first' })
+    enabled = false
+    await expect(web.search({ query: 'q' })).resolves.toMatchObject({ content: 'second' })
+    await ctx.fiber.dispose()
+  })
+  it('rejects an unregistered preference instead of silently choosing the pin', async () => {
+    const { ctx, web } = await mountWeb({ preferredSearchProviders: ['missing'], searchProvider: 'fallback' })
+    web.registerSearchProvider(makeSearchProvider('fallback', true, () => Promise.resolve(searchResult('fallback'))))
+    await expect(web.search({ query: 'q' })).rejects.toMatchObject({ code: 'WEB_PROVIDER_CONFIGURED_MISSING' })
+    await ctx.fiber.dispose()
+  })
+})
+
+
+it('keeps explicit fetch selection independent of search preferences', async () => {
+  const ctx = new Context()
+  const web = new WebRuntime(ctx, { fetchProvider: 'pinned' })
+  web.registerFetchProvider(makeFetchProvider('pinned', true, fetchResult('pinned')))
+  web.registerFetchProvider(makeFetchProvider('other', true, fetchResult('other')))
+  await expect(web.fetch({ url: 'https://example.com' })).resolves.toMatchObject({ body: { content: 'pinned' } })
+  await ctx.fiber.dispose()
+})

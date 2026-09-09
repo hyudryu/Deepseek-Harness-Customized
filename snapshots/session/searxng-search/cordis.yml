@@ -1,0 +1,20 @@
+# Search-only scenario: omit platform-specific command tools.
+- id: tool-bash
+  disabled: true
+- id: tool-pwsh
+  disabled: true
+
+- insert:
+    - id: searxng-fixture
+      name: './searxng-fixture.mjs'
+
+- id: web-search-searxng
+  config:
+    enabled: true
+    baseURL: http://searxng.snapshot.invalid
+
+- id: web-search-deepseek
+  config:
+    apiKey: ''
+    apiKeyEnv: SEARXNG_SNAPSHOT_MISSING_KEY
+    baseURL: http://deepseek.snapshot.invalid

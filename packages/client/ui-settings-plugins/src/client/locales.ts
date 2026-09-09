@@ -8,6 +8,9 @@ export type PluginsSettingsLocaleKey =
   | 'bashTitle' | 'bashDescription' | 'bashTimeoutMs' | 'bashTimeoutMsHint'
   | 'bashMaxOutputBytes' | 'bashMaxOutputBytesHint'
   | 'agentLoopTitle' | 'agentLoopDescription' | 'agentLoopMaxParallel' | 'agentLoopMaxParallelHint'
+  | 'searxngTitle' | 'searxngDescription' | 'searxngEnabled' | 'searxngEnabledHint'
+  | 'searxngBaseURL' | 'searxngBaseURLHint' | 'searxngTimeout' | 'searxngTimeoutHint'
+  | 'searxngInvalidURL' | 'searxngInvalidTimeout'
   | 'webSearchTitle' | 'webSearchDescription'
   | 'webSearchApiKey' | 'webSearchApiKeyHint' | 'webSearchApiKeySet' | 'webSearchApiKeyUnset'
   | 'webSearchBaseUrl' | 'webSearchBaseUrlHint' | 'webSearchMaxUses' | 'webSearchMaxUsesHint'
@@ -47,12 +50,22 @@ export const en: Record<PluginsSettingsLocaleKey, string> = {
   agentLoopDescription: 'How the agent dispatches tool calls.',
   agentLoopMaxParallel: 'Parallel tool calls',
   agentLoopMaxParallelHint: 'Upper bound on parallel-safe calls running at once within one step.',
+  searxngTitle: 'SearXNG web search',
+  searxngDescription: 'Search through your SearXNG instance without an API key.',
+  searxngEnabled: 'Enable SearXNG',
+  searxngEnabledHint: 'When enabled, SearXNG takes precedence over DeepSeek search. Disabling it restores the configured search provider.',
+  searxngBaseURL: 'Instance URL',
+  searxngBaseURLHint: 'Your instance must allow JSON search responses. Leave blank to use the configured default.',
+  searxngTimeout: 'Request timeout (ms)',
+  searxngTimeoutHint: 'How long to wait for search results. Leave blank to use the configured default.',
+  searxngInvalidURL: 'Enter an HTTP or HTTPS URL without credentials, a query, or a fragment.',
+  searxngInvalidTimeout: 'Enter a whole number from 1 to 2147483647, or leave blank for the default.',
   webSearchTitle: 'Web search',
   webSearchDescription: 'The DeepSeek search provider.',
   webSearchApiKey: 'API key',
   webSearchApiKeyHint: 'Stored outside the settings file. Leave blank to keep the current key.',
   webSearchApiKeySet: 'A key is configured.',
-  webSearchApiKeyUnset: 'No key is configured; search is unavailable until one is.',
+  webSearchApiKeyUnset: 'No key is configured for DeepSeek search.',
   webSearchBaseUrl: 'Endpoint',
   webSearchBaseUrlHint: 'Leave blank to use the provider default.',
   webSearchMaxUses: 'Max searches per request',
@@ -103,12 +116,22 @@ export const zh: Record<PluginsSettingsLocaleKey, string> = {
   agentLoopDescription: 'Agent 如何派发工具调用。',
   agentLoopMaxParallel: '并行工具调用数',
   agentLoopMaxParallelHint: '同一步内最多同时运行多少个可并行的调用。',
+  searxngTitle: 'SearXNG web search',
+  searxngDescription: 'Search through your SearXNG instance without an API key.',
+  searxngEnabled: 'Enable SearXNG',
+  searxngEnabledHint: 'When enabled, SearXNG takes precedence over DeepSeek search. Disabling it restores the configured search provider.',
+  searxngBaseURL: 'Instance URL',
+  searxngBaseURLHint: 'Your instance must allow JSON search responses. Leave blank to use the configured default.',
+  searxngTimeout: 'Request timeout (ms)',
+  searxngTimeoutHint: 'How long to wait for search results. Leave blank to use the configured default.',
+  searxngInvalidURL: 'Enter an HTTP or HTTPS URL without credentials, a query, or a fragment.',
+  searxngInvalidTimeout: 'Enter a whole number from 1 to 2147483647, or leave blank for the default.',
   webSearchTitle: '网页搜索',
   webSearchDescription: 'DeepSeek 搜索提供方。',
   webSearchApiKey: 'API Key',
   webSearchApiKeyHint: '不写入设置文件。留空表示保持当前密钥。',
   webSearchApiKeySet: '已配置密钥。',
-  webSearchApiKeyUnset: '未配置密钥；配置之前搜索不可用。',
+  webSearchApiKeyUnset: 'No key is configured for DeepSeek search.',
   webSearchBaseUrl: '接口地址',
   webSearchBaseUrlHint: '留空则使用提供方默认地址。',
   webSearchMaxUses: '单次请求最多搜索次数',

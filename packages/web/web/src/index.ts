@@ -1,7 +1,8 @@
 /**
  * Service Definition for the web access capability seam (`ctx.web`): registries and provider-selecting execution for search and
  * fetch. Duplicate ids are rejected. At execution time, a configured provider must exist and
- * be usable; without one, exactly one usable provider is required, so selection never depends
+ * be usable; preferred search providers are tried first. Without a selection, exactly one usable
+ * provider is required, so selection never depends
  * on registration order.
  * @module @deepseek-ai/dsh-web
  */
@@ -47,12 +48,14 @@ interface Selection<P> {
 }
 
 /**
- * Config for the web seam. `searchProvider` / `fetchProvider` pin which provider
- * wins for each capability; both are optional (a single registered usable
- * provider auto-selects). Operational overrides such as environment variables
+ * Config for the web seam. `searchProvider` pins the fallback after the ordered
+ * `preferredSearchProviders` list. `fetchProvider` independently pins fetch.
+ * Omitted pins auto-select a single usable provider. Operational environment overrides
  * must feed these same fields rather than introduce a hidden priority chain.
  */
 export interface WebRuntimeConfig {
+  /** Ordered search overrides, tried before the configured or environment fallback. Missing ids fail; unavailable providers are skipped. */
+  readonly preferredSearchProviders?: string[]
   /** Explicit search provider id. Omitted = auto-select when exactly one usable. */
   readonly searchProvider?: string
   /** Explicit fetch provider id. Omitted = auto-select when exactly one usable. */
@@ -63,13 +66,14 @@ export interface WebRuntimeConfig {
  * The web access service. Registered as `ctx.web` (one instance per context).
  *
  * Selection semantics (resolved at execution time, never order-dependent):
- * - A configured id that is registered and `available()` → that provider.
- * - A configured id not registered → `WEB_PROVIDER_CONFIGURED_MISSING`.
- * - A configured id registered but unavailable →
+ * - First available id in `preferredSearchProviders` wins for search; missing ids fail.
+ * - A configured id that is registered and `available()` â†’ that provider.
+ * - A configured id not registered â†’ `WEB_PROVIDER_CONFIGURED_MISSING`.
+ * - A configured id registered but unavailable â†’
  *   `WEB_PROVIDER_CONFIGURED_UNAVAILABLE`.
- * - No id configured, exactly one registered usable provider → that provider.
- * - No id configured, multiple usable providers → `WEB_PROVIDER_AMBIGUOUS`.
- * - No id configured, no usable provider → `WEB_PROVIDER_UNAVAILABLE`.
+ * - No id configured, exactly one registered usable provider â†’ that provider.
+ * - No id configured, multiple usable providers â†’ `WEB_PROVIDER_AMBIGUOUS`.
+ * - No id configured, no usable provider â†’ `WEB_PROVIDER_UNAVAILABLE`.
  */
 export class WebRuntime extends Service {
   /**
@@ -78,17 +82,20 @@ export class WebRuntime extends Service {
    * `searchProvider` / `fetchProvider` and are NOT a hidden priority chain.
    */
   static Config: z<WebRuntimeConfig> = z.object({
+    preferredSearchProviders: z.array(z.string()).default([]),
     searchProvider: z.string(),
     fetchProvider: z.string(),
   })
 
   private searchProviders = new Map<string, WebSearchProvider>()
   private fetchProviders = new Map<string, WebFetchProvider>()
+  private readonly preferredSearchProviderIds: readonly string[]
   private readonly searchProviderId: string | undefined
   private readonly fetchProviderId: string | undefined
 
   constructor(ctx: Context, config: WebRuntimeConfig = {}) {
     super(ctx, 'web')
+    this.preferredSearchProviderIds = [...config.preferredSearchProviders ?? []]
     this.searchProviderId = config.searchProvider ?? process.env.DSH_WEB_SEARCH_PROVIDER
     this.fetchProviderId = config.fetchProvider ?? process.env.DSH_WEB_FETCH_PROVIDER
   }
@@ -124,7 +131,7 @@ export class WebRuntime extends Service {
       yield () => store.delete(provider.id)
     }, 'web.registerProvider()')
     // ctx.effect's disposer returns Promise<void>; our disposer API is
-    // synchronous fire-and-forget — discard the (always-resolved) promise.
+    // synchronous fire-and-forget â€” discard the (always-resolved) promise.
     return () => void dispose()
   }
 
@@ -138,12 +145,23 @@ export class WebRuntime extends Service {
    * @returns the provider's results, capped to `request.maxResults`.
    */
   async search(request: WebSearchRequest, signal?: AbortSignal): Promise<WebSearchResult> {
-    const provider = resolveProvider({
+    const provider = this.preferredSearchProvider() ?? resolveProvider({
       providers: this.searchProviders,
       ...this.searchProviderId !== undefined ? { configuredId: this.searchProviderId } : {},
     })
     const result = await provider.search(request, signal)
     return capSources(result, request.maxResults)
+  }
+
+  private preferredSearchProvider(): WebSearchProvider | undefined {
+    for (const id of this.preferredSearchProviderIds) {
+      const provider = this.searchProviders.get(id)
+      if (provider === undefined) {
+        throw new WebError(`preferred web provider "${id}" is not registered`, 'WEB_PROVIDER_CONFIGURED_MISSING')
+      }
+      if (provider.available()) return provider
+    }
+    return undefined
   }
 
   /**
