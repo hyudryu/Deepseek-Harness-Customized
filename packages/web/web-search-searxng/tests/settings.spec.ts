@@ -77,7 +77,7 @@ it('logs provider guidance only while enabled and web_search is visible, then re
   expect(await prompt()).not.toContain('SearXNG is enabled')
   const removeTool = ctx.tools.register(defineContentToolFixture({
     name: 'web_search', description: 'Search fixture', parameters: {},
-    execute: async () => ({ content: [] }),
+    execute: async () => [],
   }))
   expect(await prompt()).toContain('SearXNG is enabled for web_search.')
   expect(await prompt()).toContain('without an API key')
