@@ -48,6 +48,6 @@
           - text: 网页搜索 DeepSeek 搜索提供方。
           - img
       - listitem:
-        - 'button "展开设置: SearXNG web search"':
-          - text: SearXNG web search Search through your SearXNG instance without an API key.
+        - 'button "展开设置: SearXNG 网页搜索"':
+          - text: SearXNG 网页搜索 无需 API 密钥，通过你的 SearXNG 实例进行搜索。
           - img

@@ -25,6 +25,8 @@ export interface Config {
   baseURL?: string
   /** Complete request and response deadline in milliseconds. */
   timeoutMs?: number
+  /** Maximum response body size in bytes; a larger body is refused. */
+  maxResponseBytes?: number
 }
 
 /** Validated settings accepted by the loader and live settings service. */
@@ -35,9 +37,15 @@ export const Config: z<Config> = z.object({
     if (!['http:', 'https:'].includes(url.protocol) || url.username || url.password || url.search || url.hash) {
       throw new Error('SearXNG baseURL must be HTTP(S), without credentials, query, or fragment')
     }
-    return value
+    // Return a normalized base derived from the parsed URL, not the raw input:
+    // a bare trailing `?` or `#`, or surrounding whitespace, passes the empty
+    // search/hash check but would make the later `/search` concatenation a
+    // query/fragment or an invalid URL. `origin + pathname` drops those and
+    // any stray punctuation, so every schema-accepted value can be dispatched.
+    return `${url.origin}${url.pathname}`
   }).default('http://127.0.0.1:8080'),
   timeoutMs: z.number().step(1).min(1).max(2147483647).default(30000),
+  maxResponseBytes: z.number().step(1).min(1).max(2147483647).default(1_000_000),
 })
 
 /** Register a provider whose next operation observes committed settings. */
@@ -64,6 +72,7 @@ export function apply(ctx: Context, config: Config): void {
       enabled: resolved.enabled ?? false,
       baseURL: resolved.baseURL ?? 'http://127.0.0.1:8080',
       timeoutMs: resolved.timeoutMs ?? 30000,
+      maxResponseBytes: resolved.maxResponseBytes ?? 1_000_000,
     }
   }))
 }

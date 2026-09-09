@@ -5,6 +5,7 @@ import { afterEach, describe, expect, it } from 'vitest'
 import { bindSnapshotSelector, stubSettingsScope } from '@deepseek-ai/dsh-client-test-runtime'
 import { SearxngCard } from '../src/client/SearxngCard.tsx'
 import type { SearxngCardProps } from '../src/client/SearxngCard.tsx'
+import type { SettingsPathOpView } from '@deepseek-ai/dsh-api-remotes/client'
 import { SearxngCardController, type SearxngSettings } from '../src/client/searxng-card-controller.ts'
 import { en } from '../src/client/locales.ts'
 
@@ -14,16 +15,21 @@ function bench() {
   const host = stubSettingsScope<SearxngSettings>()
   const defaults = { enabled: false, baseURL: 'http://127.0.0.1:8080', timeoutMs: 30_000 }
   host.publish({ status: 'ready', writable: true, value: defaults, base: defaults, user: {} })
-  host.set.mockImplementation((field: string, value: unknown) => {
+  host.mutate.mockImplementation((ops: readonly SettingsPathOpView[]) => {
     const state = host.scope.getSnapshot()
-    host.publish({ value: { ...state.value, [field]: value }, user: { ...state.user as object, [field]: value } })
-  })
-  host.unset.mockImplementation((field: string) => {
-    const state = host.scope.getSnapshot()
-    host.publish({
-      value: { ...state.value, [field]: defaults[field as keyof typeof defaults] },
-      user: Object.fromEntries(Object.entries(state.user ?? {}).filter(([key]) => key !== field)),
-    })
+    let value: Record<string, unknown> = { ...state.value as object }
+    let user: Record<string, unknown> = { ...state.user as object }
+    for (const op of ops) {
+      const field = op.path[0]!
+      if (op.op === 'set') {
+        value = { ...value, [field]: op.value }
+        user = { ...user, [field]: op.value }
+      } else {
+        user = Object.fromEntries(Object.entries(user).filter(([key]) => key !== field))
+        value = { ...value, [field]: defaults[field as keyof typeof defaults] }
+      }
+    }
+    host.publish({ value, user })
   })
   const face = new SearxngCardController(host.scope).inject()
   return { host, face, state: () => face.hooks.searxngCard.getSnapshot() }
@@ -43,7 +49,7 @@ describe('SearXNG settings card', () => {
     const { host, face, state } = bench()
     face.edit('enabled', 'true')
     face.edit('baseURL', 'https://search.example/searxng')
-    expect(host.set).not.toHaveBeenCalled()
+    expect(host.mutate).not.toHaveBeenCalled()
     expect(state().enabled).toBe(true)
     face.discard()
     expect(state().enabled).toBe(false)
@@ -53,6 +59,14 @@ describe('SearXNG settings card', () => {
     face.edit('enabled', 'true')
     face.save()
     await waitFor(() => { expect(state().saving).toBe(false) })
+    // Enablement is committed with its endpoint and timeout in ONE mutation, so a
+    // concurrent search never observes SearXNG enabled against an old endpoint.
+    expect(host.mutate).toHaveBeenCalledTimes(1)
+    expect(host.mutate).toHaveBeenCalledWith([
+      { op: 'set', path: ['baseURL'], value: 'https://search.example/searxng' },
+      { op: 'set', path: ['timeoutMs'], value: 12000 },
+      { op: 'set', path: ['enabled'], value: true },
+    ], host.scope.getSnapshot().revision)
     expect(host.scope.getSnapshot().value).toEqual({ enabled: true, baseURL: 'https://search.example/searxng', timeoutMs: 12000 })
     expect(state().dirty).toBe(false)
     face.edit('enabled', 'false')
@@ -67,7 +81,7 @@ describe('SearXNG settings card', () => {
     expect(state().baseURL.invalid).toBe(true)
     face.save()
     await waitFor(() => { expect(state().saving).toBe(false) })
-    expect(host.set).not.toHaveBeenCalled()
+    expect(host.mutate).not.toHaveBeenCalled()
   })
 
   it.each(['0', '-1', '1.5', '2147483648', 'not a number'])('refuses invalid timeout %s', async (timeout) => {
@@ -76,7 +90,7 @@ describe('SearXNG settings card', () => {
     expect(state().timeoutMs.invalid).toBe(true)
     face.save()
     await waitFor(() => { expect(state().saving).toBe(false) })
-    expect(host.set).not.toHaveBeenCalled()
+    expect(host.mutate).not.toHaveBeenCalled()
   })
 
   it('resets overridden settings and retains drafts when the Host refuses a write', async () => {
@@ -88,8 +102,11 @@ describe('SearXNG settings card', () => {
     face.save()
     await waitFor(() => { expect(state().saving).toBe(false) })
     expect(state().baseURL.text).toBe('http://127.0.0.1:8080')
-    expect(host.unset).toHaveBeenCalledWith('baseURL')
-    host.set.mockImplementation(() => {})
+    expect(host.mutate).toHaveBeenCalledWith(
+      [{ op: 'unset', path: ['baseURL'] }],
+      host.scope.getSnapshot().revision,
+    )
+    host.mutate.mockImplementation(() => {})
     face.edit('enabled', 'true')
     face.save()
     await waitFor(() => { expect(state().saving).toBe(false) })

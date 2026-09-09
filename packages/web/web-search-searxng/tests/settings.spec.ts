@@ -38,7 +38,7 @@ describe('SearXNG live settings', () => {
     await fiber.await()
     vi.spyOn(globalThis, 'fetch').mockImplementation(async () => new Response(JSON.stringify({ results: [{ url: 'https://searx.test' }] })))
     await ctx.settings.update('web-search-searxng', { enabled: true })
-    await expect(ctx.web.search({ query: 'q' })).resolves.toMatchObject({ sources: [{ url: 'https://searx.test' }] })
+    await expect(ctx.web.search({ query: 'q' })).resolves.toMatchObject({ sources: [{ url: 'https://searx.test/' }] })
     expect(fallback).not.toHaveBeenCalled()
     await ctx.settings.update('web-search-searxng', { enabled: false })
     if (fallbackAvailable) {

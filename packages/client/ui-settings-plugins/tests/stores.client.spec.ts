@@ -28,13 +28,17 @@ function acceptWrites<T>(host: StubSettingsScope<T>): void {
     host.publish({ value: { ...section(), [field]: value } as T, user: { ...layer(), [field]: value } })
   })
   host.mutate.mockImplementation((ops: readonly SettingsPathOpView[]) => {
-    const value = { ...section() }
-    const user = { ...layer() }
+    let value: Record<string, unknown> = { ...section() }
+    let user: Record<string, unknown> = { ...layer() }
+    const base = host.scope.getSnapshot().base as Record<string, unknown> | undefined
     for (const op of ops) {
       const field = op.path[0]!
       if (op.op === 'set') {
-        value[field] = op.value
-        user[field] = op.value
+        value = { ...value, [field]: op.value }
+        user = { ...user, [field]: op.value }
+      } else {
+        user = Object.fromEntries(Object.entries(user).filter(([key]) => key !== field))
+        value = { ...value, [field]: base?.[field] }
       }
     }
     host.publish({ value: value as T, user })
@@ -125,11 +129,11 @@ describe('CardForm', () => {
 
     expect(subject.field('timeoutMs')).toEqual({ text: '9000', overridden: true, invalid: false })
     expect(subject.shell().dirty).toBe(true)
-    expect(host.set).not.toHaveBeenCalled()
+    expect(host.mutate).not.toHaveBeenCalled()
 
     await subject.save()
 
-    expect(host.set.mock.calls).toEqual([['timeoutMs', 9_000]])
+    expect(host.mutate).toHaveBeenCalledWith([{ op: 'set', path: ['timeoutMs'], value: 9_000 }], host.scope.getSnapshot().revision)
     expect(subject.shell()).toMatchObject({ dirty: false, failed: false, saving: false })
   })
 
@@ -142,7 +146,7 @@ describe('CardForm', () => {
     expect(subject.shell().dirty).toBe(false)
     await subject.save()
 
-    expect(host.set).not.toHaveBeenCalled()
+    expect(host.mutate).not.toHaveBeenCalled()
   })
 
   it('refuses to save while a draft is not a value the field accepts', async () => {
@@ -155,7 +159,7 @@ describe('CardForm', () => {
 
     await subject.save()
 
-    expect(host.set).not.toHaveBeenCalled()
+    expect(host.mutate).not.toHaveBeenCalled()
     expect(subject.field('timeoutMs').text).toBe('soon')
   })
 
@@ -168,11 +172,11 @@ describe('CardForm', () => {
 
     // The badge previews the save: the field will no longer be overridden.
     expect(subject.field('timeoutMs')).toEqual({ text: '60000', overridden: false, invalid: false })
-    expect(host.unset).not.toHaveBeenCalled()
+    expect(host.mutate).not.toHaveBeenCalled()
 
     await subject.save()
 
-    expect(host.unset.mock.calls).toEqual([['timeoutMs']])
+    expect(host.mutate).toHaveBeenCalledWith([{ op: 'unset', path: ['timeoutMs'] }], host.scope.getSnapshot().revision)
     expect(subject.shell()).toMatchObject({ dirty: false, failed: false })
   })
 
@@ -184,7 +188,7 @@ describe('CardForm', () => {
     expect(subject.shell().dirty).toBe(false)
     await subject.save()
 
-    expect(host.unset).not.toHaveBeenCalled()
+    expect(host.mutate).not.toHaveBeenCalled()
   })
 
   it('clears a number field by emptying it', async () => {
@@ -197,7 +201,7 @@ describe('CardForm', () => {
     expect(subject.field('timeoutMs')).toEqual({ text: '', overridden: false, invalid: false })
     await subject.save()
 
-    expect(host.unset.mock.calls).toEqual([['timeoutMs']])
+    expect(host.mutate).toHaveBeenCalledWith([{ op: 'unset', path: ['timeoutMs'] }], host.scope.getSnapshot().revision)
   })
 
   it('clears a text field by emptying it', async () => {
@@ -208,7 +212,7 @@ describe('CardForm', () => {
     subject.actions().edit('baseURL', '   ')
     await subject.save()
 
-    expect(host.unset.mock.calls).toEqual([['baseURL']])
+    expect(host.mutate).toHaveBeenCalledWith([{ op: 'unset', path: ['baseURL'] }], host.scope.getSnapshot().revision)
   })
 
   it('writes the trimmed text of a text field', async () => {
@@ -218,7 +222,7 @@ describe('CardForm', () => {
     subject.actions().edit('baseURL', '  https://other.test  ')
     await subject.save()
 
-    expect(host.set.mock.calls).toEqual([['baseURL', 'https://other.test']])
+    expect(host.mutate).toHaveBeenCalledWith([{ op: 'set', path: ['baseURL'], value: 'https://other.test' }], host.scope.getSnapshot().revision)
   })
 
   it('keeps the drafts a save did not land, and reports the failure', async () => {
@@ -229,7 +233,7 @@ describe('CardForm', () => {
 
     // The stub Host accepted the call without storing it, exactly as a
     // validator that refuses the value does.
-    expect(host.set).toHaveBeenCalledWith('timeoutMs', 9_000)
+    expect(host.mutate).toHaveBeenCalledWith([{ op: 'set', path: ['timeoutMs'], value: 9_000 }], host.scope.getSnapshot().revision)
     expect(subject.shell()).toMatchObject({ dirty: true, failed: true, saving: false })
     expect(subject.field('timeoutMs').text).toBe('9000')
   })
@@ -241,7 +245,7 @@ describe('CardForm', () => {
     subject.actions().resetField('timeoutMs')
     await subject.save()
 
-    expect(host.unset).toHaveBeenCalledWith('timeoutMs')
+    expect(host.mutate).toHaveBeenCalledWith([{ op: 'unset', path: ['timeoutMs'] }], host.scope.getSnapshot().revision)
     expect(subject.shell().failed).toBe(true)
   })
 
@@ -272,7 +276,7 @@ describe('CardForm', () => {
     expect(subject.shell()).toEqual(before)
 
     await subject.save()
-    expect(host.set).not.toHaveBeenCalled()
+    expect(host.mutate).not.toHaveBeenCalled()
   })
 
   it('refuses a second save while one is in flight', async () => {
@@ -285,7 +289,7 @@ describe('CardForm', () => {
     const second = subject.save()
     await Promise.all([first, second])
 
-    expect(host.set).toHaveBeenCalledTimes(1)
+    expect(host.mutate).toHaveBeenCalledTimes(1)
   })
 
   it('publishes a projection whenever the scope or a draft changes', () => {
@@ -354,9 +358,12 @@ describe('BashCardController', () => {
     expect(face.hooks.bashCard.getSnapshot().dirty).toBe(true)
 
     face.save()
-    await vi.waitFor(() => { expect(host.set).toHaveBeenCalledTimes(2) })
+    await vi.waitFor(() => { expect(host.mutate).toHaveBeenCalledTimes(1) })
 
-    expect(host.set.mock.calls).toEqual([['timeoutMs', 9_000], ['maxOutputBytes', 1_024]])
+    expect(host.mutate).toHaveBeenCalledWith([
+      { op: 'set', path: ['timeoutMs'], value: 9_000 },
+      { op: 'set', path: ['maxOutputBytes'], value: 1_024 },
+    ], host.scope.getSnapshot().revision)
     expect(face.hooks.bashCard.getSnapshot().dirty).toBe(false)
   })
 
@@ -377,7 +384,7 @@ describe('BashCardController', () => {
     expect(face.hooks.bashCard.getSnapshot().timeoutMs.text).toBe('60000')
 
     face.save()
-    await vi.waitFor(() => { expect(host.unset).toHaveBeenCalledWith('timeoutMs') })
+    await vi.waitFor(() => { expect(host.mutate).toHaveBeenCalledWith([{ op: 'unset', path: ['timeoutMs'] }], host.scope.getSnapshot().revision) })
 
     expect(face.hooks.bashCard.getSnapshot()).toMatchObject({
       dirty: false,
@@ -395,7 +402,7 @@ describe('BashCardController', () => {
     face.discard()
 
     expect(face.hooks.bashCard.getSnapshot().timeoutMs.text).toBe('5000')
-    expect(host.set).not.toHaveBeenCalled()
+    expect(host.mutate).not.toHaveBeenCalled()
   })
 })
 
@@ -415,7 +422,7 @@ describe('AgentLoopCardController', () => {
 
     face.edit('maxParallelToolCalls', '4')
     face.save()
-    await vi.waitFor(() => { expect(host.set).toHaveBeenCalledWith('maxParallelToolCalls', 4) })
+    await vi.waitFor(() => { expect(host.mutate).toHaveBeenCalledWith([{ op: 'set', path: ['maxParallelToolCalls'], value: 4 }], host.scope.getSnapshot().revision) })
 
     expect(face.hooks.agentLoopCard.getSnapshot()).toMatchObject({
       dirty: false,
@@ -889,7 +896,7 @@ describe('WebSearchCardController', () => {
     await vi.waitFor(() => { expect(credentials.set).toHaveBeenCalled() })
 
     expect(credentials.set).toHaveBeenCalledWith('DEEPSEEK_API_KEY', 'ds-secret')
-    expect(host.set).not.toHaveBeenCalled()
+    expect(host.mutate).not.toHaveBeenCalled()
     await vi.waitFor(() => {
       expect(face.hooks.webSearchCard.getSnapshot()).toMatchObject({ dirty: false, apiKeyConfigured: true })
     })
@@ -1012,9 +1019,12 @@ describe('WebSearchCardController', () => {
     face.edit('baseURL', 'https://other.test')
     face.edit('maxUses', '3')
     face.save()
-    await vi.waitFor(() => { expect(host.set).toHaveBeenCalledTimes(2) })
+    await vi.waitFor(() => { expect(host.mutate).toHaveBeenCalledTimes(1) })
 
-    expect(host.set.mock.calls).toEqual([['baseURL', 'https://other.test'], ['maxUses', 3]])
+    expect(host.mutate).toHaveBeenCalledWith([
+      { op: 'set', path: ['baseURL'], value: 'https://other.test' },
+      { op: 'set', path: ['maxUses'], value: 3 },
+    ], host.scope.getSnapshot().revision)
     expect(credentials.set).not.toHaveBeenCalled()
   })
 })

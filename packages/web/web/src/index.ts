@@ -67,13 +67,13 @@ export interface WebRuntimeConfig {
  *
  * Selection semantics (resolved at execution time, never order-dependent):
  * - First available id in `preferredSearchProviders` wins for search; missing ids fail.
- * - A configured id that is registered and `available()` â†’ that provider.
- * - A configured id not registered â†’ `WEB_PROVIDER_CONFIGURED_MISSING`.
- * - A configured id registered but unavailable â†’
+ * - A configured id that is registered and `available()` → that provider.
+ * - A configured id not registered → `WEB_PROVIDER_CONFIGURED_MISSING`.
+ * - A configured id registered but unavailable →
  *   `WEB_PROVIDER_CONFIGURED_UNAVAILABLE`.
- * - No id configured, exactly one registered usable provider â†’ that provider.
- * - No id configured, multiple usable providers â†’ `WEB_PROVIDER_AMBIGUOUS`.
- * - No id configured, no usable provider â†’ `WEB_PROVIDER_UNAVAILABLE`.
+ * - No id configured, exactly one registered usable provider → that provider.
+ * - No id configured, multiple usable providers → `WEB_PROVIDER_AMBIGUOUS`.
+ * - No id configured, no usable provider → `WEB_PROVIDER_UNAVAILABLE`.
  */
 export class WebRuntime extends Service {
   /**
@@ -131,7 +131,7 @@ export class WebRuntime extends Service {
       yield () => store.delete(provider.id)
     }, 'web.registerProvider()')
     // ctx.effect's disposer returns Promise<void>; our disposer API is
-    // synchronous fire-and-forget â€” discard the (always-resolved) promise.
+    // synchronous fire-and-forget — discard the (always-resolved) promise.
     return () => void dispose()
   }
 

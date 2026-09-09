@@ -2792,7 +2792,7 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
   {
     key: 'web',
     summary: 'The web access service.',
-    description: 'The web access service. Registered as `ctx.web` (one instance per context).\n\nSelection semantics (resolved at execution time, never order-dependent):\n\n- First available id in `preferredSearchProviders` wins for search; missing ids fail.\n- A configured id that is registered and `available()` â†’ that provider.\n- A configured id not registered â†’ `WEB_PROVIDER_CONFIGURED_MISSING`.\n- A configured id registered but unavailable â†’ `WEB_PROVIDER_CONFIGURED_UNAVAILABLE`.\n- No id configured, exactly one registered usable provider â†’ that provider.\n- No id configured, multiple usable providers â†’ `WEB_PROVIDER_AMBIGUOUS`.\n- No id configured, no usable provider â†’ `WEB_PROVIDER_UNAVAILABLE`.',
+    description: 'The web access service. Registered as `ctx.web` (one instance per context).\n\nSelection semantics (resolved at execution time, never order-dependent):\n\n- First available id in `preferredSearchProviders` wins for search; missing ids fail.\n- A configured id that is registered and `available()` → that provider.\n- A configured id not registered → `WEB_PROVIDER_CONFIGURED_MISSING`.\n- A configured id registered but unavailable → `WEB_PROVIDER_CONFIGURED_UNAVAILABLE`.\n- No id configured, exactly one registered usable provider → that provider.\n- No id configured, multiple usable providers → `WEB_PROVIDER_AMBIGUOUS`.\n- No id configured, no usable provider → `WEB_PROVIDER_UNAVAILABLE`.',
     methods: [
       {
         signature: 'registerSearchProvider(provider: WebSearchProvider): () => void',

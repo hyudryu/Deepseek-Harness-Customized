@@ -18,6 +18,12 @@ const server = createServer((request, response) => {
   if (query === 'invalid-results') { response.end('{}'); return }
   if (query === 'invalid-url') { response.end(JSON.stringify({ results: [{ url: 'relative' }] })); return }
   if (query === 'invalid-title') { response.end(JSON.stringify({ results: [{ url: 'https://a.test', title: 1 }] })); return }
+  if (query === 'canonical') {
+    response.end(JSON.stringify({ results: [
+      { url: 'https://a.test' }, { url: 'https://a.test/' }, { url: 'https:evil.example' },
+    ] }))
+    return
+  }
   response.setHeader('content-type', 'application/json')
   response.end(JSON.stringify({ results: query === 'empty' ? [] : [
     { url: 'https://a.test', title: url.pathname, content: url.searchParams.get('format'), publishedDate: '2026-09-08T00:00:00Z' },
@@ -32,19 +38,27 @@ afterAll(async () => {
   server.closeAllConnections()
   await new Promise<void>((resolve, reject) => server.close((error) => { if (error) reject(error); else resolve() }))
 })
-function provider(timeoutMs = 1000): SearXNGSearchProvider {
-  return new SearXNGSearchProvider(() => ({ enabled: true, baseURL: `${origin}/prefix/`, timeoutMs }))
+function provider(timeoutMs = 1000, maxResponseBytes = 1_000_000): SearXNGSearchProvider {
+  return new SearXNGSearchProvider(() => ({
+    enabled: true, baseURL: `${origin}/prefix/`, timeoutMs, maxResponseBytes,
+  }))
 }
 describe('SearXNG HTTP search', () => {
   it('requests JSON under the configured prefix and preserves portable, unique sources', async () => {
     expect(provider().available()).toBe(true)
     await expect(provider().search({ query: 'a & b' })).resolves.toEqual({ sources: [
-      { url: 'https://a.test', title: '/prefix/search', snippet: 'json', publishedAt: '2026-09-08T00:00:00Z' },
-      { url: 'https://b.test' },
+      { url: 'https://a.test/', title: '/prefix/search', snippet: 'json', publishedAt: '2026-09-08T00:00:00Z' },
+      { url: 'https://b.test/' },
     ], truncated: false })
   })
   it('accepts an empty result set', async () => {
     await expect(provider().search({ query: 'empty' })).resolves.toEqual({ sources: [], truncated: false })
+  })
+  it('canonicalizes by href and deduplicates equivalent spellings', async () => {
+    await expect(provider().search({ query: 'canonical' })).resolves.toEqual({ sources: [
+      { url: 'https://a.test/' },
+      { url: 'https://evil.example/' },
+    ], truncated: false })
   })
   it.each(['500', 'invalid-json', 'invalid-results', 'invalid-url', 'invalid-title'])('reports %s as a provider error', async (query) => {
     await expect(provider().search({ query })).rejects.toMatchObject({ code: 'WEB_PROVIDER_ERROR' })
@@ -59,6 +73,11 @@ describe('SearXNG HTTP search', () => {
   it.each(['hang', 'body-hang'])('bounds the complete %s response', async (query) => {
     await expect(provider(50).search({ query })).rejects.toMatchObject({ code: 'WEB_TIMEOUT' })
   })
+  it('refuses a response body larger than the configured bound', async () => {
+    const outcome = provider(1000, 50).search({ query: 'a & b' })
+    await expect(outcome).rejects.toMatchObject({ code: 'WEB_PROVIDER_ERROR' })
+    await expect(outcome).rejects.toThrow(/exceeds the maximum of 50 bytes/)
+  })
   it('honors cancellation before dispatch and during the response', async () => {
     await expect(provider().search({ query: 'hang' }, AbortSignal.abort('stop'))).rejects.toMatchObject({ code: 'WEB_ABORTED' })
     const controller = new AbortController()
@@ -67,12 +86,17 @@ describe('SearXNG HTTP search', () => {
     await expect(pending).rejects.toMatchObject({ code: 'WEB_ABORTED' })
   })
   it('rejects direct calls while disabled', async () => {
-    const disabled = new SearXNGSearchProvider(() => ({ enabled: false, baseURL: origin, timeoutMs: 1000 }))
+    const disabled = new SearXNGSearchProvider(() => ({ enabled: false, baseURL: origin, timeoutMs: 1000, maxResponseBytes: 1_000_000 }))
     expect(disabled.available()).toBe(false)
     await expect(disabled.search({ query: 'q' })).rejects.toMatchObject({ code: 'WEB_PROVIDER_CONFIGURED_UNAVAILABLE' })
   })
   it.each(['file:///tmp', 'https://user:password@test', 'https://test?q=1', 'https://test#fragment', 'invalid'])('rejects invalid base %s', (baseURL) => {
     expect(() => Config({ baseURL })).toThrow()
+  })
+  it('normalizes an accepted base URL without whitespace, trailing query, or fragment', () => {
+    expect(Config({ baseURL: ' http://a.test ' }).baseURL).toBe('http://a.test/')
+    expect(Config({ baseURL: 'https://search.example/?' }).baseURL).toBe('https://search.example/')
+    expect(Config({ baseURL: 'https://search.example/#' }).baseURL).toBe('https://search.example/')
   })
   it.each([0, -1, 0.5, 2147483648])('rejects invalid timeout %s', (timeoutMs) => {
     expect(() => Config({ timeoutMs })).toThrow()

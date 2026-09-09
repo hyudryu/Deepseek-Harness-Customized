@@ -51,7 +51,9 @@ const instanceField: CardFieldSpec = {
     }
     if ((url.protocol !== 'http:' && url.protocol !== 'https:')
       || url.username !== '' || url.password !== '' || url.search !== '' || url.hash !== '') return undefined
-    return { kind: 'set', value }
+    // Normalize the parsed URL exactly as the Host validator does, so the
+    // staged value matches what the Host stores and a save reports success.
+    return { kind: 'set', value: `${url.origin}${url.pathname}` }
   },
 }
 const timeoutField: CardFieldSpec = {

@@ -3389,10 +3389,12 @@ export interface Config {
   baseURL?: string
   /** Complete request and response deadline in milliseconds. */
   timeoutMs?: number
+  /** Maximum response body size in bytes; a larger body is refused. */
+  maxResponseBytes?: number
 }
 ```
 
-Source: [`packages/web/web-search-searxng/src/index.ts:19`](../packages/web/web-search-searxng/src/index.ts)
+Source: [`packages/web/web-search-searxng/src/index.ts:21`](../packages/web/web-search-searxng/src/index.ts)
 
 <a id="deepseek-aidsh-webhook-github"></a>
 
