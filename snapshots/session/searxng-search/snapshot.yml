@@ -1,0 +1,8 @@
+version: 1
+scenario: searxng-search
+profile: headless
+composition: searxng-search
+recording: authored
+header:
+  class: searxng-search
+  pin: true

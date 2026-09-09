@@ -33,6 +33,8 @@ Choose the service when a plugin or tool must search or fetch without hard-codin
 
 ### Minimal configuration
 
+Search first selects the first available provider in `preferredSearchProviders`. This explicit list precedes both the configured search pin and its environment fallback. The base bundle prefers `searxng`, whose enable setting controls availability; disabling it restores the normal pin. Errors from the selected provider are returned without silently dispatching the query elsewhere.
+
 Load the service and let a single mounted backend auto-select, or pin a provider id with `searchProvider`/`fetchProvider`. The environment variables `$DSH_WEB_SEARCH_PROVIDER` and `$DSH_WEB_FETCH_PROVIDER` feed the same fields and are not a separate priority chain.
 
 ```yaml
@@ -43,6 +45,7 @@ Load the service and let a single mounted backend auto-select, or pin a provider
 
 | Field | Default | Meaning |
 |---|---|---|
+| `preferredSearchProviders` | `[]` | Ordered search overrides evaluated before the pin; registered unavailable providers are skipped, missing ids fail |
 | `searchProvider` | (unset) | Pinned search provider id; unset auto-selects when exactly one is usable |
 | `fetchProvider` | (unset) | Pinned fetch provider id; unset auto-selects when exactly one is usable |
 

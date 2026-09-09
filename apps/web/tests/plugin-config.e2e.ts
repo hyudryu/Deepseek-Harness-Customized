@@ -19,6 +19,7 @@ import { ZH_BROWSER_LOCALE, saveFailureShot } from './support.ts'
 const SNAPSHOT_DIR = fileURLToPath(new URL('./expected/plugin-config', import.meta.url))
 const SECTION_EXPECTED = join(SNAPSHOT_DIR, 'section.expected.md')
 const MODE = webSnapshotMode()
+const SHELL_TIMEOUT = process.platform === 'win32' ? '120000' : '60000'
 
 describe('web e2e: plugin configuration section', () => {
   let scaffold: WebScaffold
@@ -137,7 +138,7 @@ describe('web e2e: plugin configuration section', () => {
     const timeout = dialog.getByLabel('命令超时（毫秒）')
     await timeout.waitFor({ timeout: 10_000 })
     // The composed default this deployment ships, before any user layer.
-    expect(await timeout.inputValue()).toBe('60000')
+    expect(await timeout.inputValue()).toBe(SHELL_TIMEOUT)
     await timeout.fill('12000')
     await timeout.blur()
 
@@ -204,7 +205,7 @@ describe('web e2e: plugin configuration section', () => {
     // The reset stages the composed default; the document still carries the
     // override until the save lands.
     await dialog.getByRole('button', { name: '恢复默认' }).click()
-    await expect.poll(() => timeout.inputValue(), { timeout: 5_000 }).toBe('60000')
+    await expect.poll(() => timeout.inputValue(), { timeout: 5_000 }).toBe(SHELL_TIMEOUT)
     expect(await settingsDocument()).toContain('timeoutMs: 12000')
 
     await dialog.getByRole('button', { name: '保存', exact: true }).click()
@@ -214,8 +215,44 @@ describe('web e2e: plugin configuration section', () => {
     const expandTerminal = dialog.getByRole('button', { name: '展开设置: 终端' })
     await expandTerminal.waitFor({ timeout: 5_000 })
     await expandTerminal.click()
-    expect(await timeout.inputValue()).toBe('60000')
+    expect(await timeout.inputValue()).toBe(SHELL_TIMEOUT)
     expect(await dialog.getByText('已覆盖').count()).toBe(0)
+    expect(tripwire.pageErrors).toEqual([])
+  }, 60_000)
+
+  it('stages SearXNG enablement, rejects invalid URLs, and persists the selected instance', async () => {
+    onTestFailed(() => saveFailureShot(page, 'web-e2e-plugin-config-searxng'))
+    const dialog = await openPlugins()
+    const card = dialog.getByRole('listitem').filter({ has: page.getByText('SearXNG 网页搜索', { exact: true }) })
+    await card.getByText('SearXNG 网页搜索', { exact: true }).click()
+    const toggle = card.getByRole('switch', { name: '启用 SearXNG' })
+    const url = card.getByLabel('实例地址', { exact: true })
+    const initialURL = await url.inputValue()
+    expect(await toggle.isChecked()).toBe(false)
+    await toggle.click()
+    await url.fill('not-a-url')
+    expect(await card.getByText('请输入不含凭据、查询参数或片段（fragment）的 HTTP 或 HTTPS 地址。', { exact: true }).count()).toBe(1)
+    expect(await card.getByRole('button', { name: '保存', exact: true }).isEnabled()).toBe(false)
+    expect(await settingsDocument()).not.toContain('web-search-searxng:')
+    await card.getByRole('button', { name: '放弃修改', exact: true }).click()
+    expect(await toggle.isChecked()).toBe(false)
+    expect(await url.inputValue()).toBe(initialURL)
+    await url.fill('http://127.0.0.1:18888/searxng')
+    await card.getByLabel('请求超时（毫秒）', { exact: true }).fill('12000')
+    await toggle.click()
+    await card.getByRole('button', { name: '保存', exact: true }).click()
+    await expect.poll(settingsDocument).toContain('http://127.0.0.1:18888/searxng')
+    await expect.poll(() => card.getByRole('switch').count()).toBe(0)
+    await card.getByText('SearXNG 网页搜索', { exact: true }).click()
+    expect(await toggle.isChecked()).toBe(true)
+    expect(await url.inputValue()).toBe('http://127.0.0.1:18888/searxng')
+    expect(await card.getByLabel('请求超时（毫秒）', { exact: true }).inputValue()).toBe('12000')
+    await toggle.click()
+    await card.getByRole('button', { name: '保存', exact: true }).click()
+    await expect.poll(() => card.getByRole('switch').count()).toBe(0)
+    await card.getByText('SearXNG 网页搜索', { exact: true }).click()
+    expect(await toggle.isChecked()).toBe(false)
+    expect(await url.inputValue()).toBe('http://127.0.0.1:18888/searxng')
     expect(tripwire.pageErrors).toEqual([])
   }, 60_000)
 

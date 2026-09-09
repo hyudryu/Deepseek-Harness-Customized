@@ -14,6 +14,7 @@
  */
 
 import { createSnapshotStore, type SnapshotStore } from '@deepseek-ai/dsh-client-store'
+import type { SettingsPathOpView } from '@deepseek-ai/dsh-api-remotes/client'
 import type { SettingsScope, SettingsScopeSnapshot } from '@deepseek-ai/dsh-client-ui-settings/client'
 
 /** The write one field's staged text performs when the card is saved. */
@@ -101,10 +102,16 @@ interface PlannedWrite {
   /** Field this entry writes. */
   field: string
   /**
-   * Perform the write and report whether the Host holds the staged value
-   * afterwards; undefined when the draft is not a value the field accepts.
+   * Section operation batched into one atomic namespace mutation, so a save
+   * publishes no intermediate provider or plugin configuration. Undefined for
+   * a write-only control or an invalid draft.
    */
-  run: (() => Promise<boolean>) | undefined
+  op?: SettingsPathOpView
+  /**
+   * Perform a write-only control's write and report whether it landed;
+   * undefined for a section field carried by `op` or an invalid draft.
+   */
+  run?: () => Promise<boolean>
 }
 
 /**
@@ -197,7 +204,7 @@ export class CardForm<T> {
       available: snapshot.status === 'ready',
       writable: snapshot.writable,
       dirty: plan.length > 0,
-      invalid: plan.some(item => item.run === undefined),
+      invalid: plan.some(item => item.op === undefined && item.run === undefined),
       saving: this.saving,
       failed: this.failed,
     }
@@ -248,33 +255,56 @@ export class CardForm<T> {
   /**
    * Write every staged edit, then re-seed from what the Host accepted.
    *
-   * The Host is the only authority on whether a value was accepted — its
-   * validators own the constraints no schema can express — so the outcome is
-   * read back from the section rather than predicted here. A save that did not
-   * land keeps its drafts, so the user can correct them instead of retyping.
+   * Section fields are committed as one revision-fenced namespace mutation, so
+   * a save that stages several fields (enablement beside a new endpoint, for
+   * example) never publishes an intermediate configuration a concurrent read
+   * could observe. The Host is the only authority on whether a value was
+   * accepted — its validators own the constraints no schema can express — so
+   * the outcome is read back from the section rather than predicted here. A
+   * save that did not land keeps its drafts, so the user can correct them
+   * instead of retyping.
    * @returns settlement after every write and the read-back.
    */
   async save(): Promise<void> {
     const plan = this.plan()
-    const writes = plan.flatMap(item => item.run === undefined ? [] : [item.run])
-    if (plan.length === 0 || this.saving || writes.length !== plan.length) return
+    if (plan.length === 0 || this.saving) return
+    if (plan.some(item => item.op === undefined && item.run === undefined)) return
     this.saving = true
     this.failed = false
     this.publish()
-    let landed = true
-    for (const write of writes) {
-      landed = await write() && landed
-    }
+    const landed = await this.commit(plan)
     if (landed) this.staged.clear()
     this.saving = false
     this.failed = !landed
     this.publish()
   }
 
+  /** Apply one save's planned writes and report whether every one landed. */
+  private async commit(plan: PlannedWrite[]): Promise<boolean> {
+    let landed = true
+    const ops: SettingsPathOpView[] = []
+    const sectionFields: string[] = []
+    for (const item of plan) {
+      if (item.op !== undefined) {
+        ops.push(item.op)
+        sectionFields.push(item.field)
+      }
+    }
+    if (ops.length > 0) {
+      await this.scope.mutate(ops, this.scope.getSnapshot().revision)
+      landed = sectionFields.every(field => this.fieldLanded(field))
+    }
+    for (const item of plan) {
+      if (item.run === undefined) continue
+      landed = await item.run() && landed
+    }
+    return landed
+  }
+
   /**
    * Every staged edit a save would write. An entry whose draft is not a value
-   * its field accepts carries no write: the form is still dirty, and the save
-   * refuses rather than dropping the edit.
+   * its field accepts carries neither an operation nor a write: the form is
+   * still dirty, and the save refuses rather than dropping the edit.
    * @returns the planned writes, in the order the fields were staged.
    */
   private plan(): PlannedWrite[] {
@@ -288,26 +318,25 @@ export class CardForm<T> {
       }
       const spec = this.spec(field)
       if (staged.clear) {
-        if (this.stored(field)) plan.push({ field, run: () => this.clear(field) })
+        if (this.stored(field)) plan.push({ field, op: { op: 'unset', path: [field] } })
         continue
       }
       if (staged.text === spec.format(this.sectionValue(field))) continue
       const write = spec.parse(staged.text)
-      if (write === undefined) plan.push({ field, run: undefined })
-      else if (write.kind === 'clear') plan.push({ field, run: () => this.clear(field) })
-      else plan.push({ field, run: () => this.store(field, write.value) })
+      if (write === undefined) plan.push({ field })
+      else if (write.kind === 'clear') plan.push({ field, op: { op: 'unset', path: [field] } })
+      else plan.push({ field, op: { op: 'set', path: [field], value: write.value as Extract<SettingsPathOpView, { op: 'set' }>['value'] } })
     }
     return plan
   }
 
-  private async clear(field: string): Promise<boolean> {
-    await this.scope.unset(field)
-    return !this.stored(field)
-  }
-
-  private async store(field: string, value: unknown): Promise<boolean> {
-    await this.scope.set(field, value)
-    return this.userLayer()?.[field] === value
+  /** Whether a committed section field now holds the staged value (or its clear). */
+  private fieldLanded(field: string): boolean {
+    const staged = this.staged.get(field)
+    if (staged === undefined) return true
+    if (staged.clear) return !this.stored(field)
+    const write = this.spec(field).parse(staged.text)
+    return write !== undefined && write.kind === 'set' && this.userLayer()?.[field] === write.value
   }
 
   private stage(field: string, edit: StagedEdit): void {

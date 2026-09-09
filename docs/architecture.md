@@ -12,6 +12,8 @@ We recommend using an agent to explore the codebase and understand its architect
 
 There is no privileged core to patch: you extend dsh by mounting a plugin beside the others, and registrations are effects that unwind when their plugin unloads.
 
+The web service resolves search providers at execution time. Its explicit `preferredSearchProviders` list precedes the configured or environment search pin; unavailable preferred providers are skipped, while missing preferred ids fail. The base bundle uses this list to select enabled SearXNG before DeepSeek without relying on registration order. Fetch selection is unchanged.
+
 ## Profiles and bundles
 
 A running `dsh` is a plugin tree composed at boot from ordered layers.

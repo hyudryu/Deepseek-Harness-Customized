@@ -13,6 +13,9 @@
     - button "Agent 预设":
       - img
       - text: Agent 预设
+    - button "用量":
+      - img
+      - text: 用量
   - button "打开配置文件"
   - button "关闭":
     - img
@@ -24,6 +27,10 @@
     - tab "插件列表"
   - tabpanel "插件配置":
     - list:
+      - listitem:
+        - button "身份验证器 MCP 导入身份验证器二维码，并向会话代理提供当前验证码。":
+          - strong: 身份验证器 MCP
+          - text: 导入身份验证器二维码，并向会话代理提供当前验证码。
       - listitem:
         - 'button "展开设置: 终端"':
           - text: 终端 限制 agent 运行的每一条命令。
@@ -39,4 +46,8 @@
       - listitem:
         - 'button "展开设置: 网页搜索"':
           - text: 网页搜索 DeepSeek 搜索提供方。
+          - img
+      - listitem:
+        - 'button "展开设置: SearXNG 网页搜索"':
+          - text: SearXNG 网页搜索 无需 API 密钥，通过你的 SearXNG 实例进行搜索。
           - img

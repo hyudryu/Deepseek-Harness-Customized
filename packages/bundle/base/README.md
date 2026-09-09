@@ -13,6 +13,8 @@ Every base-backed `dsh --profile` surface runs on `dsh-base`, so those surfaces 
 
 The [session MCP server](../../mcp/session-mcp/README.md) starts automatically at `http://127.0.0.1:3080/mcp` and closes with the profile. Web shares its configured HTTP listener; other profiles bind a standalone listener. Set `DSH_SESSION_MCP_PORT` to another port when running concurrent profiles; `0` requests an available port.
 
+The [SearXNG search provider](../../web/web-search-searxng/README.md) is installed but disabled by default. Enable it in Plugin configuration to prefer it over the DeepSeek search fallback without requiring a search API key.
+
 ## Table of Contents
 
 - [Use this package](#use-this-package)

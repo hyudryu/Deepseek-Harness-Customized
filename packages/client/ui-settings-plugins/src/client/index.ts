@@ -26,6 +26,8 @@ import { ConfigurablePluginsTab } from './ConfigurablePluginsTab.tsx'
 import { PluginsSettingsSection } from './PluginsSettingsSection.tsx'
 import type { PluginsSettingsSectionInjected, PluginsSettingsTabEntry } from './PluginsSettingsSection.tsx'
 import { SubagentModelSelectionCard } from './SubagentModelSelectionCard.tsx'
+import { SearxngCard } from './SearxngCard.tsx'
+import { SEARXNG_NS, SearxngCardController } from './searxng-card-controller.ts'
 import { WebSearchCard } from './WebSearchCard.tsx'
 import { AGENT_LOOP_NS, AgentLoopCardController } from './agent-loop-card-controller.ts'
 import { SHELL_NS, BashCardController } from './bash-card-controller.ts'
@@ -67,6 +69,7 @@ export function apply(ctx: ClientContext): void {
 
   const bash = new BashCardController(ctx.settingsScope.bind({ namespace: SHELL_NS }))
   const agentLoop = new AgentLoopCardController(ctx.settingsScope.bind({ namespace: AGENT_LOOP_NS }))
+  const searxng = new SearxngCardController(ctx.settingsScope.bind({ namespace: SEARXNG_NS }))
   const webSearch = new WebSearchCardController(
     ctx.settingsScope.bind({ namespace: WEB_SEARCH_NS }), ctx)
   const subagentModelSelection = new SubagentModelSelectionCardController(
@@ -189,5 +192,11 @@ export function apply(ctx: ClientContext): void {
       locale: NS,
       inject: () => webSearch.inject(),
     }, WebSearchCard)
+    yield ctx.slots.register({
+      name: 'settings.plugin.item',
+      key: SEARXNG_NS,
+      locale: NS,
+      inject: () => searxng.inject(),
+    }, SearxngCard)
   })
 }

@@ -3230,12 +3230,14 @@ Source: [`packages/interaction/user-approval/src/index.ts:127`](../packages/inte
 
 ```ts config-catalog
 /**
- * Config for the web seam. `searchProvider` / `fetchProvider` pin which provider
- * wins for each capability; both are optional (a single registered usable
- * provider auto-selects). Operational overrides such as environment variables
+ * Config for the web seam. `searchProvider` pins the fallback after the ordered
+ * `preferredSearchProviders` list. `fetchProvider` independently pins fetch.
+ * Omitted pins auto-select a single usable provider. Operational environment overrides
  * must feed these same fields rather than introduce a hidden priority chain.
  */
 export interface WebRuntimeConfig {
+  /** Ordered search overrides, tried before the configured or environment fallback. Missing ids fail; unavailable providers are skipped. */
+  readonly preferredSearchProviders?: string[]
   /** Explicit search provider id. Omitted = auto-select when exactly one usable. */
   readonly searchProvider?: string
   /** Explicit fetch provider id. Omitted = auto-select when exactly one usable. */
@@ -3243,7 +3245,7 @@ export interface WebRuntimeConfig {
 }
 ```
 
-Source: [`packages/web/web/src/index.ts:55`](../packages/web/web/src/index.ts)
+Source: [`packages/web/web/src/index.ts:56`](../packages/web/web/src/index.ts)
 
 <a id="deepseek-aidsh-web-app"></a>
 
@@ -3371,6 +3373,28 @@ export interface Config {
 ```
 
 Source: [`packages/web/web-search-perplexity/src/index.ts:30`](../packages/web/web-search-perplexity/src/index.ts)
+
+<a id="deepseek-aidsh-web-search-searxng"></a>
+
+## `@deepseek-ai/dsh-web-search-searxng`
+
+Requires: `web`
+
+```ts config-catalog
+/** Deployment settings; defaults are resolved before provider execution. */
+export interface Config {
+  /** Make SearXNG available for search selection. */
+  enabled?: boolean
+  /** HTTP(S) instance base, optionally including a path prefix. */
+  baseURL?: string
+  /** Complete request and response deadline in milliseconds. */
+  timeoutMs?: number
+  /** Maximum response body size in bytes; a larger body is refused. */
+  maxResponseBytes?: number
+}
+```
+
+Source: [`packages/web/web-search-searxng/src/index.ts:21`](../packages/web/web-search-searxng/src/index.ts)
 
 <a id="deepseek-aidsh-webhook-github"></a>
 
