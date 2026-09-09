@@ -31,7 +31,7 @@ async function boot(maxAccounts = 100, maxMetadataBytes = 256) {
   await writeFile(config, [
     '- name: credentials', '  config:', `    path: '${join(directory, 'credentials.yaml')}'`, '    watch: false',
     '- name: webserver', '  config:', "    host: '127.0.0.1'", '    port: 0',
-    '- name: connection', '- name: system-prompt', '- name: tools',
+    '- name: connection', '  config:', '    requireAuth: true', '- name: system-prompt', '- name: tools',
     '- name: settings', '  config:', `    dshHome: '${directory}'`, '    watch: false',
     '- id: authenticator', '  name: authenticator', '  config:', `    dshHome: '${directory}'`, `    maxAccounts: ${maxAccounts}`, `    maxMetadataBytes: ${maxMetadataBytes}`, '',
   ].join('\n'))

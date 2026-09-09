@@ -1177,7 +1177,7 @@ describe('TypertGatewayService', () => {
     const routes: WebRoute[] = []
     provideBrowserCredentials(ctx)
     ctx.provide('webServer', fakeHttpServer(routes) as WebServer)
-    const connectionFiber = ctx.plugin({ inject: [...connectionInject], apply: applyConnection })
+    const connectionFiber = ctx.plugin({ inject: [...connectionInject], apply: applyConnection }, { requireAuth: true })
     await connectionFiber
     await ctx.plugin(TypertRegistry)
     const gatewayFiber = ctx.plugin(TypertGatewayService)

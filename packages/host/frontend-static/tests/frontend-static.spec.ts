@@ -51,6 +51,8 @@ async function loadComposition(): Promise<Context> {
     "    host: '127.0.0.1'",
     '    port: 0',
     "- name: '@deepseek-ai/dsh-client-connection'",
+    '  config:',
+    '    requireAuth: true',
     '- id: frontend',
     "  name: '@deepseek-ai/dsh-host-frontend-static'",
     '  config:',

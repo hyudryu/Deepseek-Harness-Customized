@@ -81,7 +81,7 @@ describe.skipIf(!requiredArtifacts)('Goal Remote built LIB chain', () => {
           return next ?? current
         },
       })
-      await host.plugin({ inject: connectionHost.inject, apply: connectionHost.apply })
+      await host.plugin({ inject: connectionHost.inject, apply: connectionHost.apply }, { requireAuth: true })
       await host.plugin(TypertRegistry)
       await host.plugin(AgentRegistry)
       await host.plugin(TypertRemoteService)

@@ -81,7 +81,7 @@ function fakeResponse(): {
   return { response, state }
 }
 
-async function mounted(config?: { trustedHosts?: string[] }): Promise<{
+async function mounted(config?: { trustedHosts?: string[]; requireAuth?: boolean }): Promise<{
   routes: WebRoute[]
   upgrades: WebUpgradeRoute[]
   connection: HostConnectionHandle
@@ -92,7 +92,11 @@ async function mounted(config?: { trustedHosts?: string[] }): Promise<{
   const upgrades: WebUpgradeRoute[] = []
   provideBrowserCredentials(ctx)
   ctx.provide('webServer', fakeHttpServer(routes, upgrades) as WebServer)
-  const fiber = ctx.plugin({ inject: [...inject], apply }, config)
+  // These tests assert the authenticated token/cookie posture; the connection
+  // plugin defaults to anonymous, so opt back in explicitly.
+  const fiber = ctx.plugin({
+    inject: [...inject], apply,
+  }, { requireAuth: true, ...config })
   await fiber.await()
   return {
     routes,
@@ -139,7 +143,7 @@ describe('connection node half', () => {
     const ctx = new Context()
     provideBrowserCredentials(ctx)
     ctx.provide('webServer', fakeHttpServer(routes, upgrades) as WebServer)
-    const fiber = ctx.plugin({ inject: [...inject], apply }, { trustedHosts: ['harness.internal/path'] })
+    const fiber = ctx.plugin({ inject: [...inject], apply }, { requireAuth: true, trustedHosts: ['harness.internal/path'] })
     await expect(fiber).rejects.toThrow(/not a bare host\[:port\] authority/)
     expect(routes).toHaveLength(0)
     expect(upgrades).toHaveLength(0)
@@ -243,7 +247,7 @@ describe('connection node half', () => {
     const routes: WebRoute[] = []
     provideBrowserCredentials(ctx)
     ctx.provide('webServer', fakeHttpServer(routes, []) as WebServer)
-    const fiber = ctx.plugin({ inject: [...inject], apply })
+    const fiber = ctx.plugin({ inject: [...inject], apply }, { requireAuth: true })
     await fiber.await()
     expect(routes).toHaveLength(1)
     expect(routes[0]).toMatchObject({ kind: 'prefix', path: API_PATH })
@@ -292,7 +296,7 @@ describe('connection node half', () => {
     const routes: WebRoute[] = []
     provideBrowserCredentials(ctx)
     ctx.provide('webServer', fakeHttpServer(routes, []) as WebServer)
-    const fiber = ctx.plugin({ inject: [...inject], apply }, { trustedHosts: ['harness.example'] })
+    const fiber = ctx.plugin({ inject: [...inject], apply }, { requireAuth: true, trustedHosts: ['harness.example'] })
     await fiber.await()
     const connection = ctx.get('connection') as HostConnectionHandle
     const calls: unknown[] = []
@@ -376,7 +380,7 @@ describe('connection node half', () => {
     const routes: WebRoute[] = []
     provideBrowserCredentials(ctx)
     ctx.provide('webServer', fakeHttpServer(routes, []) as WebServer)
-    const fiber = ctx.plugin({ inject: [...inject], apply }, { trustedHosts: ['harness.example'] })
+    const fiber = ctx.plugin({ inject: [...inject], apply }, { requireAuth: true, trustedHosts: ['harness.example'] })
     await fiber.await()
     const connection = ctx.get('connection') as HostConnectionHandle
     const remove = connection.rpc.handle('/rpc', async (endpoint) => {

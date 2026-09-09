@@ -126,18 +126,27 @@ try {
  *
  * Derived entries are port-less IP literals: DNS rebinding needs an
  * attacker-controlled name, while an IP-literal Host is safe on any port and
- * an OS-assigned port is unknowable before bind.
+ * an OS-assigned port is unknowable before bind. A non-loopback IP literal
+ * bind (e.g. a Tailscale or LAN address) is trusted and displayed itself.
  * @param bindHost - the active webserver bind host.
  * @param extra - explicit `--trusted-host` values, in argument order.
  * @returns the LAN display addresses and invocation-derived fence authorities.
  */
 export function resolveLanTrust(bindHost: string, extra: readonly string[]): WebRuntimeValues {
-  const lanAddresses = bindHost === ALL_INTERFACES_HOST
+  const allInterfaces = bindHost === ALL_INTERFACES_HOST
+  const addresses = allInterfaces
     ? Object.values(networkInterfaces()).flat()
       .filter((iface): iface is NonNullable<typeof iface> => iface !== undefined && iface.family === 'IPv4' && !iface.internal)
       .map(iface => iface.address)
     : []
+  const explicitBind = !allInterfaces && !isLoopbackBind(bindHost) ? [bindHost] : []
+  const lanAddresses = [...addresses, ...explicitBind]
   return { lanAddresses, trustedHosts: [...lanAddresses, ...extra] }
+}
+
+/** Whether a bind host names a loopback authority. */
+function isLoopbackBind(host: string): boolean {
+  return host === '127.0.0.1' || host === 'localhost' || host === '::1'
 }
 
 /** Model-visible orientation and acceptance boundary for sessions created through `dsh web`. */

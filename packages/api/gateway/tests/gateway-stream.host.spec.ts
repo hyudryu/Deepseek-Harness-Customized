@@ -1005,7 +1005,7 @@ async function setup(
   await ctx.plugin(TypertRegistry)
   await ctx.plugin(TypertGatewayService, gatewayConfig)
   if (transport) {
-    await ctx.plugin({ inject: [...connectionInject], apply: applyConnection })
+    await ctx.plugin({ inject: [...connectionInject], apply: applyConnection }, { requireAuth: true })
   }
   await ctx.plugin(FeedService)
   ctx.typert.register({

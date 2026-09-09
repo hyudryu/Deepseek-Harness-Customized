@@ -1,0 +1,21 @@
+{
+  "name": "dsh-qwen-tool-adapter",
+  "version": "0.1.0",
+  "description": "Qwen tool-call adapter for DeepSeek Harness: translate Qwen's text-format tool calls into structured tool-call blocks so the agent loop dispatches them instead of stopping on the raw markup",
+  "type": "module",
+  "main": "index.js",
+  "files": [
+    "index.js",
+    "core.js",
+    "cordis.patch.yml"
+  ],
+  "scripts": {
+    "test": "node --test test/core.test.mjs test/index.test.mjs"
+  },
+  "license": "MIT",
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    }
+  }
+}

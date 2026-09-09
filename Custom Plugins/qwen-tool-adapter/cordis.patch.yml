@@ -1,0 +1,7 @@
+- insert:
+    - id: qwen-tool-adapter
+      name: dsh-qwen-tool-adapter
+      config:
+        enabled: true
+        providers: []   # empty = any provider; add e.g. [pi-ai] to limit
+        models: []      # empty = any model on a matched provider; add ids to limit
