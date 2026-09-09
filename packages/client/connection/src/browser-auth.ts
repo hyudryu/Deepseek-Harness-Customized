@@ -190,7 +190,7 @@ export class BrowserAuth {
 
   private constructor(
     processOwner: object,
-    private readonly secret: Buffer | undefined,
+    private readonly secret: Buffer,
     maxAgeDays: number,
     private readonly anonymous: boolean,
   ) {
@@ -206,7 +206,9 @@ export class BrowserAuth {
    * Initialize browser authentication and create its durable signing secret
    * when this Harness home has none. With `requireAuth` false the returned
    * owner is anonymous: it admits index requests and browser sessions without
-   * a token or cookie, so the GUI is reachable by IP and port alone.
+   * a token or cookie, so the GUI is reachable by IP and port alone. A
+   * placeholder secret is stored for type completeness but is never read,
+   * because every secret-consuming method returns before it.
    * @param processOwner - root application context retaining one token across Connection reloads.
    * @param credentials - persistent credential provider for the Web profile.
    * @param maxAgeDays - positive absolute browser-cookie lifetime in days.
@@ -219,7 +221,7 @@ export class BrowserAuth {
     maxAgeDays: number,
     requireAuth = false,
   ): Promise<BrowserAuth> {
-    if (!requireAuth) return new BrowserAuth(processOwner, undefined, maxAgeDays, true)
+    if (!requireAuth) return new BrowserAuth(processOwner, Buffer.alloc(0), maxAgeDays, true)
     return new BrowserAuth(processOwner, await initializeSecret(credentials), maxAgeDays, false)
   }
 
