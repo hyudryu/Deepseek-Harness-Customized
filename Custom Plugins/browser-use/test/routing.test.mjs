@@ -63,7 +63,7 @@ function harness(options = {}) {
 }
 
 function execFor(root, id = 'session-1') {
-  return { agent: { session: { id, header: { cwd: root } } }, signal: { aborted: false } }
+  return { agent: { session: { id, header: { cwd: root } } }, signal: new AbortController().signal }
 }
 
 test('apply registers the tool and the skill with the browser-mode rule', () => {
@@ -195,6 +195,7 @@ test('sidecar env carries config, the API key, and telemetry opt-out', () => {
   const root = mkdtempSync(join(tmpdir(), 'dsh-bu-env-'))
   try {
     process.env.DSH_BU_TEST_KEY = 'secret-value'
+    process.env.DSH_BU_UNRELATED_SECRET = 'must-not-leak'
     const config = normalizeConfig({ chromeEndpoint: 'http://127.0.0.1:9222', llmApiKeyEnv: 'DSH_BU_TEST_KEY', llmBaseUrl: 'http://127.0.0.1:9000/v1' })
     const env = buildSidecarEnv(config, execFor(root))
     assert.equal(env.DSH_BU_CDP_URL, 'http://127.0.0.1:9222')
@@ -206,8 +207,53 @@ test('sidecar env carries config, the API key, and telemetry opt-out', () => {
     assert.equal(env.DSH_BU_MAX_STEPS, '25')
     assert.equal(env.ANONYMIZED_TELEMETRY, 'false')
     assert.equal(env.DSH_BU_ARTIFACT_DIR, join(root, '.dsh', 'browser-use-artifacts'))
+    // The allowlisted child environment never inherits unrelated credentials.
+    assert.equal(env.DSH_BU_UNRELATED_SECRET, undefined)
+    assert.equal(Object.keys(env).length > 0, true)
   } finally {
     delete process.env.DSH_BU_TEST_KEY
+    delete process.env.DSH_BU_UNRELATED_SECRET
+    rmSync(root, { recursive: true, force: true })
+  }
+})
+
+test('an aborted run forwards stop to the sidecar', async () => {
+  const root = mkdtempSync(join(tmpdir(), 'dsh-bu-abort-'))
+  const registrations = { tools: [], skills: [] }
+  const stops = []
+  let resolveRun
+  try {
+    const ctx = {
+      logger: { warn() {}, debug() {} },
+      effect(callback) { callback() },
+      provide() {},
+      skills: { register(value) { registrations.skills.push(value) } },
+      tools: { register(value) { registrations.tools.push(value) } },
+    }
+    apply(ctx, { chromeEndpoint: '' }, {
+      ensureRuntime: async () => '/stub/python',
+      launchSidecar: async () => ({
+        alive: true,
+        killed: false,
+        async request(method) {
+          if (method === 'run') return new Promise(resolve => { resolveRun = resolve })
+          if (method === 'stop') { stops.push(method); return { stopped: true } }
+          return {}
+        },
+        async kill() { this.killed = true; this.alive = false },
+      }),
+    })
+    const controller = new AbortController()
+    const exec = { agent: { session: { id: 's1', header: { cwd: root } } }, signal: controller.signal }
+    const pending = registrations.tools[0].execute({ action: 'run', task: 'long task' }, exec)
+    while (resolveRun === undefined) await new Promise(resolve => setImmediate(resolve))
+    const rejected = assert.rejects(pending, /aborted/)
+    controller.abort()
+    await new Promise(resolve => setImmediate(resolve))
+    assert.deepEqual(stops, ['stop'])
+    resolveRun({ done: false, errors: [], steps: [], elapsed_s: 1, screenshot_path: join(root, 'shot.png') })
+    await rejected
+  } finally {
     rmSync(root, { recursive: true, force: true })
   }
 })
@@ -221,4 +267,29 @@ test('missing API key env yields an empty string, not undefined', () => {
   } finally {
     rmSync(root, { recursive: true, force: true })
   }
+})
+
+
+test('a failed run waits for stop acknowledgement and kills a nonresponsive sidecar', async () => {
+  const { tool, clients, root } = harness()
+  try {
+    const exec = execFor(root)
+    await tool.execute({ action: 'run', task: 'initialize' }, exec)
+    const client = clients[0]
+    let releaseStop
+    client.request = async method => {
+      if (method === 'run') throw new Error('run timed out')
+      return new Promise(resolve => { releaseStop = resolve })
+    }
+    let settled = false
+    const pending = tool.execute({ action: 'run', task: 'timeout' }, exec)
+    const rejected = assert.rejects(pending, /run timed out/).then(() => { settled = true })
+    while (!releaseStop) await new Promise(resolve => setImmediate(resolve))
+    assert.equal(settled, false)
+    releaseStop({ stopped: true })
+    await rejected
+    client.request = async () => { throw new Error('unresponsive') }
+    await assert.rejects(tool.execute({ action: 'run', task: 'timeout again' }, exec), /unresponsive/)
+    assert.equal(client.killed, true)
+  } finally { rmSync(root, { recursive: true, force: true }) }
 })

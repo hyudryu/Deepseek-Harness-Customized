@@ -78,6 +78,7 @@ class Sidecar:
 		self.session_cls: Any = None
 		self.chat_cls: Any = None
 		self.version = 'unknown'
+		self.attached_browser = bool(os.environ.get('DSH_BU_CDP_URL'))
 
 	async def start(self) -> None:
 		try:
@@ -103,17 +104,17 @@ class Sidecar:
 				'browser_use run requires an API key: set the env var named by the '
 				'llmApiKeyEnv config (default DEEPSEEK_API_KEY) for the Harness process.'
 			)
-		return self.chat_cls(
-			model=os.environ.get('DSH_BU_LLM_MODEL') or 'deepseek-chat',
-			api_key=api_key,
-			base_url=os.environ.get('DSH_BU_LLM_BASE_URL') or None,
-		)
+		options = {'model': os.environ.get('DSH_BU_LLM_MODEL') or 'deepseek-chat', 'api_key': api_key}
+		if base_url := os.environ.get('DSH_BU_LLM_BASE_URL'):
+			options['base_url'] = base_url
+		return self.chat_cls(**options)
 
 	async def browser_session(self) -> Any:
 		if self.session is None:
 			self.session = self.session_cls(
 				cdp_url=os.environ.get('DSH_BU_CDP_URL') or None,
 				headless=os.environ.get('DSH_BU_HEADLESS', '').lower() == 'true',
+				keep_alive=True,
 			)
 			await self.session.start()
 		return self.session
@@ -145,26 +146,30 @@ class Sidecar:
 		elapsed_s = round(time.monotonic() - started, 1)
 
 		screenshot_path = await self.save_screenshot()
-		names = history.action_names()
-		contents = history.extracted_content()
-		steps = [
-			{
-				'step': index + 1,
-				'action': name,
-				'result': clip(contents[index] if index < len(contents) else '', MAX_STEP_CHARS),
-			}
-			for index, name in enumerate(names)
-		]
+		steps = []
+		for item in history.history:
+			if item.model_output is None:
+				continue
+			for action, result in zip(item.model_output.action, item.result):
+				action_fields = action.model_dump(exclude_none=True, mode='json')
+				steps.append({
+					'step': len(steps) + 1,
+					'action': next(iter(action_fields), ''),
+					'result': clip(result.extracted_content if result else '', MAX_STEP_CHARS),
+				})
 		urls = [url for url in history.urls() if url]
-		return {
+		result = {
 			'done': bool(history.is_done()),
-			'final_result': clip(history.final_result(), self.max_history_chars) or None,
 			'errors': [str(error) for error in history.errors() if error][:MAX_ERRORS],
 			'steps': steps[-max_steps:],
-			'url': urls[-1] if urls else None,
 			'elapsed_s': elapsed_s,
 			'screenshot_path': screenshot_path,
 		}
+		if final_result := history.final_result():
+			result['final_result'] = clip(final_result, self.max_history_chars)
+		if urls:
+			result['url'] = urls[-1]
+		return result
 
 	async def save_screenshot(self, path: str | None = None, full_page: bool = True) -> str:
 		session = await self.browser_session()
@@ -183,11 +188,13 @@ class Sidecar:
 		)
 		tabs = await session.get_tabs()
 		last = tabs[-1] if tabs else None
-		return {
-			'screenshot_path': screenshot_path,
-			'url': last.url if last else None,
-			'title': last.title if last else None,
-		}
+		result = {'screenshot_path': screenshot_path}
+		if last is not None:
+			if last.url is not None:
+				result['url'] = last.url
+			if last.title is not None:
+				result['title'] = last.title
+		return result
 
 	async def handle_stop(self, _params: dict[str, Any]) -> dict[str, Any]:
 		if self.active_run is None or self.active_run.done():
@@ -208,11 +215,11 @@ class Sidecar:
 				pass
 		# An attached Chrome and its tabs belong to the integrated browser and
 		# survive; a browser this sidecar launched itself is closed.
-		if self.session is not None and not getattr(self.session, 'cdp_url', None):
-			try:
+		if self.session is not None:
+			if self.attached_browser:
 				await self.session.stop()
-			except Exception:
-				pass
+			else:
+				await self.session.kill()
 
 
 async def amain() -> None:
@@ -227,7 +234,7 @@ async def amain() -> None:
 			loop.call_soon_threadsafe(requests.put_nowait, line)
 		loop.call_soon_threadsafe(requests.put_nowait, '')
 
-	await loop.run_in_executor(None, read_stdin)
+	stdin_reader = loop.run_in_executor(None, read_stdin)
 
 	handlers = {
 		'ping': sidecar.handle_ping,
@@ -259,6 +266,10 @@ async def amain() -> None:
 			emit({'id': request_id, 'ok': False, 'error': f'unknown method: {method}'})
 			continue
 
+		if method == 'run' and sidecar.active_run is not None and not sidecar.active_run.done():
+			emit({'id': request_id, 'ok': False, 'error': 'a browser_use run is already active'})
+			continue
+
 		async def dispatch(
 			request_id=request_id,
 			handler=handler,
@@ -285,6 +296,7 @@ async def amain() -> None:
 	if inflight:
 		await asyncio.wait(set(inflight), timeout=EOF_GRACE_S)
 	await sidecar.shutdown()
+	await stdin_reader
 
 
 def main() -> None:

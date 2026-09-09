@@ -67,3 +67,20 @@ test('client rejects a request when the process dies mid-flight', async () => {
   await assert.rejects(pending, /sidecar/)
   await client.kill()
 })
+
+test('client rejects pending requests when the stdin stream errors', async () => {
+  const client = stubClient()
+  await client.start()
+  const pending = client.request('hang', {}, 20_000)
+  client.child.stdin.emit('error', Object.assign(new Error('broken pipe'), { code: 'EPIPE' }))
+  await assert.rejects(pending, /stdin failed/)
+  await client.kill()
+})
+
+
+test('failed process startup rejects without hanging teardown', async () => {
+  const client = stubClient()
+  client.python = 'dsh-browser-use-missing-executable'
+  await assert.rejects(client.start(), /ENOENT/)
+  await client.kill()
+})

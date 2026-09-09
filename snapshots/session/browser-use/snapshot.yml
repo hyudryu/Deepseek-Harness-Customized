@@ -1,0 +1,8 @@
+version: 1
+scenario: browser-use
+profile: headless
+composition: browser-use
+recording: authored
+header:
+  class: browser-use
+  pin: true

@@ -1,0 +1,8 @@
+# Mount the real plugin with a deterministic executor through the shipped headless profile.
+- insert:
+    - id: browser-use
+      name: '../../../snapshots/session/browser-use/browser-use-fixture.mjs'
+
+# Keep machine-local skills outside this browser-only scenario.
+- id: skill-filesystem
+  disabled: true

@@ -1,8 +1,10 @@
 import { spawn } from 'node:child_process'
 import { existsSync, readFileSync } from 'node:fs'
-import { mkdir, rm, writeFile } from 'node:fs/promises'
+import { mkdir, readdir, rename, rm, stat, writeFile } from 'node:fs/promises'
 import { dirname, isAbsolute, join, resolve } from 'node:path'
 import { homedir } from 'node:os'
+import { setTimeout as delay } from 'node:timers/promises'
+import { randomUUID } from 'node:crypto'
 import { fileURLToPath } from 'node:url'
 import { connectChrome } from 'dsh-browser-control/chrome-backend.js'
 
@@ -63,8 +65,14 @@ export function vendoredBrowserUseVersion() {
   return match[1]
 }
 
-/** Normalize and validate the plugin config; invalid configuration fails at load. */
+/** Normalize and validate the plugin config; invalid or unknown fields fail at load. */
 export function normalizeConfig(input = {}) {
+  if (input === null || typeof input !== 'object' || Array.isArray(input)) {
+    throw new Error('browser-use config must be an object')
+  }
+  for (const key of Object.keys(input)) {
+    if (!Object.hasOwn(DEFAULTS, key)) throw new Error(`unknown browser-use config field: ${key}`)
+  }
   const endpointInput = input.chromeEndpoint ?? DEFAULTS.chromeEndpoint
   let chromeEndpoint = ''
   if (endpointInput !== '') {
@@ -145,10 +153,12 @@ function runCaptured(command, args, timeoutMs, label) {
     let stdout = ''
     let stderr = ''
     let settled = false
+    let timedOut = false
+    let forceTimer
     const timer = setTimeout(() => {
-      settled = true
+      timedOut = true
       child.kill()
-      rejectRun(new Error(`${label} timed out after ${timeoutMs}ms`))
+      forceTimer = setTimeout(() => child.kill('SIGKILL'), 5000)
     }, timeoutMs)
     const capture = (chunk, stream) => {
       if (stream === 'out') stdout = (stdout + chunk).slice(-COMMAND_OUTPUT_TAIL)
@@ -160,13 +170,16 @@ function runCaptured(command, args, timeoutMs, label) {
       if (settled) return
       settled = true
       clearTimeout(timer)
+      clearTimeout(forceTimer)
       rejectRun(new Error(`${label} failed to start: ${error.message}`))
     })
     child.on('close', code => {
       if (settled) return
       settled = true
       clearTimeout(timer)
-      if (code === 0) resolveRun(stdout)
+      clearTimeout(forceTimer)
+      if (timedOut) rejectRun(new Error(`${label} timed out after ${timeoutMs}ms`))
+      else if (code === 0) resolveRun(stdout)
       else rejectRun(new Error(`${label} failed with exit code ${code}\n${stdout}\n${stderr}`))
     })
   })
@@ -182,15 +195,26 @@ export function parseSidecarLine(line) {
 
 /**
  * The plugin-managed Python runtime: one venv under venvRoot built from the
- * vendored browser-use source. The `.ready` marker records the vendored
- * version, so a vendor sync rebuilds the environment on the next tool call.
+ * vendored browser-use source. An exclusive directory lock serializes setup
+ * across Harness processes. A crashed owner's lock causes a bounded error;
+ * operators remove it only after checking that no setup process is running.
+ * The ready marker records the vendored version.
  */
 export function createRuntime(config, run = runCaptured) {
   const venvDir = join(config.venvRoot, 'venv')
   const pythonBin = process.platform === 'win32' ? join(venvDir, 'Scripts', 'python.exe') : join(venvDir, 'bin', 'python')
-  const markerPath = join(config.venvRoot, '.ready')
+  const stagingPython = staging => process.platform === 'win32' ? join(staging, 'Scripts', 'python.exe') : join(staging, 'bin', 'python')
+  const markerPath = join(venvDir, '.ready')
   const marker = `browser-use ${vendoredBrowserUseVersion()}`
   let pending = null
+
+  const readMarker = () => {
+    try { return readFileSync(markerPath, 'utf8').trim() } catch (error) {
+      if (error.code === 'ENOENT') return ''
+      throw error
+    }
+  }
+  const isReady = () => existsSync(pythonBin) && readMarker() === marker
 
   async function probeBasePython() {
     const candidates = config.pythonExecutable
@@ -206,15 +230,80 @@ export function createRuntime(config, run = runCaptured) {
     throw new Error(`browser_use requires Python >= 3.11; set pythonExecutable in the plugin config (tried: ${candidates.join(', ')})`)
   }
 
+  /** Best-effort removal of build leftovers from crashed processes, at least a day old. */
+  async function sweepAbandoned() {
+    let entries
+    try { entries = await readdir(config.venvRoot, { withFileTypes: true }) } catch { return }
+    const cutoff = Date.now() - 86_400_000
+    await Promise.allSettled(entries
+      .filter(entry => entry.isDirectory() && /^(staging|retired)-/.test(entry.name))
+      .map(async entry => {
+        const directory = join(config.venvRoot, entry.name)
+        const stats = await stat(directory).catch(() => null)
+        if (stats && stats.mtimeMs < cutoff) await rm(directory, { recursive: true, force: true })
+      }))
+  }
+
+  /** Move a fully built staging environment into place; survives a concurrent publisher. */
+  async function publish(staging) {
+    const retired = join(config.venvRoot, `retired-${process.pid}-${Date.now()}`)
+    let movedPrevious = false
+    try {
+      await rename(venvDir, retired)
+      movedPrevious = true
+    } catch { /* no previous environment to retire */ }
+    try {
+      await rename(staging, venvDir)
+    } catch (error) {
+      if (movedPrevious) await rename(retired, venvDir).catch(() => {})
+      if (!isReady()) throw error
+      // Another process published concurrently; keep the winner.
+    }
+    if (!isReady()) {
+      await rm(staging, { recursive: true, force: true }).catch(() => {})
+      await rm(retired, { recursive: true, force: true }).catch(() => {})
+      throw new Error('browser-use venv publication failed; retry the tool call')
+    }
+    await rm(retired, { recursive: true, force: true }).catch(() => {})
+  }
+
   async function build() {
-    if (existsSync(pythonBin) && existsSync(markerPath) && readFileSync(markerPath, 'utf8').trim() === marker) return pythonBin
+    if (isReady()) return pythonBin
+    await mkdir(config.venvRoot, { recursive: true })
+    const lock = join(config.venvRoot, 'setup.lock')
+    const deadline = Date.now() + config.setupTimeoutMs
+    for (;;) {
+      try { await mkdir(lock); break } catch (error) {
+        if (error.code !== 'EEXIST') throw error
+        if (isReady()) return pythonBin
+        if (Date.now() >= deadline) throw new Error(`browser-use setup lock timed out: ${lock}; check for a running setup process before removing an abandoned lock`)
+        await delay(Math.min(100, Math.max(1, deadline - Date.now())))
+      }
+    }
+    try {
+      if (isReady()) return pythonBin
+      return await buildLocked()
+    } finally {
+      await rm(lock, { recursive: true })
+    }
+  }
+
+  async function buildLocked() {
     const basePython = await probeBasePython()
     await mkdir(config.venvRoot, { recursive: true })
-    await rm(venvDir, { recursive: true, force: true })
-    await run(basePython, ['-m', 'venv', venvDir], config.setupTimeoutMs, 'browser-use venv creation')
-    await run(pythonBin, ['-m', 'pip', 'install', '--disable-pip-version-check', '--no-input', VENDOR_DIR],
-      config.setupTimeoutMs, 'browser-use installation (vendored source plus pinned dependencies; needs network)')
-    await writeFile(markerPath, `${marker}\n`)
+    await sweepAbandoned()
+    const staging = join(config.venvRoot, `staging-${process.pid}-${randomUUID()}`)
+    await rm(staging, { recursive: true, force: true })
+    try {
+      await run(basePython, ['-m', 'venv', staging], config.setupTimeoutMs, 'browser-use venv creation')
+      await run(stagingPython(staging), ['-m', 'pip', 'install', '--disable-pip-version-check', '--no-input', VENDOR_DIR],
+        config.setupTimeoutMs, 'browser-use installation (vendored source plus pinned dependencies; needs network)')
+      await writeFile(join(staging, '.ready'), `${marker}\n`)
+      await publish(staging)
+    } catch (error) {
+      await rm(staging, { recursive: true, force: true }).catch(() => {})
+      throw error
+    }
     return pythonBin
   }
 
@@ -252,15 +341,23 @@ export class SidecarClient {
       const text = String(chunk).trim()
       if (text) this.logger?.debug(`browser-use sidecar stderr: ${text.slice(-COMMAND_OUTPUT_TAIL)}`)
     })
+    // A closed or broken stdin pipe reports EPIPE on the stream, not on the
+    // ChildProcess; without this listener that shutdown race is uncaught.
+    this.child.stdin.on('error', error => {
+      this.alive = false
+      const failure = new Error(`browser-use sidecar stdin failed: ${error.message}`)
+      for (const entry of this.pending.values()) { clearTimeout(entry.timer); entry.reject(failure) }
+      this.pending.clear()
+    })
     this.child.on('exit', (code, signal) => {
       this.alive = false
       const error = new Error(`browser-use sidecar exited (code ${code ?? 'null'}, signal ${signal ?? 'none'})`)
-      for (const entry of this.pending.values()) entry.reject(error)
+      for (const entry of this.pending.values()) { clearTimeout(entry.timer); entry.reject(error) }
       this.pending.clear()
     })
     this.child.on('error', error => {
       this.alive = false
-      for (const entry of this.pending.values()) entry.reject(error)
+      for (const entry of this.pending.values()) { clearTimeout(entry.timer); entry.reject(error) }
       this.pending.clear()
     })
   }
@@ -285,7 +382,7 @@ export class SidecarClient {
     }
     if (message.event === 'fatal') {
       const error = new Error(`browser-use sidecar failed to start: ${String(message.message ?? 'unknown error')}`)
-      for (const entry of this.pending.values()) entry.reject(error)
+      for (const entry of this.pending.values()) { clearTimeout(entry.timer); entry.reject(error) }
       this.pending.clear()
       this.child?.kill()
       return
@@ -330,9 +427,10 @@ export class SidecarClient {
 
   kill() {
     return new Promise(resolveKill => {
-      if (!this.child) { resolveKill(); return }
-      if (!this.alive) { resolveKill(); return }
-      const fallback = setTimeout(resolveKill, 5000)
+      if (!this.child?.pid) { resolveKill(); return }
+      if (this.child.exitCode !== null || this.child.signalCode !== null) { resolveKill(); return }
+      this.alive = false
+      const fallback = setTimeout(() => this.child.kill('SIGKILL'), 5000)
       this.child.once('exit', () => {
         clearTimeout(fallback)
         resolveKill()
@@ -347,21 +445,36 @@ export class SidecarClient {
   }
 }
 
+/**
+ * Operational environment variables the sidecar may inherit. The child gets
+ * an allowlisted environment, not all of `process.env`, so unrelated Harness
+ * credentials never reach the third-party browser-use runtime; the selected
+ * API key travels only as `DSH_BU_API_KEY`.
+ */
+const CHILD_ENV_KEYS = [
+  'PATH', 'PATHEXT', 'SYSTEMROOT', 'COMSPEC', 'TEMP', 'TMP', 'HOME', 'USERPROFILE',
+  'LANG', 'LOCALAPPDATA', 'PROGRAMDATA', 'PROGRAMFILES',
+  'HTTP_PROXY', 'HTTPS_PROXY', 'NO_PROXY', 'http_proxy', 'https_proxy', 'no_proxy',
+]
+
 /** Build the sidecar process environment; the API key travels by env and is never logged. */
 export function buildSidecarEnv(config, exec) {
-  return {
-    ...process.env,
-    DSH_BU_CDP_URL: config.chromeEndpoint,
-    DSH_BU_HEADLESS: String(config.headless),
-    DSH_BU_ARTIFACT_DIR: artifactDirFor(config, exec),
-    DSH_BU_LLM_PROVIDER: config.llmProvider,
-    DSH_BU_LLM_MODEL: config.llmModel,
-    ...(config.llmBaseUrl ? { DSH_BU_LLM_BASE_URL: config.llmBaseUrl } : {}),
-    DSH_BU_API_KEY: process.env[config.llmApiKeyEnv] ?? '',
-    DSH_BU_MAX_HISTORY_CHARS: String(config.maxHistoryChars),
-    DSH_BU_MAX_STEPS: String(config.maxSteps),
-    ANONYMIZED_TELEMETRY: 'false',
+  const env = {}
+  for (const key of CHILD_ENV_KEYS) {
+    const value = process.env[key]
+    if (value !== undefined) env[key] = value
   }
+  env.ANONYMIZED_TELEMETRY = 'false'
+  env.DSH_BU_CDP_URL = config.chromeEndpoint
+  env.DSH_BU_HEADLESS = String(config.headless)
+  env.DSH_BU_ARTIFACT_DIR = artifactDirFor(config, exec)
+  env.DSH_BU_LLM_PROVIDER = config.llmProvider
+  env.DSH_BU_LLM_MODEL = config.llmModel
+  if (config.llmBaseUrl) env.DSH_BU_LLM_BASE_URL = config.llmBaseUrl
+  env.DSH_BU_API_KEY = process.env[config.llmApiKeyEnv] ?? ''
+  env.DSH_BU_MAX_HISTORY_CHARS = String(config.maxHistoryChars)
+  env.DSH_BU_MAX_STEPS = String(config.maxSteps)
+  return env
 }
 
 function outputSchema() {
@@ -468,7 +581,7 @@ export function apply(ctx, rawConfig = {}, deps = {}) {
 
   const browserUseTool = {
     name: 'browser_use',
-    description: 'Drive the session browser with the browser-use agent. ALWAYS use browser mode (this tool, or the integrated `browser` tool) for actions on a website instead of fetch/curl/web-search. Send one concrete task per run; browser-use executes it in the visible session Chrome and returns the result with a screenshot. Read the screenshot, compare it with the intent, then confirm completion or send a revised task. Use `screenshot` for an on-demand capture and `stop` to cancel an active run.',
+    description: 'Drive the session browser with the browser-use agent. ALWAYS use browser mode (this tool, or the integrated `browser` tool) for actions on a website instead of fetch/curl/web-search. Send one concrete task per run; browser-use executes it in the visible session Chrome and returns the result with a screenshot. Inspect the screenshot with `read_image`, compare it with the intent, then confirm completion or send a revised task. Use `screenshot` for an on-demand capture and `stop` to cancel an active run.',
     parameters: {
       type: 'object',
       additionalProperties: false,
@@ -496,12 +609,35 @@ export function apply(ctx, rawConfig = {}, deps = {}) {
           ? Math.min(args.max_steps, config.maxSteps)
           : config.maxSteps
         const client = await sidecarFor(exec)
-        const result = await client.request('run', {
-          task,
-          max_steps: maxSteps,
-          use_vision: args.use_vision ?? config.useVision,
-        }, config.requestTimeoutMs)
-        return { ok: true, action, ...result }
+        if (exec.signal?.aborted) throw new Error('browser_use call aborted')
+        let stopping
+        const stop = () => {
+          stopping ??= client.request('stop', {}, config.shortRequestTimeoutMs)
+            .catch(() => client.kill())
+          return stopping
+        }
+        let rejectAbort
+        const aborted = new Promise((_, reject) => { rejectAbort = reject })
+        const abort = () => {
+          void stop()
+          rejectAbort(new Error('browser_use call aborted'))
+        }
+        exec.signal?.addEventListener('abort', abort)
+        try {
+          const result = await Promise.race([aborted, client.request('run', {
+            task,
+            max_steps: maxSteps,
+            use_vision: args.use_vision ?? config.useVision,
+          }, config.requestTimeoutMs)])
+          if (exec.signal?.aborted) throw new Error('browser_use call aborted')
+          return { ok: true, action, ...result }
+        } catch (error) {
+          await stop()
+          throw error
+        } finally {
+          exec.signal?.removeEventListener('abort', abort)
+          if (stopping) await stopping
+        }
       }
       if (action === 'screenshot') {
         const client = await sidecarFor(exec)

@@ -12,7 +12,11 @@ The `browser-use` skill and the tool description instruct the model that **brows
 
 ## Self-contained runtime
 
-The bundle vendors the browser-use Python source under `vendor/browser-use/` (upstream commit and sync procedure in `vendor/browser-use/VENDOR.md`; MIT license preserved). On first use the plugin creates a Python virtual environment under `~/.dsh/browser-use/venv` and installs the vendored source plus its pinned dependencies; this one-time setup needs Python >= 3.11 and network access. A `.ready` marker records the vendored version, so replacing the vendor directory rebuilds the environment automatically. Invalid configuration fails at load; setup failures fail the tool call with the command output.
+The bundle vendors the browser-use Python source under `vendor/browser-use/` (upstream commit and sync procedure in `vendor/browser-use/VENDOR.md`; MIT license preserved). On first use the plugin builds a Python virtual environment under `~/.dsh/browser-use` and installs the vendored source plus its pinned dependencies; this one-time setup needs Python >= 3.11 and network access. An exclusive `setup.lock` directory serializes setup across Harness processes sharing `venvRoot`; each build uses private staging before publication. Lock waits use `setupTimeoutMs`. After a crashed setup, remove the lock only after verifying no installer is running. The `.ready` marker inside the venv records the vendored version, so replacing the vendor directory rebuilds the environment automatically; abandoned staging directories from crashed builds are swept after a day. Invalid or unknown configuration fields fail at load; setup failures fail the tool call with the command output.
+
+## Sidecar environment and credentials
+
+The sidecar child process receives an allowlisted environment (PATH, PATHEXT, SYSTEMROOT, COMSPEC, TEMP, TMP, HOME, USERPROFILE, LANG, LOCALAPPDATA, PROGRAMDATA, PROGRAMFILES, and HTTP(S)_PROXY/NO_PROXY variants), not the full Harness environment, so unrelated Harness credentials never reach the third-party runtime. The selected API key travels only as `DSH_BU_API_KEY` and is never logged or written to results. Task text must not contain secrets; the model rule forbids it.
 
 ## Configuration (`cordis.patch.yml`)
 
@@ -36,16 +40,14 @@ The bundle vendors the browser-use Python source under `vendor/browser-use/` (up
 
 `browser_use` exposes three actions:
 
-- `run` — `{ task, max_steps?, use_vision? }`: executes the task, returns `{ done, final_result, errors, steps, url, elapsed_s, screenshot_path }`. One run at a time per session.
-- `screenshot` — `{ path?, full_page? }`: saves a capture of the current tab and returns `{ screenshot_path, url, title }`.
+- `run` — `{ task, max_steps?, use_vision? }`: executes the task, returns `{ done, final_result?, errors, steps, url?, elapsed_s, screenshot_path }`. One run at a time per session; a second concurrent run is rejected. An aborted tool call forwards `stop`, so the browser-use run actually stops instead of only stopping the wait. Absent values are omitted from results, never `null`.
+- `screenshot` — `{ path?, full_page? }`: saves a capture of the current tab and returns `{ screenshot_path, url?, title? }`.
 - `stop` — cancels the active run and returns `{ stopped }`.
 
-The sidecar keeps one browser-use `BrowserSession` per DSH session, attached over CDP to the integrated Chrome. Chrome, its persistent profile, and the tab browser-use opened survive session close and plugin disposal; only the sidecar process ends. A self-launched browser (empty `chromeEndpoint`) is closed at disposal.
+Inspect returned screenshots with the harness `read_image` tool; the `read` tool is text-only and cannot display PNG evidence.
 
-## Credentials
-
-The `DSH_BU_API_KEY` value is passed to the sidecar through the environment and never logged or written to results. Task text must not contain secrets; the model rule forbids it.
+The sidecar keeps one browser-use `BrowserSession` per DSH session, attached over CDP to the integrated Chrome, alive across runs (`keep_alive`). At sidecar shutdown an attached Chrome is merely disconnected (its process and tabs survive); a browser browser-use launched itself (empty `chromeEndpoint`) is killed. A closed or broken stdin pipe rejects only the pending tool request. With `llmBaseUrl` unset, the chat client keeps its own default endpoint (`https://api.deepseek.com/v1` for the deepseek provider).
 
 ## Tests
 
-Run `node --test "Custom Plugins/browser-use/test/*.test.mjs"`. Tests cover configuration validation, protocol framing, tool routing against a stub sidecar, output schema shape, and skill registration; no Python or Chrome is required.
+Run `node --test "test/*.test.mjs"` (JavaScript: configuration validation, protocol framing, tool routing including abort and relaunch, output schema, runtime build) and `python test/python_sidecar_test.py` (sidecar protocol regression with fakes, including live-stdin request processing, exclusive runs, and stop). No Chrome is required; the Python suite needs only a Python interpreter. `pnpm run test:snapshot -- -t "headless.*browser-use"` at the repository root replays the skill catalog, loaded skill, tool schemas, and run/screenshot/stop results through the shipped headless profile using a deterministic executor fixture. It does not validate live browser or LLM behavior.
