@@ -331,6 +331,12 @@ export interface ConnectionConfig {
   trustedHosts?: string[]
   /** Absolute browser-session lifetime in days. Default: 30. */
   cookieMaxAgeDays?: number
+  /**
+   * Require the browser-session token/cookie before serving the GUI and /api.
+   * Default: false ("always open") — the GUI serves any caller on the bound
+   * host by IP and port alone. Set true to restore the authenticated posture.
+   */
+  requireAuth?: boolean
   /** Maximum buffered JSON body for every `/api` request. Default: 300 MiB. */
   maxRequestBodyBytes?: number
 }

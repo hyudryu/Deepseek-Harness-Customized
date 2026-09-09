@@ -579,9 +579,11 @@ export async function launchWebScaffold(options: LaunchOptions = {}): Promise<We
     // Preserve the composed surface-context choice because a patch replaces
     // the row's complete config.
     { id: 'web-runtime', config: { openBrowser: false, printUrl: false, surfaceContext } },
+    // The e2e lane asserts the authenticated token/cookie exchange; the
+    // connection plugin defaults to anonymous ("always open"), so opt back in.
     ...options.remoteAuthority === undefined
-      ? []
-      : [{ id: 'connection', config: { trustedHosts: [options.remoteAuthority] } }],
+      ? [{ id: 'connection', config: { requireAuth: true } }]
+      : [{ id: 'connection', config: { requireAuth: true, trustedHosts: [options.remoteAuthority] } }],
     { id: 'settings', config: { dshHome: harnessHome } },
     { id: 'credentials', config: { dshHome: harnessHome } },
     // The shipped directory-picker row is the -auto chooser, which resolves

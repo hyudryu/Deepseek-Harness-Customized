@@ -180,7 +180,9 @@ async function initializeSecret(credentials: CredentialProvider): Promise<Buffer
 /**
  * Process launch-token exchange and persistent signed-cookie verification.
  * Connection loads the credential provider's signing secret during activation
- * and retains it for synchronous request authentication.
+ * and retains it for synchronous request authentication. In anonymous mode
+ * (the deployment's default "always open" posture) every session check is
+ * bypassed so the GUI serves any caller on the bound host without a token.
  */
 export class BrowserAuth {
   private readonly launchToken: string
@@ -190,6 +192,7 @@ export class BrowserAuth {
     processOwner: object,
     private readonly secret: Buffer,
     maxAgeDays: number,
+    private readonly anonymous: boolean,
   ) {
     this.launchToken = processLaunchToken(processOwner)
     this.maxAgeMilliseconds = maxAgeDays * DAY_MILLISECONDS
@@ -201,30 +204,39 @@ export class BrowserAuth {
 
   /**
    * Initialize browser authentication and create its durable signing secret
-   * when this Harness home has none.
+   * when this Harness home has none. With `requireAuth` false the returned
+   * owner is anonymous: it admits index requests and browser sessions without
+   * a token or cookie, so the GUI is reachable by IP and port alone. A
+   * placeholder secret is stored for type completeness but is never read,
+   * because every secret-consuming method returns before it.
    * @param processOwner - root application context retaining one token across Connection reloads.
    * @param credentials - persistent credential provider for the Web profile.
    * @param maxAgeDays - positive absolute browser-cookie lifetime in days.
+   * @param requireAuth - false (default) serves anonymously; true restores the token/cookie gate.
    * @returns initialized authentication owner with the process owner's launch token.
    */
   static async create(
     processOwner: object,
     credentials: CredentialProvider,
     maxAgeDays: number,
+    requireAuth = false,
   ): Promise<BrowserAuth> {
-    return new BrowserAuth(processOwner, await initializeSecret(credentials), maxAgeDays)
+    if (!requireAuth) return new BrowserAuth(processOwner, Buffer.alloc(0), maxAgeDays, true)
+    return new BrowserAuth(processOwner, await initializeSecret(credentials), maxAgeDays, false)
   }
 
   /**
    * Add this process's launch token to the ordinary application root URL.
+   * The token is redundant in anonymous mode, so a clean URL is returned.
    * @param baseUrl - canonical browser origin without credentials.
-   * @returns root URL carrying the process token as its sole authentication input.
+   * @returns root URL carrying the process token as its sole authentication input, or the clean URL when anonymous.
    */
   authenticatedUrl(baseUrl: string): string {
     const url = new URL(baseUrl)
     url.pathname = '/'
     url.search = ''
     url.hash = ''
+    if (this.anonymous) return url.href
     url.searchParams.set(TOKEN_QUERY, this.launchToken)
     return url.href
   }
@@ -238,6 +250,7 @@ export class BrowserAuth {
    * @returns true only when the caller may serve index.html.
    */
   authorizeIndex(req: ConnectionIndexRequest, res: ConnectionIndexResponse): boolean {
+    if (this.anonymous) return true
     /* v8 ignore next -- node:http always supplies url on server requests. */
     const url = new URL(req.url ?? '/', 'http://dsh.invalid')
     const tokens = url.searchParams.getAll(TOKEN_QUERY)
@@ -287,6 +300,7 @@ export class BrowserAuth {
    * @returns true only for an unexpired cookie signed by this activation's loaded secret.
    */
   isAuthenticated(request: ConnectionTrustRequest): boolean {
+    if (this.anonymous) return true
     const authority = requestAuthority(request.headers)
     const rawCookie = header(request.headers, 'cookie')
     if (authority === undefined || rawCookie === undefined) return false

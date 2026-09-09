@@ -56,7 +56,7 @@ function createAuth(
   maxAgeDays = 30,
   processOwner: object = {},
 ): Promise<BrowserAuth> {
-  return BrowserAuth.create(processOwner, credentials(store), maxAgeDays)
+  return BrowserAuth.create(processOwner, credentials(store), maxAgeDays, true)
 }
 
 function request(url: string, authority = '127.0.0.1:3080', init?: {
@@ -246,5 +246,14 @@ describe('BrowserAuth', () => {
 
     await expect(createAuth(new RecordCredentials(), Number.MAX_SAFE_INTEGER))
       .rejects.toThrow(/safe timestamp range/u)
+  })
+
+  it('serves anonymously by default: no token, no cookie, every index and session admitted', async () => {
+    const auth = await BrowserAuth.create({}, credentials(new RecordCredentials()), 30)
+    expect(auth.authenticatedUrl('http://127.0.0.1:3080')).toBe('http://127.0.0.1:3080/')
+    expect(auth.isAuthenticated({ headers: {} })).toBe(true)
+    const index = response()
+    expect(auth.authorizeIndex(request('/'), index.value)).toBe(true)
+    expect(index.state).toEqual({})
   })
 })

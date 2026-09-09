@@ -31,4 +31,11 @@ describe('resolveLanTrust', () => {
     expect(resolveLanTrust('127.0.0.1', ['lab.internal']))
       .toEqual({ lanAddresses: [], trustedHosts: ['lab.internal'] })
   })
+
+  it('trusts and displays a specific non-loopback bind IP (e.g. a Tailscale address)', () => {
+    expect(resolveLanTrust('100.64.0.5', []))
+      .toEqual({ lanAddresses: ['100.64.0.5'], trustedHosts: ['100.64.0.5'] })
+    expect(resolveLanTrust('192.168.1.9', ['lab.internal']))
+      .toEqual({ lanAddresses: ['192.168.1.9'], trustedHosts: ['192.168.1.9', 'lab.internal'] })
+  })
 })

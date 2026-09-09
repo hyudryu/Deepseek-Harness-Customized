@@ -48,13 +48,14 @@ function webCommand(): Command {
     .name('dsh --profile web')
     .description('Serve the DeepSeek Harness browser UI.')
     .helpOption('-h, --help', 'show this help')
-    .option('--host <host>', 'bind host')
+    .option('--host <host>', 'bind host; pass 0.0.0.0 to serve every interface (e.g. a Tailscale or LAN IP)')
     .option('--no-open', 'do not open the Web UI in the default browser')
     .option('--port <port>', 'listen port; pass 0 to let the OS pick a free one')
     .option('--trusted-host <authority...>', 'extra authority the /api browser-trust fence accepts (host or host:port; repeatable)')
     .addHelpText('after', `
 Examples:
   dsh --profile web                          serve on the composed host and port
+  dsh --profile web --host 0.0.0.0           serve every interface, reachable by the LAN or Tailscale IP
   dsh --profile web --no-open                serve without opening a browser
   dsh --profile web --port 8080              serve on another port
 `)
@@ -71,9 +72,6 @@ export function apply(ctx: Context): void {
   const program = webCommand()
   program.action(() => {
     const options = program.opts<WebOptions>()
-    if (options.host === '0.0.0.0') {
-      program.error('error: --host 0.0.0.0 is intentionally not supported yet for safety: it would expose remote code execution to the network; use 127.0.0.1 instead')
-    }
     if (options.port !== undefined && !/^\d+$/.test(options.port)) {
       program.error(`error: --port must be a number, got ${JSON.stringify(options.port)}`)
     }

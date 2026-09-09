@@ -32,7 +32,8 @@ async function boot(host = '127.0.0.1'): Promise<Context> {
   await writeFile(config, [
     '- name: credentials', '  config:', `    path: '${join(directory, 'credentials.yaml')}'`, '    watch: false',
     '- name: webserver', '  config:', `    host: '${host}'`, '    port: 0',
-    '- name: connection', '- id: mobile', '  name: mobile-access', '',
+    '- name: connection', '  config:', '    requireAuth: true',
+    '- id: mobile', '  name: mobile-access', '',
   ].join('\n'))
   const ctx = context = new Context()
   ctx.baseUrl = pathToFileURL(directory).href + '/'

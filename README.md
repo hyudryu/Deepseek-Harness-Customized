@@ -213,6 +213,50 @@ The bundle vendors the browser-use Python source (MIT, pinned upstream commit in
 
 </details>
 
+#### 5. `dsh-qwen-tool-adapter`
+
+<details>
+<summary><b>Qwen tool-call adapter</b> — click to expand</summary>
+
+Some Qwen-family models (and Qwen behind certain OpenAI-compatible or proxied routes) emit tool calls as literal text in the assistant reply, most often:
+
+```
+<tool_call>
+<function=read>
+<parameter=file_path> src/a.ts </parameter>
+</function>
+</tool_call>
+```
+
+or the JSON form Qwen also uses:
+
+```
+<tool_call>
+{"name": "read", "arguments": {"file_path": "src/a.ts"}}
+</tool_call>
+```
+
+The harness only dispatches tools that arrive as structured `tool-call` blocks, so an unwrapped reply carrying that markup yields no tool call and the turn ends with nothing executed. This plugin registers an `llm/stream` listener (the model-stream waterfall) that detects that markup in each assistant text block, re-emits the preamble as text plus one `tool-call` block per call, and rewrites the terminal finish reason to `tool-calls` so the agent loop dispatches them.
+
+Install it with the custom-plugin installer, then add the bundle to your profile:
+
+```sh
+pnpm run install:custom-plugins
+pnpm dsh plugin --profile web add "./Custom Plugins/qwen-tool-adapter"
+```
+
+Configuration lives in the bundle's `cordis.patch.yml` (or your profile patch):
+
+| Field | Default | Meaning |
+|---|---|---|
+| `enabled` | `true` | Whether the adapter is active |
+| `providers` | `[]` | Provider routes to translate; empty = any provider |
+| `models` | `[]` | Model ids to translate; empty = any model on a matched provider |
+
+Empty `providers`/`models` translate every request, which is safe because ordinary providers never emit Qwen markup and the transform is a pass-through for text that has none. The translation only touches outgoing stream chunks, never the frozen request, so the session log still records the assembled assistant message.
+
+</details>
+
 ## Developer preview
 
 DeepSeek Harness is in _developer preview_ and iterating rapidly. **THERE WILL BE COMPATIBILITY-BREAKING CHANGES.**

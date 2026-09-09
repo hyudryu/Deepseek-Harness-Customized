@@ -9,7 +9,7 @@ English | [中文](README.zh.md)
 
 ## Summary
 
-Run `dsh --profile web` and the interface opens in your default browser, ready for interactive chat with the agent. You get the conversation view, model and settings management, and session history, backed by the same model access, tools, and safety defaults as every other surface. The command prints a tokenized startup URL; the browser exchanges that token for a signed session cookie and redirects to the clean root URL. You can change the port, suppress the browser handoff, and allow extra hosts from the command line; binding all network interfaces is intentionally not supported. Choose it for interactive work in the browser; `dsh-headless` is the one-shot command-line sibling.
+Run `dsh --profile web` and the interface opens in your default browser, ready for interactive chat with the agent. You get the conversation view, model and settings management, and session history, backed by the same model access, tools, and safety defaults as every other surface. By default the GUI is anonymous ("always open"): it serves any caller on the bound host by IP and port alone, with no login token. The startup URL line prints the clean root. You can change the port, suppress the browser handoff, allow extra hosts, and bind all network interfaces (`--host 0.0.0.0`) so a LAN or Tailscale IP can reach it. Choose it for interactive work in the browser; `dsh-headless` is the one-shot command-line sibling.
 
 The [session MCP server](../../mcp/session-mcp/README.md) starts automatically at `/mcp` on the Web server's port (3080 by default). App help exits before the MCP listener starts.
 
@@ -36,9 +36,10 @@ Session browser controls are optional. The `dsh-browser-control` bundle mounts i
 ```sh
 dsh --profile web
 dsh --profile web --no-open --port 8080
+dsh --profile web --host 0.0.0.0   # serve every interface, reachable by a LAN or Tailscale IP
 ```
 
-After startup you see a `dsh web:` line whose root URL carries a fresh process token. Unless `--no-open` or an SSH session suppresses it, the default browser opens that URL, receives a signed cookie, and redirects to the clean root page. You know it worked when the page loads and you can chat with the agent. Two failures to expect: if the frontend is not built, startup stops with a build hint (`pnpm run build` in a checkout); if the browser cannot be opened, a credential-free diagnostic prints to stderr while the server keeps running — open the printed startup URL yourself.
+After startup you see a clean `dsh web:` URL line naming the root page (with a LAN/tailnet variant when an all-interface or IP bind is active). Unless `--no-open` or an SSH session suppresses it, the default browser opens that URL. The GUI is anonymous by default, so no token handoff is needed. You know it worked when the page loads and you can chat with the agent. Two failures to expect: if the frontend is not built, startup stops with a build hint (`pnpm run build` in a checkout); if the browser cannot be opened, a credential-free diagnostic prints to stderr while the server keeps running — open the printed startup URL yourself.
 
 ### Configuration
 
@@ -55,7 +56,7 @@ The generated [configuration catalog](../../../docs/config-catalog.md#deepseek-a
 
 ### LAN access and trusted hosts
 
-By default the GUI accepts connections from this machine only. A deployment that binds all network interfaces also allows browsers from the LAN, and the printed URL then includes a LAN address; `--trusted-host` adds extra hosts in either case. Host and Origin checks control reachability, while the token exchange authenticates every Host API method and WebSocket stream. The LAN addresses are sampled once at startup, so a network change later is not picked up — restart the GUI to re-advertise.
+By default the GUI accepts connections from any caller on the bound host — it is anonymous and needs no token. A deployment that binds all network interfaces (`--host 0.0.0.0`) allows browsers from the LAN or tailnet, and the printed URL then includes a LAN address; binding a specific non-loopback IP (such as a Tailscale address) trusts and advertises that IP itself. `--trusted-host` adds extra hosts in either case. Host and Origin checks still control reachability (the DNS-rebinding fence), while authentication is off by default. The LAN addresses are sampled once at startup, so a network change later is not picked up — restart the GUI to re-advertise. Operators that need the previous token-session gate can enable it on the `connection` plugin (`requireAuth: true`).
 
 ### Running over SSH
 
@@ -87,7 +88,7 @@ The URL line and browser handoff are readiness signals: supervisors RPC as soon 
 
 ### LAN trust sampling
 
-`resolveLanTrust` samples the network once at boot: a loopback bind (`127.0.0.1`) derives no LAN addresses, while an all-interfaces bind adds every non-internal IPv4 literal. The derived literals plus the explicit `--trusted-host` authorities form the `/api` browser-trust fence, and the printed LAN URL always matches that fence.
+`resolveLanTrust` samples the network once at boot: a loopback bind (`127.0.0.1`) derives no LAN addresses, an all-interfaces bind adds every non-internal IPv4 literal, and a specific non-loopback IP bind (a LAN or Tailscale address) trusts and advertises that IP itself. The derived literals plus the explicit `--trusted-host` authorities form the `/api` browser-trust fence, and the printed LAN URL always matches that fence.
 
 ### Source map
 
@@ -152,7 +153,7 @@ These limits tell you what to expect in unusual setups — a source checkout, SS
 - **Only the handoff start is observable** — the GUI reports that the browser was asked to open, not that it actually opened; a later browser exit is never reported, and the printed URL is your manual fallback.
 - **SSH sessions keep the URL but skip the browser handoff** — the printed URL names the remote host's loopback endpoint; the SSH client or editor must expose and open the local forwarded address.
 - **`BROWSER` overrides only come from the environment** — a discovered `.env` cannot set `BROWSER`; only an inherited value can choose the executable for the automatic handoff.
-- **Binding all network interfaces is not supported** — `--host 0.0.0.0` is rejected at startup for safety; use the default loopback host.
+- **Anonymous by default means anyone on the bound host can act** — `--host 0.0.0.0` exposes the GUI (and its tool access) to every reachable computer without a login; pin the bind to a trusted tailnet/LAN interface, or set `connection.requireAuth: true`, when that is not acceptable.
 
 <a id="dev-note"></a>
 ### Dev Note
