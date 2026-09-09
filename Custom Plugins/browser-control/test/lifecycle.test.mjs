@@ -35,6 +35,43 @@ function fixture(t, config = {}) {
   return { context, page, browser, control, tool, dispose }
 }
 
+test('IPv6 loopback remains the endpoint used by the Chrome transport', async t => {
+  const probe = t.mock.method(globalThis, 'fetch', async () => new Response('{}'))
+  const transportFailure = new Error('transport stopped before allocation')
+  const connect = t.mock.method(chromium, 'connectOverCDP', async () => { throw transportFailure })
+  const { control } = fixture(t, { backend: 'chrome', chromeEndpoint: 'http://[::1]:9222' })
+  await assert.rejects(control.open('session'), error => error === transportFailure)
+  assert.equal(probe.mock.calls[0].arguments[0], 'http://[::1]:9222/json/version')
+  assert.equal(connect.mock.calls[0].arguments[0], 'http://[::1]:9222')
+})
+
+test('new-tab navigation and rollback failures preserve both errors and allow cleanup retry', async t => {
+  const { context, page, control } = fixture(t)
+  await control.open('session')
+  const tab = new EventEmitter()
+  tab.url = () => 'about:blank'
+  tab.title = async () => ''
+  tab.viewportSize = page.viewportSize
+  tab.screenshot = page.screenshot
+  const navigationFailure = new Error('tab navigation failed')
+  const cleanupFailure = new Error('tab cleanup failed')
+  tab.goto = async () => { throw navigationFailure }
+  tab.close = t.mock.fn(async () => { throw cleanupFailure })
+  context.newPage = async () => tab
+  context.pages = () => [page, tab]
+  await assert.rejects(control.createTab('session', 'https://unreachable.invalid'), error => {
+    assert.ok(error instanceof AggregateError)
+    assert.deepEqual(error.errors, [navigationFailure, cleanupFailure])
+    return true
+  })
+  const failedTabId = control.snapshot('session').activeTabId
+  assert.equal(control.snapshot('session').tabs.length, 2)
+  tab.close.mock.mockImplementation(async () => { context.pages = () => [page]; tab.emit('close') })
+  await control.closeTab('session', failedTabId)
+  assert.equal(control.snapshot('session').tabs.length, 1)
+  assert.equal(control.snapshot('session').open, true)
+})
+
 test('failed context cleanup rejects both callers and leaves the browser available for retry', async t => {
   const { context, control, tool } = fixture(t)
   const updates = []

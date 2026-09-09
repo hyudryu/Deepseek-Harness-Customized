@@ -50,11 +50,11 @@ function normalizeConfig(input = {}) {
   const backend = input.backend ?? DEFAULTS.backend
   if (!['chrome', 'playwright'].includes(backend)) throw new Error('backend must be chrome or playwright')
   const endpoint = new URL(input.chromeEndpoint ?? DEFAULTS.chromeEndpoint)
-  if (endpoint.protocol !== 'http:' || !['localhost', '127.0.0.1'].includes(endpoint.hostname)
+  if (endpoint.protocol !== 'http:' || !['localhost', '127.0.0.1', '[::1]'].includes(endpoint.hostname)
     || !endpoint.port || Number(endpoint.port) <= 0 || endpoint.username || endpoint.password || endpoint.pathname !== '/' || endpoint.search || endpoint.hash) {
     throw new Error('chromeEndpoint must be an HTTP loopback origin with an explicit port')
   }
-  endpoint.hostname = '127.0.0.1'
+  if (endpoint.hostname === 'localhost') endpoint.hostname = '127.0.0.1'
   if (input.chromeUserDataDir !== undefined && (typeof input.chromeUserDataDir !== 'string' || !input.chromeUserDataDir.trim())) {
     throw new Error('chromeUserDataDir must be a nonempty path')
   }
@@ -477,7 +477,11 @@ export function apply(ctx, rawConfig = {}) {
       await page.goto(destination, { waitUntil: 'domcontentloaded', timeout: config.navigationTimeoutMs })
       await page.bringToFront()
     } catch (error) {
-      await page.close()
+      try { await page.close() }
+      catch (cleanupError) {
+        await refreshAndNotify(state)
+        throw new AggregateError([error, cleanupError], 'Tab navigation and cleanup failed')
+      }
       state.page = state.context.pages().at(-1)
       await refreshAndNotify(state)
       throw error
