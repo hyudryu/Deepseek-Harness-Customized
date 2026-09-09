@@ -1,0 +1,20 @@
+- id: llm-deepseek
+  disabled: true
+- insert:
+    - id: llm-replay
+      name: '@deepseek-ai/dsh-llm-replay'
+      config:
+        providers:
+          - id: deepseek-official
+            name: DeepSeek
+            models:
+              - id: deepseek-v4-flash
+              - id: deepseek-v4-pro
+# Mount the real plugin with a deterministic executor through the shipped headless profile.
+- insert:
+    - id: browser-use
+      name: '../../../snapshots/session/browser-use/browser-use-fixture.mjs'
+
+# Keep machine-local skills outside this browser-only scenario.
+- id: skill-filesystem
+  disabled: true
