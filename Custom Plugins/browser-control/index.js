@@ -1,6 +1,9 @@
 import { mkdir } from 'node:fs/promises'
 import { readFileSync } from 'node:fs'
-import { dirname, isAbsolute, resolve } from 'node:path'
+import { dirname, isAbsolute, resolve, join } from 'node:path'
+import { homedir } from 'node:os'
+import { randomUUID } from 'node:crypto'
+import { connectChrome, chromeSessionContext } from './chrome-backend.js'
 import { chromium } from 'playwright'
 
 export const name = 'browser-control'
@@ -9,6 +12,11 @@ export const inject = ['tools', 'skills']
 const SKILL_CONTENT = readFileSync(new URL('./skills/browser-control.md', import.meta.url), 'utf8')
 
 const DEFAULTS = Object.freeze({
+  backend: 'chrome',
+  homepage: 'https://www.google.com/',
+  chromeEndpoint: 'http://127.0.0.1:9222',
+  chromeConnectTimeoutMs: 10000,
+  chromeUserDataDir: join(homedir(), '.dsh', 'chrome-profile'),
   headless: true,
   defaultTimeoutMs: 10_000,
   navigationTimeoutMs: 30_000,
@@ -25,12 +33,46 @@ function positiveInt(value, fallback, name) {
   return value
 }
 
+/** Normalize an address before allocating a browser; bare local addresses use HTTP, other hosts HTTPS. */
+export function normalizeUrl(value) {
+  const text = value.trim()
+  if (!text) throw new Error('Browser URL must not be empty')
+  const scheme = /^[a-z][a-z0-9+.-]*:/i.test(text) && !/^[^/?#:\s]+:\d+(?:[/?#]|$)/.test(text)
+  const local = /^(localhost|127\.0\.0\.1|\[::1\])(?=[:/?#]|$)/i.test(text)
+  const url = new URL(local && !text.includes('://') ? `http://${text}` : scheme ? text : `https://${text}`)
+  if (!['http:', 'https:', 'about:'].includes(url.protocol) || (url.protocol === 'about:' && url.href !== 'about:blank')) {
+    throw new Error('Browser URL must use HTTP or HTTPS (about:blank is also supported)')
+  }
+  return url.href
+}
+
 function normalizeConfig(input = {}) {
+  const backend = input.backend ?? DEFAULTS.backend
+  if (!['chrome', 'playwright'].includes(backend)) throw new Error('backend must be chrome or playwright')
+  const endpoint = new URL(input.chromeEndpoint ?? DEFAULTS.chromeEndpoint)
+  if (endpoint.protocol !== 'http:' || !['localhost', '127.0.0.1', '[::1]'].includes(endpoint.hostname)
+    || !endpoint.port || Number(endpoint.port) <= 0 || endpoint.username || endpoint.password || endpoint.pathname !== '/' || endpoint.search || endpoint.hash) {
+    throw new Error('chromeEndpoint must be an HTTP loopback origin with an explicit port')
+  }
+  if (endpoint.hostname === 'localhost') endpoint.hostname = '127.0.0.1'
+  if (input.chromeUserDataDir !== undefined && (typeof input.chromeUserDataDir !== 'string' || !input.chromeUserDataDir.trim())) {
+    throw new Error('chromeUserDataDir must be a nonempty path')
+  }
+  if (input.chromeExecutablePath !== undefined && (typeof input.chromeExecutablePath !== 'string' || !isAbsolute(input.chromeExecutablePath))) {
+    throw new Error('chromeExecutablePath must be an absolute executable path')
+  }
+
   const frameQuality = input.frameQuality === undefined ? DEFAULTS.frameQuality : input.frameQuality
   if (!Number.isInteger(frameQuality) || frameQuality < 0 || frameQuality > 100) {
     throw new Error('frameQuality must be an integer between 0 and 100')
   }
   return {
+    backend,
+    homepage: normalizeUrl(input.homepage ?? DEFAULTS.homepage),
+    chromeEndpoint: endpoint.origin,
+    chromeConnectTimeoutMs: positiveInt(input.chromeConnectTimeoutMs, DEFAULTS.chromeConnectTimeoutMs, 'chromeConnectTimeoutMs'),
+    chromeUserDataDir: resolve(input.chromeUserDataDir ?? DEFAULTS.chromeUserDataDir),
+    chromeExecutablePath: input.chromeExecutablePath,
     headless: input.headless ?? DEFAULTS.headless,
     defaultTimeoutMs: positiveInt(input.defaultTimeoutMs, DEFAULTS.defaultTimeoutMs, 'defaultTimeoutMs'),
     navigationTimeoutMs: positiveInt(input.navigationTimeoutMs, DEFAULTS.navigationTimeoutMs, 'navigationTimeoutMs'),
@@ -45,8 +87,9 @@ function normalizeConfig(input = {}) {
 }
 
 function sessionKey(exec) {
-  // Each chat session owns its own browser instance.
-  return exec?.agent?.session?.id ?? exec?.agent?.id ?? 'agentless'
+  const id = exec?.agent?.session?.id
+  if (typeof id !== 'string' || id === '') throw new Error('Browser actions require a DSH session')
+  return id
 }
 
 function workspaceRoot(exec) {
@@ -171,6 +214,9 @@ function outputSchema() {
       actual: { type: 'string' },
       screenshotPath: { type: 'string' },
       activePage: { type: 'integer' },
+      activeTabId: { type: 'string' },
+      tabs: { type: 'array', items: { type: 'object', additionalProperties: false, required: ['id', 'url', 'title'],
+        properties: { id: { type: 'string' }, url: { type: 'string' }, title: { type: 'string' } } } },
       pages: {
         type: 'array',
         items: {
@@ -198,20 +244,36 @@ export function apply(ctx, rawConfig = {}) {
   const pendingStates = new Map()
   const pendingLifecycle = new Map()
   const subscribers = new Map()
-  let browserPromise
+  const browsers = new Map()
 
-  async function browser() {
-    if (!browserPromise) {
-      browserPromise = chromium.launch({ headless: config.headless }).catch(error => {
-        browserPromise = undefined
-        throw error
-      })
+  async function browser(backend) {
+    let pending = browsers.get(backend)
+    if (!pending) {
+      pending = (backend === 'chrome' ? connectChrome(config) : chromium.launch({ headless: config.headless }))
+        .then(instance => {
+          instance.on?.('disconnected', () => {
+            if (browsers.get(backend) === pending) browsers.delete(backend)
+          })
+          return instance
+        })
+        .catch(error => { browsers.delete(backend); throw error })
+      browsers.set(backend, pending)
     }
-    return browserPromise
+    return pending
+  }
+
+  function tabId(state, page) {
+    let id = state.tabIds.get(page)
+    if (!id) { id = randomUUID(); state.tabIds.set(page, id) }
+    return id
   }
 
   function makeSnapshot(state) {
+    const pages = state.context.pages()
     return {
+      backend: state.backend,
+      tabs: pages.map(page => ({ id: tabId(state, page), url: page.url(), title: state.tabTitles.get(page) ?? '' })),
+      ...(state.page && pages.includes(state.page) ? { activeTabId: tabId(state, state.page) } : {}),
       open: state.open,
       url: state.page ? state.page.url() : state.url ?? '',
       title: state.page ? state.title ?? '' : state.title ?? '',
@@ -224,14 +286,21 @@ export function apply(ctx, rawConfig = {}) {
     }
   }
 
+  function tabResult(state, action) {
+    const { tabs, activeTabId } = state ? makeSnapshot(state) : { tabs: [] }
+    const result = { ok: true, action, tabs, ...(activeTabId ? { activeTabId } : {}) }
+    if (JSON.stringify(result).length > config.maxSnapshotChars) throw new Error('Browser tab listing exceeds maxSnapshotChars')
+    return result
+  }
+
   function closedSnapshot() {
-    return { open: false, url: '', title: '', actions: [] }
+    return { open: false, url: '', title: '', actions: [], tabs: [] }
   }
 
   async function captureFrame(page) {
     try {
       const buffer = await page.screenshot({ type: 'jpeg', quality: config.frameQuality, fullPage: false })
-      const viewport = page.viewportSize()
+      const viewport = page.viewportSize() ?? await page.evaluate(() => ({ width: innerWidth, height: innerHeight }))
       return {
         frame: `data:image/jpeg;base64,${buffer.toString('base64')}`,
         frameWidth: viewport?.width,
@@ -261,6 +330,7 @@ export function apply(ctx, rawConfig = {}) {
   }
 
   async function refreshAndNotify(state) {
+    for (const page of state.context.pages()) state.tabTitles.set(page, await page.title().catch(() => ''))
     if (state.open && state.page) {
       const frame = await captureFrame(state.page)
       state.frame = frame.frame
@@ -276,16 +346,19 @@ export function apply(ctx, rawConfig = {}) {
     return snapshot
   }
 
-  async function createStateFor(key) {
-    const instance = await browser()
-    const context = await instance.newContext()
+  async function createStateFor(key, backend) {
+    const instance = await browser(backend)
+    const context = backend === 'chrome' ? chromeSessionContext(instance, config) : await instance.newContext()
     context.setDefaultTimeout(config.defaultTimeoutMs)
     context.setDefaultNavigationTimeout(config.navigationTimeoutMs)
     const state = {
       key,
+      backend,
       context,
       page: undefined,
       diagnostics: emptyDiagnostics(),
+      tabIds: new WeakMap(),
+      tabTitles: new WeakMap(),
       attached: new WeakSet(),
       actions: [],
       seq: 0,
@@ -299,6 +372,16 @@ export function apply(ctx, rawConfig = {}) {
     context.on('page', page => {
       attachPage(state, page, config.maxDiagnostics)
       state.page = page
+      const refresh = () => {
+        if (state.open && states.get(key) === state) {
+          void refreshAndNotify(state).catch(error => ctx.logger?.warn(`Browser frame refresh failed: ${String(error)}`))
+        }
+      }
+      page.on('domcontentloaded', refresh)
+      page.on('close', () => {
+        if (state.page === page) state.page = context.pages().at(-1)
+        refresh()
+      })
     })
     context.on('close', () => {
       state.open = false
@@ -307,18 +390,23 @@ export function apply(ctx, rawConfig = {}) {
         try { listener(closedSnapshot()) } catch { /* an observer failure never breaks the session */ }
       }
     })
-    state.page = await context.newPage()
+    try { state.page = await context.newPage() }
+    catch (error) {
+      try { await context.close() }
+      catch (cleanupError) { throw new AggregateError([error, cleanupError], 'Browser page creation and cleanup failed') }
+      throw error
+    }
     attachPage(state, state.page, config.maxDiagnostics)
     states.set(key, state)
     return state
   }
 
-  async function getState(key) {
+  async function getState(key, backend = config.backend) {
     const existing = states.get(key)
     if (existing?.open) return { state: existing, created: false }
     const pending = pendingStates.get(key)
     if (pending) return { state: await pending, created: false }
-    const created = createStateFor(key).finally(() => pendingStates.delete(key))
+    const created = createStateFor(key, backend).finally(() => pendingStates.delete(key))
     pendingStates.set(key, created)
     return { state: await created, created: true }
   }
@@ -347,8 +435,12 @@ export function apply(ctx, rawConfig = {}) {
   }
 
   // Initial navigation and rollback settle before another lifecycle call can reuse this session's state.
-  async function openState(key, url) {
-    const { state, created } = await getState(key)
+  async function openState(key, url, backend) {
+    if (backend !== undefined && !['chrome', 'playwright'].includes(backend)) throw new Error('backend must be chrome or playwright')
+    const destination = typeof url === 'string' && url.trim() !== '' ? normalizeUrl(url) : undefined
+    if (backend !== undefined && states.has(key) && states.get(key).backend !== backend) await closeState(key)
+    const { state, created } = await getState(key, backend)
+    url = destination ?? (created && config.homepage !== 'about:blank' ? config.homepage : undefined)
     if (typeof url === 'string' && url.trim() !== '') {
       try {
         await state.page.goto(url, { waitUntil: 'domcontentloaded', timeout: config.navigationTimeoutMs })
@@ -369,14 +461,61 @@ export function apply(ctx, rawConfig = {}) {
     await refreshAndNotify(state)
   }
 
+  function requireTab(state, id) {
+    const page = state.context.pages().find(candidate => tabId(state, candidate) === id)
+    if (!page) throw new Error(`Browser tab ${id} is not owned by this session`)
+    return page
+  }
+
+  async function createTab(key, url) {
+    const destination = normalizeUrl(url?.trim() ? url : config.homepage)
+    if (!states.has(key)) { await openState(key, destination); return }
+    const state = states.get(key)
+    const page = await state.context.newPage()
+    state.page = page
+    try {
+      await page.goto(destination, { waitUntil: 'domcontentloaded', timeout: config.navigationTimeoutMs })
+      await page.bringToFront()
+    } catch (error) {
+      try { await page.close() }
+      catch (cleanupError) {
+        await refreshAndNotify(state)
+        throw new AggregateError([error, cleanupError], 'Tab navigation and cleanup failed')
+      }
+      state.page = state.context.pages().at(-1)
+      await refreshAndNotify(state)
+      throw error
+    }
+    await refreshAndNotify(state)
+  }
+
+  async function selectTab(key, id) {
+    const state = states.get(key)
+    if (!state) throw new Error('Session browser is closed')
+    const page = requireTab(state, id)
+    await page.bringToFront()
+    state.page = page
+    await refreshAndNotify(state)
+  }
+
+  async function closeTab(key, id) {
+    const state = states.get(key)
+    if (!state) throw new Error('Session browser is closed')
+    const page = requireTab(state, id)
+    if (state.context.pages().length === 1) { await closeState(key); return }
+    await page.close()
+    if (state.page === page) state.page = state.context.pages().at(-1)
+    await refreshAndNotify(state)
+  }
+
   ctx.effect(() => {
     return async () => {
       subscribers.clear()
       await Promise.allSettled([...pendingStates.values()])
       await Promise.allSettled([...pendingLifecycle.values()])
       const results = await Promise.allSettled([...states.keys()].map(closeState))
-      const instance = browserPromise ? await browserPromise.catch(() => undefined) : undefined
-      if (instance) results.push(...await Promise.allSettled([instance.close()]))
+      const instances = await Promise.all([...browsers.values()].map(pending => pending.catch(() => undefined)))
+      results.push(...await Promise.allSettled(instances.filter(Boolean).map(instance => instance.close())))
       const failure = results.find(result => result.status === 'rejected')
       if (failure) throw failure.reason
     }
@@ -384,7 +523,7 @@ export function apply(ctx, rawConfig = {}) {
 
   ctx.effect(() => ctx.skills.register({
     name: 'browser-control',
-    description: 'Operate and inspect browser applications with semantic Playwright locators, deterministic assertions, diagnostics, responsive viewports, and screenshots. Load for browser interaction or browser QA.',
+    description: 'Operate visible Chrome through localhost debugging by default, with explicit Playwright opt-in, semantic locators, deterministic assertions, diagnostics, responsive viewports, and screenshots. Load for browser interaction or browser QA.',
     source: 'runtime',
     content: SKILL_CONTENT,
     invocation: { modelInvocable: true, userInvocable: true },
@@ -410,6 +549,9 @@ export function apply(ctx, rawConfig = {}) {
     async open(sessionId, url) {
       await queueLifecycle(sessionId, () => openState(sessionId, url))
     },
+    async createTab(sessionId, url) { return queueLifecycle(sessionId, () => createTab(sessionId, url)) },
+    async selectTab(sessionId, id) { return queueLifecycle(sessionId, () => selectTab(sessionId, id)) },
+    async closeTab(sessionId, id) { return queueLifecycle(sessionId, () => closeTab(sessionId, id)) },
     async close(sessionId) {
       await queueLifecycle(sessionId, () => closeState(sessionId))
     },
@@ -417,15 +559,16 @@ export function apply(ctx, rawConfig = {}) {
 
   const browserTool = {
     name: 'browser',
-    description: 'Control a persistent Playwright Chromium context for the current agent. Prefer semantic locators. Use snapshot to inspect UI, assert for deterministic pass/fail, diagnostics for console/network failures, and screenshot for visual evidence.',
+    description: 'Control the current DSH session browser mirrored in the DSH GUI. Use this integrated tool instead of scanning debugging ports or attaching unrelated browser windows. Chrome is the default; request backend playwright only when the user explicitly asks. Prefer semantic locators. Use snapshot to inspect UI, assert for pass/fail, diagnostics for failures, and screenshot for visual evidence.',
     parameters: {
       type: 'object',
       additionalProperties: false,
       required: ['action'],
       properties: {
+        backend: { type: 'string', enum: ['chrome', 'playwright'], description: 'Only for open. Chrome is the default; use playwright only when the user explicitly requests it.' },
         action: {
           type: 'string',
-          enum: ['open', 'reload', 'back', 'snapshot', 'click', 'fill', 'press', 'select', 'check', 'uncheck', 'assert', 'diagnostics', 'clear_diagnostics', 'screenshot', 'viewport', 'pages', 'switch_page', 'close'],
+          enum: ['open', 'reload', 'back', 'snapshot', 'click', 'fill', 'press', 'select', 'check', 'uncheck', 'assert', 'diagnostics', 'clear_diagnostics', 'screenshot', 'viewport', 'pages', 'switch_page', 'tabs', 'new_tab', 'switch_tab', 'close_tab', 'close'],
         },
         url: { type: 'string' },
         role: { type: 'string' },
@@ -451,6 +594,7 @@ export function apply(ctx, rawConfig = {}) {
         width: { type: 'integer' },
         height: { type: 'integer' },
         page_index: { type: 'integer' },
+        tab_id: { type: 'string', description: 'Opaque session-owned tab id returned by tabs.' },
       },
     },
     output: {
@@ -460,15 +604,27 @@ export function apply(ctx, rawConfig = {}) {
     async execute(args, exec, lifecycleQueued = false) {
       if (exec.signal?.aborted) throw new Error('browser call aborted')
       const action = args.action
+      if (args.backend !== undefined && action !== 'open') throw new Error('backend is supported only by browser open')
       const key = sessionKey(exec)
-      if (!lifecycleQueued && (action === 'open' || action === 'close')) {
+      if (!lifecycleQueued) {
         return await queueLifecycle(key, () => browserTool.execute(args, exec, true))
       }
       if (action === 'close') {
         await closeState(key)
         return { ok: true, action }
       }
-      if (!lifecycleQueued) await pendingLifecycle.get(key)?.catch(() => {})
+      if (action === 'new_tab') {
+        await createTab(key, args.url)
+        return tabResult(states.get(key), action)
+      }
+      if (action === 'switch_tab' || action === 'close_tab') {
+        const id = requireString(args, 'tab_id')
+        if (action === 'switch_tab') await selectTab(key, id)
+        else await closeTab(key, id)
+        return tabResult(states.get(key), action)
+      }
+      if (action === 'open') await openState(key, args.url, args.backend)
+      else if (!states.has(key)) await openState(key)
       const { state } = await getState(key)
       const page = state.page
       const timeoutMs = Number.isFinite(args.timeout_ms) && args.timeout_ms > 0
@@ -482,8 +638,6 @@ export function apply(ctx, rawConfig = {}) {
       try {
         switch (action) {
           case 'open': {
-            const url = requireString(args, 'url')
-            await page.goto(url, { waitUntil: 'domcontentloaded', timeout: config.navigationTimeoutMs })
             result = { ok: true, action, url: page.url(), title: await page.title() }
             break
           }
@@ -612,6 +766,10 @@ export function apply(ctx, rawConfig = {}) {
             }
             await page.setViewportSize({ width, height })
             result = { ok: true, action, url: page.url() }
+            break
+          }
+          case 'tabs': {
+            result = tabResult(state, action)
             break
           }
           case 'pages': {

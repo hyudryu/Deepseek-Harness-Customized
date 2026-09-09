@@ -1,6 +1,17 @@
 /** Browser-control Remote wire types: live per-session browser state and action log. */
 
+import type { Branded } from '@deepseek-ai/dsh-brand'
 import type { SessionId } from '@deepseek-ai/dsh-session/types'
+
+/** Opaque identity of a tab owned by one session. */
+export type BrowserTabId = Branded<'BrowserTabId'>
+
+/** Public facts about one session-owned browser tab. */
+export interface BrowserTab {
+  readonly id: BrowserTabId
+  readonly title: string
+  readonly url: string
+}
 
 /** One recorded Playwright tool action for a session's browser. */
 export interface BrowserActionEntry {
@@ -30,6 +41,12 @@ export interface BrowserActionEntry {
 export interface BrowserSnapshot {
   /** True when a browser context/page is open for the session. */
   readonly open: boolean
+  /** Provider used by the session browser. */
+  readonly backend?: 'chrome' | 'playwright'
+  /** Session-owned tabs in browser order; unrelated user tabs are excluded. */
+  readonly tabs?: readonly BrowserTab[]
+  /** Identity of the tab supplying the current frame and address. */
+  readonly activeTabId?: BrowserTabId
   /** Current page URL (empty when closed). */
   readonly url: string
   /** Current page title (empty when closed). */
@@ -49,7 +66,7 @@ export interface BrowserWatchRequest {
   readonly sessionId: SessionId
 }
 
-/** Open request; url is optional and defaults to about:blank. */
+/** Open request; url is optional and defaults to the configured homepage. */
 export interface BrowserOpenRequest {
   readonly sessionId: SessionId
   readonly url?: string
@@ -68,4 +85,11 @@ export interface BrowserCloseRequest {
 /** Close acknowledgement. */
 export interface BrowserCloseValue {
   readonly ok: boolean
+}
+
+
+/** Select or close one tab owned by the requested session. */
+export interface BrowserTabRequest {
+  readonly sessionId: SessionId
+  readonly tabId: BrowserTabId
 }

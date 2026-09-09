@@ -4,6 +4,12 @@ export const NS = 'browser'
 
 /** Chinese browser panel dictionary. */
 export const zh = {
+  chromeInteraction: '\u8bf7\u5728 Chrome \u7a97\u53e3\u4e2d\u767b\u5f55\u6216\u64cd\u4f5c\u6b64\u9875\u9762\u3002',
+  tabs: '\u6807\u7b7e\u9875',
+  newTab: '\u65b0\u5efa\u6807\u7b7e\u9875',
+  closeTab: '\u5173\u95ed\u6807\u7b7e\u9875',
+  untitledTab: '\u65e0\u6807\u9898',
+  address: '\u7f51\u5740',
   stop: '停止浏览器',
   panelTitle: '浏览器',
   start: '启动浏览器',
@@ -27,6 +33,12 @@ export type BrowserKey = keyof typeof zh
 
 /** English browser panel dictionary. */
 export const en: Record<BrowserKey, string> = {
+  chromeInteraction: 'Use the Chrome window to sign in or interact with this page.',
+  tabs: 'Browser tabs',
+  newTab: 'New tab',
+  closeTab: 'Close tab',
+  untitledTab: 'Untitled tab',
+  address: 'Address',
   stop: 'Stop browser',
   panelTitle: 'Browser',
   start: 'Start Browser',

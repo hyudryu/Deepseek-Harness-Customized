@@ -14,6 +14,7 @@ function fixture(t, config = {}) {
   page.goto = async () => {}
   context.setDefaultTimeout = () => {}
   context.setDefaultNavigationTimeout = () => {}
+  context.pages = () => [page]
   context.newPage = async () => page
   context.close = t.mock.fn(async () => { context.emit('close') })
   const browser = { newContext: async () => context, close: t.mock.fn(async () => {}) }
@@ -26,13 +27,50 @@ function fixture(t, config = {}) {
     provide(_name, value) { control = value },
     skills: { register() {} },
     tools: { register(value) { tool = value } },
-  }, config)
+  }, { backend: 'playwright', homepage: 'about:blank', ...config })
   async function dispose() {
     for (const disposer of disposers.reverse()) await disposer?.()
   }
   t.after(dispose)
   return { context, page, browser, control, tool, dispose }
 }
+
+test('IPv6 loopback remains the endpoint used by the Chrome transport', async t => {
+  const probe = t.mock.method(globalThis, 'fetch', async () => new Response('{}'))
+  const transportFailure = new Error('transport stopped before allocation')
+  const connect = t.mock.method(chromium, 'connectOverCDP', async () => { throw transportFailure })
+  const { control } = fixture(t, { backend: 'chrome', chromeEndpoint: 'http://[::1]:9222' })
+  await assert.rejects(control.open('session'), error => error === transportFailure)
+  assert.equal(probe.mock.calls[0].arguments[0], 'http://[::1]:9222/json/version')
+  assert.equal(connect.mock.calls[0].arguments[0], 'http://[::1]:9222')
+})
+
+test('new-tab navigation and rollback failures preserve both errors and allow cleanup retry', async t => {
+  const { context, page, control } = fixture(t)
+  await control.open('session')
+  const tab = new EventEmitter()
+  tab.url = () => 'about:blank'
+  tab.title = async () => ''
+  tab.viewportSize = page.viewportSize
+  tab.screenshot = page.screenshot
+  const navigationFailure = new Error('tab navigation failed')
+  const cleanupFailure = new Error('tab cleanup failed')
+  tab.goto = async () => { throw navigationFailure }
+  tab.close = t.mock.fn(async () => { throw cleanupFailure })
+  context.newPage = async () => tab
+  context.pages = () => [page, tab]
+  await assert.rejects(control.createTab('session', 'https://unreachable.invalid'), error => {
+    assert.ok(error instanceof AggregateError)
+    assert.deepEqual(error.errors, [navigationFailure, cleanupFailure])
+    return true
+  })
+  const failedTabId = control.snapshot('session').activeTabId
+  assert.equal(control.snapshot('session').tabs.length, 2)
+  tab.close.mock.mockImplementation(async () => { context.pages = () => [page]; tab.emit('close') })
+  await control.closeTab('session', failedTabId)
+  assert.equal(control.snapshot('session').tabs.length, 1)
+  assert.equal(control.snapshot('session').open, true)
+})
 
 test('failed context cleanup rejects both callers and leaves the browser available for retry', async t => {
   const { context, control, tool } = fixture(t)
@@ -188,6 +226,32 @@ test('concurrent browser tool opens navigate in issued order', async t => {
   releaseFirst()
   await Promise.all([first, second])
   assert.equal(gotoCalls, 2)
+})
+
+test('tab listing bounds the complete result including its action acknowledgement', async t => {
+  const id = '0'.repeat(36)
+  const partial = { tabs: [{ id, url: 'about:blank', title: '' }], activeTabId: id }
+  const { control, tool } = fixture(t, { maxSnapshotChars: JSON.stringify(partial).length })
+  await control.open('session')
+  await assert.rejects(tool.execute({ action: 'tabs' }, { agent: { session: { id: 'session' } } }), /exceeds maxSnapshotChars/)
+})
+
+test('tab listing accepts a complete result exactly at the configured limit', async t => {
+  const id = '0'.repeat(36)
+  const complete = { ok: true, action: 'tabs', tabs: [{ id, url: 'about:blank', title: '' }], activeTabId: id }
+  const limit = JSON.stringify(complete).length
+  const { control, tool } = fixture(t, { maxSnapshotChars: limit })
+  await control.open('session')
+  const result = await tool.execute({ action: 'tabs' }, { agent: { session: { id: 'session' } } })
+  assert.equal(JSON.stringify(result).length, limit)
+})
+
+test('closing the last tab also bounds its complete empty listing', async t => {
+  const { control, tool } = fixture(t, { maxSnapshotChars: JSON.stringify({ tabs: [] }).length })
+  await control.open('session')
+  const tab_id = control.snapshot('session').activeTabId
+  await assert.rejects(tool.execute({ action: 'close_tab', tab_id }, { agent: { session: { id: 'session' } } }), /exceeds maxSnapshotChars/)
+  assert.equal(control.snapshot('session').open, false)
 })
 
 for (const quality of [0, 60, 100]) {

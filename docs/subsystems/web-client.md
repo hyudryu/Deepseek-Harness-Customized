@@ -100,7 +100,7 @@ Use the four detailed references according to the extension being added:
 
 ## Session browser viewing
 
-The [browser controller](../../packages/api/browser-controller/README.md) forwards `ctx.browserControl` operations and a `BrowserSnapshot` stream to the [browser panel](../../packages/client/ui-browser/README.md). Each snapshot replaces the open state, current page URL and title, action history, and optional screenshot frame. These live browser facts are separate from durable Session history; hiding the panel does not close the session’s browser.
+The [browser controller](../../packages/api/browser-controller/README.md) forwards `ctx.browserControl` operations and a `BrowserSnapshot` stream to the [browser panel](../../packages/client/ui-browser/README.md). Each snapshot replaces the open state, current page URL and title, session-owned tabs, active tab identity, action history, and optional screenshot frame. An opaque `BrowserTabId` identifies one owned tab; create, select, and close operations remain scoped to the requested live Session. These live browser facts are separate from durable Session history; hiding the panel does not close the session’s browser.
 
 <!-- BEGIN GENERATED cordis-surface (gen-cordis-catalog.ts) — do not edit between markers -->
 
@@ -133,19 +133,40 @@ snapshot(sessionId: SessionId): BrowserSnapshot
 subscribe(sessionId: SessionId, listener: (snapshot: BrowserSnapshot) => void): () => void
 
 /**
- * Ensure an open context and page for one session, navigating to the optional url.
+ * Ensure an open page for one session, navigating to the optional URL or the configured homepage for a new session.
  * @param sessionId - session whose browser is opened.
- * @param url - optional navigation destination.
+ * @param url - optional navigation destination; the provider normalizes bare hostnames.
  * @throws Navigation failures close newly created contexts; existing contexts remain open. Cleanup failures retain the context for retry.
  */
 open(sessionId: SessionId, url?: string): Promise<void>
 
 /**
- * Close one session's browser context, if any; retain any still-open context if cleanup fails.
+ * Close one session's owned tabs or isolated context; retain retryable state if cleanup fails.
  * @param sessionId - session whose browser is closed.
  * @throws Context cleanup failures; callers may retry.
  */
 close(sessionId: SessionId): Promise<void>
+
+/**
+ * Create and select a session-owned tab, opening its browser if necessary.
+ * @param sessionId - session owning the new tab.
+ * @param url - optional destination; omission uses the configured homepage.
+ */
+createTab(sessionId: SessionId, url?: string): Promise<void>
+
+/**
+ * Select an existing tab and publish its current frame.
+ * @param sessionId - session owning the tab.
+ * @param tabId - opaque identity from that session's snapshot.
+ */
+selectTab(sessionId: SessionId, tabId: BrowserTabId): Promise<void>
+
+/**
+ * Close an owned tab; closing the last tab stops the session browser.
+ * @param sessionId - session owning the tab.
+ * @param tabId - opaque identity from that session's snapshot.
+ */
+closeTab(sessionId: SessionId, tabId: BrowserTabId): Promise<void>
 ```
 
 Types: [SessionId](core.md)

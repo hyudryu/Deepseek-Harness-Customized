@@ -9,6 +9,8 @@ import type {
   BrowserOpenRequest,
   BrowserOpenValue,
   BrowserSnapshot,
+  BrowserTabId,
+  BrowserTabRequest,
   BrowserWatchRequest,
 } from './types.ts'
 
@@ -30,18 +32,36 @@ export interface BrowserControl {
    */
   subscribe(sessionId: SessionId, listener: (snapshot: BrowserSnapshot) => void): () => void
   /**
-   * Ensure an open context and page for one session, navigating to the optional url.
+   * Ensure an open page for one session, navigating to the optional URL or the configured homepage for a new session.
    * @param sessionId - session whose browser is opened.
-   * @param url - optional navigation destination.
+   * @param url - optional navigation destination; the provider normalizes bare hostnames.
    * @throws Navigation failures close newly created contexts; existing contexts remain open. Cleanup failures retain the context for retry.
    */
   open(sessionId: SessionId, url?: string): Promise<void>
   /**
-   * Close one session's browser context, if any; retain any still-open context if cleanup fails.
+   * Close one session's owned tabs or isolated context; retain retryable state if cleanup fails.
    * @param sessionId - session whose browser is closed.
    * @throws Context cleanup failures; callers may retry.
    */
   close(sessionId: SessionId): Promise<void>
+  /**
+   * Create and select a session-owned tab, opening its browser if necessary.
+   * @param sessionId - session owning the new tab.
+   * @param url - optional destination; omission uses the configured homepage.
+   */
+  createTab(sessionId: SessionId, url?: string): Promise<void>
+  /**
+   * Select an existing tab and publish its current frame.
+   * @param sessionId - session owning the tab.
+   * @param tabId - opaque identity from that session's snapshot.
+   */
+  selectTab(sessionId: SessionId, tabId: BrowserTabId): Promise<void>
+  /**
+   * Close an owned tab; closing the last tab stops the session browser.
+   * @param sessionId - session owning the tab.
+   * @param tabId - opaque identity from that session's snapshot.
+   */
+  closeTab(sessionId: SessionId, tabId: BrowserTabId): Promise<void>
 }
 
 declare module '@deepseek-ai/cordis' {
@@ -104,6 +124,49 @@ export class BrowserController extends TypertRemoteService {
   async close(request: BrowserCloseRequest): Promise<BrowserCloseValue> {
     await this.ctx.browserControl.close(request.sessionId)
     return { ok: true }
+  }
+
+  /**
+   * Create and select a tab for a live session.
+   * @param request - session and optional initial URL.
+   * @returns acknowledgement after the tab is ready.
+   */
+  @Remote('createTab')
+  async createTab(request: BrowserOpenRequest): Promise<BrowserOpenValue> {
+    await this.changeTab(request.sessionId, () => this.ctx.browserControl.createTab(request.sessionId, request.url))
+    return { ok: true }
+  }
+
+  /**
+   * Select an existing tab owned by a live session.
+   * @param request - session and tab identity.
+   * @returns acknowledgement after the active tab changes.
+   */
+  @Remote('selectTab')
+  async selectTab(request: BrowserTabRequest): Promise<BrowserOpenValue> {
+    await this.changeTab(request.sessionId, () => this.ctx.browserControl.selectTab(request.sessionId, request.tabId))
+    return { ok: true }
+  }
+
+  /**
+   * Close a tab owned by a live session.
+   * @param request - session and tab identity.
+   * @returns acknowledgement after tab cleanup completes.
+   */
+  @Remote('closeTab')
+  async closeTab(request: BrowserTabRequest): Promise<BrowserCloseValue> {
+    await this.changeTab(request.sessionId, () => this.ctx.browserControl.closeTab(request.sessionId, request.tabId))
+    return { ok: true }
+  }
+
+  private async changeTab(sessionId: SessionId, operation: () => Promise<void>): Promise<void> {
+    const session = this.ctx.sessions.get(sessionId)
+    if (session === undefined) throw new Error(`session "${sessionId}" not found`)
+    await operation()
+    if (this.ctx.sessions.get(sessionId) !== session) {
+      await this.ctx.browserControl.close(sessionId)
+      throw new Error(`session "${sessionId}" was disposed while changing browser tabs`)
+    }
   }
 
   private async *follow(sessionId: SessionId, signal: AbortSignal): AsyncIterable<BrowserSnapshot> {

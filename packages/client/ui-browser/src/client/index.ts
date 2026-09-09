@@ -5,7 +5,7 @@
  */
 import type { Context as ClientContext } from '@deepseek-ai/cordis'
 import type { SessionId } from '@deepseek-ai/dsh-session/types'
-import type { BrowserSnapshot } from '@deepseek-ai/dsh-api-browser-controller/types'
+import type { BrowserSnapshot, BrowserTabId } from '@deepseek-ai/dsh-api-browser-controller/types'
 import type { ClientRemote } from '@deepseek-ai/dsh-api-gateway/client'
 // Type-only: pulls the generated Remote API and ctx.remote merge (remote.browser).
 import type {} from '@deepseek-ai/dsh-api-remotes/client'
@@ -42,6 +42,12 @@ export interface BrowserInjected {
   navigate: (url: string) => Promise<void>
   /** Stop this session's browser and await its cleanup. */
   stop: () => Promise<void>
+  /** Create and select a new session tab at the optional URL or configured homepage. */
+  createTab: (url?: string) => Promise<void>
+  /** Select a tab belonging to this session. */
+  selectTab: (tabId: BrowserTabId) => Promise<void>
+  /** Close one session-owned tab. */
+  closeTab: (tabId: BrowserTabId) => Promise<void>
   /** Close the right-side browser panel. */
   closePanel: () => void
 }
@@ -119,6 +125,18 @@ export function apply(ctx: ClientContext): void {
         hooks: { browser: stateFor(sessionId) },
         start: (url?: string) => startSessionBrowser(sessionId, url),
         navigate: url => startSessionBrowser(sessionId, url),
+        createTab: async (url?: string) => {
+          const result = await ctx.remote.browser.createTab({ sessionId, ...(url === undefined ? {} : { url }) })
+          if (!result.ok) throw new Error(result.error.message)
+        },
+        selectTab: async (tabId) => {
+          const result = await ctx.remote.browser.selectTab({ sessionId, tabId })
+          if (!result.ok) throw new Error(result.error.message)
+        },
+        closeTab: async (tabId) => {
+          const result = await ctx.remote.browser.closeTab({ sessionId, tabId })
+          if (!result.ok) throw new Error(result.error.message)
+        },
         stop: async () => {
           const result = await ctx.remote.browser.close({ sessionId })
           if (!result.ok) throw new Error(result.error.message)

@@ -1,5 +1,5 @@
 /**
- * Live per-session browser panel: the streamed page frame, the Playwright
+ * Live per-session browser panel: the streamed page frame, the browser
  * action log, and a glowing cursor that shows the agent's click point and
  * follows the user's pointer over the viewport. All data arrives through the
  * injected session verbs; the component holds only transient viewing state.
@@ -42,9 +42,9 @@ function ActionRow({ entry, t }: { entry: BrowserActionEntry; t: BrowserPanelPro
 }
 
 /** The browser panel occupant of the layout's 'browser' column. */
-export function BrowserPanel({ t, useBrowser, start, navigate, stop }: BrowserPanelProps) {
+export function BrowserPanel({ t, useBrowser, start, navigate, stop, createTab, selectTab, closeTab }: BrowserPanelProps) {
   const { snapshot, error: streamError } = useBrowser(value => value)
-  const [urlInput, setUrlInput] = useState('')
+  const [urlInput, setUrlInput] = useState<string | null>(null)
   const [cursor, setCursor] = useState<CursorState | null>(null)
   const [showActions, setShowActions] = useState(false)
   const [error, setError] = useState('')
@@ -88,14 +88,14 @@ export function BrowserPanel({ t, useBrowser, start, navigate, stop }: BrowserPa
     setError('')
     try {
       await operation()
-      setUrlInput('')
+      setUrlInput(null)
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : String(cause))
     } finally {
       setPending(false)
     }
   }
-  const onStart = () => run(() => snapshot.open ? navigate(urlInput) : start(urlInput))
+  const onStart = () => run(() => snapshot.open ? navigate(urlInput ?? snapshot.url) : start(urlInput ?? undefined))
 
   const onKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === 'Enter' && !pending) void onStart()
@@ -111,10 +111,43 @@ export function BrowserPanel({ t, useBrowser, start, navigate, stop }: BrowserPa
         <span className={css.url} title={snapshot.url}>{snapshot.url}</span>
       </header>
 
+      {snapshot.open && <div className={css.tabBar}>
+        <div className={css.tabs} role="tablist" aria-label={t('tabs')}>
+          {snapshot.tabs?.map((tab, index, tabs) => {
+            const label = tab.title || tab.url || t('untitledTab')
+            return <div key={tab.id} className={css.tabItem}>
+              <button type="button" role="tab" className={css.tab}
+                aria-selected={tab.id === snapshot.activeTabId} title={tab.url} disabled={pending}
+                tabIndex={tab.id === snapshot.activeTabId ? 0 : -1}
+                onClick={() => void run(() => selectTab(tab.id))}
+                onKeyDown={(event) => {
+                  const delta = event.key === 'ArrowRight' ? 1 : event.key === 'ArrowLeft' ? -1 : 0
+                  if (delta === 0 || pending) return
+                  event.preventDefault()
+                  const next = (index + delta + tabs.length) % tabs.length
+                  const target = tabs[next]
+                  const button = event.currentTarget.closest('[role="tablist"]')?.querySelectorAll('[role="tab"]')[next]
+                  if (button instanceof HTMLButtonElement) button.focus()
+                  if (target !== undefined) void run(() => selectTab(target.id))
+                }}>{label}</button>
+              <button type="button" className={css.iconButton} disabled={pending}
+                aria-label={`${t('closeTab')} ${label}`} onClick={() => void run(() => closeTab(tab.id))}>
+                <svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true">
+                  <path d="M3 3l6 6M9 3L3 9" stroke="currentColor" strokeWidth="1.5" />
+                </svg>
+              </button>
+            </div>
+          })}
+        </div>
+        <button type="button" className={css.button} disabled={pending}
+          onClick={() => void run(() => createTab())}>{t('newTab')}</button>
+      </div>}
+
       <div className={css.toolbar}>
         <input
           className={css.urlInput}
-          value={urlInput}
+          value={urlInput ?? snapshot.url}
+          aria-label={t('address')}
           onChange={(e) => { setUrlInput(e.target.value) }}
           onKeyDown={onKeyDown}
           placeholder={t('openUrlPlaceholder')}
@@ -124,6 +157,7 @@ export function BrowserPanel({ t, useBrowser, start, navigate, stop }: BrowserPa
         </button>
         {snapshot.open && <button type="button" className={css.button} disabled={pending} onClick={() => void run(stop)}>{t('stop')}</button>}
       </div>
+      {snapshot.open && snapshot.backend === 'chrome' && <p className={css.interactionHelp}>{t('chromeInteraction')}</p>}
       {(error !== '' || streamError !== '') && <div role="alert" className={css.error}>{error || streamError}</div>}
 
       {snapshot.open ? (

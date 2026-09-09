@@ -14,12 +14,9 @@ importers:
       '@deepseek-ai/dsh-client-ui-browser':
         specifier: link:../../packages/client/ui-browser
         version: link:../../packages/client/ui-browser
-      chrome-launcher:
-        specifier: ^1.2.1
-        version: 1.2.1
-      playwright:
-        specifier: ^1.62.0
-        version: 1.62.1
+      dsh-browser-control:
+        specifier: file:../browser-control
+        version: file:../browser-control
 
 packages:
 
@@ -40,14 +37,12 @@ packages:
       supports-color:
         optional: true
 
+  dsh-browser-control@file:../browser-control:
+    resolution: {directory: ../browser-control, type: directory}
+
   escape-string-regexp@4.0.0:
     resolution: {integrity: sha512-TtpcNJ3XAzx3Gq8sWRzJaVajRs0uVxA2YAkdb1jm2YkPz4G6egUFAyA3n5vtEIZefPk5Wa4UXbKuS5fKkJWdgA==}
     engines: {node: '>=10'}
-
-  fsevents@2.3.2:
-    resolution: {integrity: sha512-xiqMQR4xAeHTuB9uWm+fFRcIOgKBMiOBP+eXiyT7jsgVCq1bkVygt00oASowB7EdtpOHaaPgKt812P9ab+DDKA==}
-    engines: {node: ^8.16.0 || ^10.6.0 || >=11.0.0}
-    os: [darwin]
 
   is-docker@2.2.1:
     resolution: {integrity: sha512-F+i2BKsFrH66iaUFc0woD8sLy8getkwTwtOBjvs56Cx4CgJDeKQeqfz8wAYiSb8JOprWhHH5p77PbmYCvvUuXQ==}
@@ -67,13 +62,13 @@ packages:
   ms@2.1.3:
     resolution: {integrity: sha512-6FlzubTLZG3J2a/NVCAleEhjzq5oxgHyaCU9yYXvcLsvoVaHJq/s5xXI6/XXP6tz7R9xAOtHnSO/tXtF3WRTlA==}
 
-  playwright-core@1.62.1:
-    resolution: {integrity: sha512-wPYSwEBJY9GHraISXqyqtx0na0LpO3XEX7jNDhntbex7tzUS7kLnZsOlFruFJB4Hi/rhDMjXGqHewDZ68nYZVw==}
+  playwright-core@1.63.0:
+    resolution: {integrity: sha512-rYCsBF/M5HjUch52bbtVONEFjv6Xu8sm8h72dNlR5bzIE1fvC/bxgspzkjSfU+MweEMmPM8KJebG6nnyxo5mCg==}
     engines: {node: '>=20'}
     hasBin: true
 
-  playwright@1.62.1:
-    resolution: {integrity: sha512-0M+L3LAD8/nm554LOla9Ayx0j0tmFZ0FBcoQ7F1VuVHpM/XpiC8RcDzBQB8W5+hA8L22THxELzeF+2WcUzvcLg==}
+  playwright@1.63.0:
+    resolution: {integrity: sha512-+7ziBLidS4NaNCdt57SUDT+wYmmd5fmiQejUic/kb+YsYSCPyOOE9sebzMjNmQrsnNpDJqd4WHvV/8lfKfUDUg==}
     engines: {node: '>=20'}
     hasBin: true
 
@@ -99,10 +94,16 @@ snapshots:
     dependencies:
       ms: 2.1.3
 
-  escape-string-regexp@4.0.0: {}
+  dsh-browser-control@file:../browser-control:
+    dependencies:
+      '@deepseek-ai/dsh-api-browser-controller': link:../../packages/api/browser-controller
+      '@deepseek-ai/dsh-client-ui-browser': link:../../packages/client/ui-browser
+      chrome-launcher: 1.2.1
+      playwright: 1.63.0
+    transitivePeerDependencies:
+      - supports-color
 
-  fsevents@2.3.2:
-    optional: true
+  escape-string-regexp@4.0.0: {}
 
   is-docker@2.2.1: {}
 
@@ -121,12 +122,10 @@ snapshots:
 
   ms@2.1.3: {}
 
-  playwright-core@1.62.1: {}
+  playwright-core@1.63.0: {}
 
-  playwright@1.62.1:
+  playwright@1.63.0:
     dependencies:
-      playwright-core: 1.62.1
-    optionalDependencies:
-      fsevents: 2.3.2
+      playwright-core: 1.63.0
 
   undici-types@8.9.0: {}
