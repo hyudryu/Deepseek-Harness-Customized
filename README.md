@@ -200,6 +200,19 @@ Capabilities include:
 
 </details>
 
+#### 7. `dsh-browser-use`
+
+<details>
+<summary><b>browser-use agent driving the integrated browser</b> — click to expand</summary>
+
+The [browser-use bundle](<Custom Plugins/browser-use/README.md>) adds the open-source [browser-use](https://github.com/browser-use/browser-use) agent as the driver of the integrated browser. The harness model sends one concrete task per run; browser-use executes it in the visible session Chrome (over CDP, default `http://127.0.0.1:9222`) and every run returns a screenshot. Install it alongside the `dsh-chrome-browser` (or `dsh-browser-control`) bundle so the panel and the `browser` tool are present.
+
+A standing rule in the registered skill makes **browser mode mandatory for web actions**: site interactions go through `browser_use` or the integrated `browser` tool, never through fetch/curl substitutes. The same rule defines the supervision loop — after every run the model inspects the returned screenshot with the `read_image` tool, compares it with the task's success criteria, and either confirms completion or sends a revised task; `stop` cancels a wayward run and `screenshot` captures the current tab on demand.
+
+The bundle vendors the browser-use Python source (MIT, pinned upstream commit in `vendor/browser-use/VENDOR.md`) so the library travels with the plugin. On first use it builds a Python >= 3.11 virtual environment under `~/.dsh/browser-use` from that vendored source in a private staging directory published with atomic renames (safe when two Harness processes share the root; one-time network access for the pinned dependencies; a version marker rebuilds automatically after a vendor sync). The sidecar child gets an allowlisted environment rather than the full Harness environment. The executor LLM defaults to DeepSeek via the harness's `DEEPSEEK_API_KEY` and is configurable (`llmProvider`, `llmModel`, `llmBaseUrl`, `llmApiKeyEnv`).
+
+</details>
+
 ## Developer preview
 
 DeepSeek Harness is in _developer preview_ and iterating rapidly. **THERE WILL BE COMPATIBILITY-BREAKING CHANGES.**
