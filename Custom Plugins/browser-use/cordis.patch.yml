@@ -1,0 +1,12 @@
+- insert:
+    - id: browser-use
+      name: dsh-browser-use
+      config:
+        chromeEndpoint: http://127.0.0.1:9222
+        headless: false
+        maxSteps: 25
+        llmProvider: deepseek
+        llmModel: deepseek-chat
+        llmApiKeyEnv: DEEPSEEK_API_KEY
+        useVision: false
+        artifactDir: .dsh/browser-use-artifacts

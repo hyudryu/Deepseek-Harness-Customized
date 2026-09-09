@@ -1,0 +1,23 @@
+{
+  "name": "dsh-browser-use",
+  "version": "0.1.0",
+  "description": "browser-use agent driving the DeepSeek Harness integrated browser",
+  "type": "module",
+  "main": "index.js",
+  "files": [
+    "index.js",
+    "cordis.patch.yml",
+    "skills/browser-use.md",
+    "python/",
+    "vendor/"
+  ],
+  "license": "MIT",
+  "dependencies": {
+    "dsh-browser-control": "file:../browser-control"
+  },
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    }
+  }
+}
