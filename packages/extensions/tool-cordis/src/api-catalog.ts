@@ -637,6 +637,12 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
         description: 'Close an owned tab; closing the last tab stops the session browser.',
         parameters: [{ name: 'sessionId', description: 'session owning the tab.' }, { name: 'tabId', description: 'opaque identity from that session\'s snapshot.' }],
       },
+      {
+        signature: 'input(sessionId: SessionId, event: BrowserInputEvent): Promise<void>',
+        description: 'Forward one panel input event to the session\'s active page.',
+        parameters: [{ name: 'sessionId', description: 'session whose browser receives the input.' }, { name: 'event', description: 'pointer, wheel, or keyboard event in page CSS pixels.' }],
+        throws: ['when the session has no open browser or no active page.'],
+      },
     ],
   },
   {
@@ -3812,6 +3818,14 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   {
     name: 'BrowserActionEntry',
     declaration: 'export interface BrowserActionEntry {\n    readonly id: number;\n    readonly action: string;\n    readonly args: string;\n    readonly ok: boolean;\n    readonly url: string;\n    readonly time: number;\n    readonly viewportWidth?: number;\n    readonly viewportHeight?: number;\n    readonly clickX?: number;\n    readonly clickY?: number;\n}',
+  },
+  {
+    name: 'BrowserInputEvent',
+    declaration: 'export interface BrowserInputEvent {\n    readonly kind: \'move\' | \'down\' | \'up\' | \'wheel\' | \'key\' | \'text\';\n    readonly x?: number;\n    readonly y?: number;\n    readonly button?: BrowserMouseButton;\n    readonly clickCount?: number;\n    readonly deltaX?: number;\n    readonly deltaY?: number;\n    readonly key?: string;\n    readonly text?: string;\n}',
+  },
+  {
+    name: 'BrowserMouseButton',
+    declaration: 'export type BrowserMouseButton = \'left\' | \'right\' | \'middle\';',
   },
   {
     name: 'BrowserSnapshot',

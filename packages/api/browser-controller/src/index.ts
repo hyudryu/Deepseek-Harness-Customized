@@ -6,6 +6,9 @@ import { Remote, TypertRemoteService } from '@deepseek-ai/dsh-typert-protocol'
 import type {
   BrowserCloseRequest,
   BrowserCloseValue,
+  BrowserInputEvent,
+  BrowserInputRequest,
+  BrowserInputValue,
   BrowserOpenRequest,
   BrowserOpenValue,
   BrowserSnapshot,
@@ -62,6 +65,13 @@ export interface BrowserControl {
    * @param tabId - opaque identity from that session's snapshot.
    */
   closeTab(sessionId: SessionId, tabId: BrowserTabId): Promise<void>
+  /**
+   * Forward one panel input event to the session's active page.
+   * @param sessionId - session whose browser receives the input.
+   * @param event - pointer, wheel, or keyboard event in page CSS pixels.
+   * @throws when the session has no open browser or no active page.
+   */
+  input(sessionId: SessionId, event: BrowserInputEvent): Promise<void>
 }
 
 declare module '@deepseek-ai/cordis' {
@@ -156,6 +166,21 @@ export class BrowserController extends TypertRemoteService {
   @Remote('closeTab')
   async closeTab(request: BrowserTabRequest): Promise<BrowserCloseValue> {
     await this.changeTab(request.sessionId, () => this.ctx.browserControl.closeTab(request.sessionId, request.tabId))
+    return { ok: true }
+  }
+
+  /**
+   * Forward one panel input event to a live session's active page.
+   * @param request - session and the input event in page CSS pixels.
+   * @returns acknowledgement after the page received the event.
+   */
+  @Remote('input')
+  async input(request: BrowserInputRequest): Promise<BrowserInputValue> {
+    const session = this.ctx.sessions.get(request.sessionId)
+    if (session === undefined) {
+      throw new Error(`session "${request.sessionId}" not found`)
+    }
+    await this.ctx.browserControl.input(request.sessionId, request.event)
     return { ok: true }
   }
 

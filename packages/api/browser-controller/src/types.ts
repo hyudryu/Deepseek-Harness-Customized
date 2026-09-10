@@ -93,3 +93,43 @@ export interface BrowserTabRequest {
   readonly sessionId: SessionId
   readonly tabId: BrowserTabId
 }
+
+/** Pointer button carried by a `down` or `up` input event. */
+export type BrowserMouseButton = 'left' | 'right' | 'middle'
+
+/**
+ * One pointer, wheel, or keyboard input forwarded from the browser panel to the
+ * session's active page. Coordinates are page CSS pixels in the captured frame,
+ * so a panel maps its own viewport onto the page before sending.
+ */
+export interface BrowserInputEvent {
+  /** Which input to dispatch: pointer movement, button transition, wheel scroll, key press, or literal text. */
+  readonly kind: 'move' | 'down' | 'up' | 'wheel' | 'key' | 'text'
+  /** Page CSS-pixel x of the pointer; required by move, down, up, and wheel. */
+  readonly x?: number
+  /** Page CSS-pixel y of the pointer; required by move, down, up, and wheel. */
+  readonly y?: number
+  /** Pointer button; required by down and up. */
+  readonly button?: BrowserMouseButton
+  /** Consecutive click count for down and up, where 2 is a double click. */
+  readonly clickCount?: number
+  /** Horizontal wheel delta in px, for wheel. */
+  readonly deltaX?: number
+  /** Vertical wheel delta in px, for wheel. */
+  readonly deltaY?: number
+  /** Key combination such as `Enter` or `Control+a`, for key. */
+  readonly key?: string
+  /** Literal characters to insert at the current selection, for text. */
+  readonly text?: string
+}
+
+/** Input request for one session's browser. */
+export interface BrowserInputRequest {
+  readonly sessionId: SessionId
+  readonly event: BrowserInputEvent
+}
+
+/** Input acknowledgement, sent after the page received the event. */
+export interface BrowserInputValue {
+  readonly ok: boolean
+}

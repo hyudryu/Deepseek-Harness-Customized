@@ -24,7 +24,7 @@ This controller lets the Web client open a session browser, navigate it, and fol
 <a id="use-this-package"></a>
 ## Use this package
 
-The Web application composition mounts this controller with a provider of `ctx.browserControl`. The [browser panel](../../client/ui-browser/README.md) consumes its generated `remote.browser` API. The controller has no configuration fields. `createTab`, `selectTab`, and `closeTab` require a live session and operate on its owned tabs. Tab identifiers use the opaque `BrowserTabId` type. Snapshots carry ordered tab metadata, the active tab identity, and the provider backend; their page URL, title, and frame describe the active tab. Closing the last owned tab stops the session browser. A tab operation completing after session disposal awaits browser cleanup and rejects its acknowledgement.
+The Web application composition mounts this controller with a provider of `ctx.browserControl`. The [browser panel](../../client/ui-browser/README.md) consumes its generated `remote.browser` API. The controller has no configuration fields. `createTab`, `selectTab`, and `closeTab` require a live session and operate on its owned tabs. Tab identifiers use the opaque `BrowserTabId` type. Snapshots carry ordered tab metadata, the active tab identity, and the provider backend; their page URL, title, and frame describe the active tab. Closing the last owned tab stops the session browser. A tab operation completing after session disposal awaits browser cleanup and rejects its acknowledgement. `input` forwards one panel pointer, wheel, or keyboard event to a live session's active page in page CSS pixels and acknowledges after the page received it; an unknown session or a closed browser rejects.
 
 -----
 

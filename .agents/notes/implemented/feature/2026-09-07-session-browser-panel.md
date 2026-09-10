@@ -26,4 +26,4 @@ Initial navigation failure awaits closure of a newly created context before reje
 
 ## Consequences
 
-The user can keep a session browser running while hiding its panel. The displayed frame is a screenshot, not an interactive remote desktop; pointer movement over it does not dispatch browser input. The [visible Chrome provider](2026-09-08-visible-chrome-browser.md) supports direct human interaction in its window and exposes owned session tabs in the panel. Tests cover creation sharing, frame delivery, and close/reopen behavior, while browser verification exercises the composed application.
+The user can keep a session browser running while hiding its panel. The panel forwards pointer, wheel, and keyboard input to the page, so it is an interactive surface rather than a read-only frame; [Interactive session browser panel](2026-09-10-interactive-session-browser-panel.md) owns that input design. The [Chrome provider](2026-09-08-visible-chrome-browser.md) exposes owned session tabs in the panel. Tests cover creation sharing, frame delivery, and close/reopen behavior, while browser verification exercises the composed application.
