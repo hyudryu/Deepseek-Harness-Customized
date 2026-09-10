@@ -55,6 +55,7 @@ function createMockClient(tools: MockTool[], callResult: MockCallResult = { cont
       throw new Error(`unexpected MCP request: ${request.method}`)
     }),
     setNotificationHandler: vi.fn(),
+    getInstructions: vi.fn(() => undefined),
     connect: vi.fn().mockResolvedValue(undefined),
     close: vi.fn().mockResolvedValue(undefined),
   }

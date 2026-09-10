@@ -9,7 +9,7 @@ English | [中文](README.zh.md)
 
 ## Summary
 
-`dsh-mcp-client` attaches external Model Context Protocol (MCP) servers to the harness so their tools work like any native tool. With one configuration entry per server, the model can call that server's tools — a filesystem, GitHub, database, or memory server — under stable names such as `mcp__github__create_issue`. Add it when the model should work with an external tool server; nothing ships enabled, so you opt in. The main cost is the tokens those tool definitions add to every request, and a slow or crashed server can delay startup or leave its tools failing until it recovers. Only tools are bridged: MCP resources and prompts are not supported.
+`dsh-mcp-client` attaches external Model Context Protocol (MCP) servers to the harness so their tools work like any native tool. With one configuration entry per server, the model can call that server's tools — a filesystem, GitHub, database, or memory server — under stable names such as `mcp__github__create_issue`. Add it when the model should work with an external tool server; nothing ships enabled, so you opt in. The main cost is the tokens those tool definitions add to every request, and a slow or crashed server can delay startup or leave its tools failing until it recovers. Tools are bridged, and a server that advertises usage instructions has them published into the system prompt; MCP resources and prompts are not supported.
 
 ## Table of Contents
 
@@ -84,6 +84,12 @@ When the model calls an MCP tool, the call runs against the remote server with a
 
 Images are supported when the current model accepts image input and the harness attachment feature is enabled; they then appear in the conversation like other images. Otherwise — and for audio or embedded resources — the model sees a clear diagnostic message instead of nothing.
 
+### Server instructions
+
+An MCP server may advertise a free-form `instructions` string during the protocol handshake: its own statement of how and when to use it. When it does, the harness publishes that text into the system prompt as one section per server, so the model reads the server's guidance before choosing a tool. A server that advertises none adds no text — the section resolves empty and is dropped when the prompt renders.
+
+The text belongs to the server, so it follows the server's releases, and a reconnection that delivers changed instructions updates the next request. No configuration on this plugin controls it, and the bridge applies no length bound of its own. This is the channel a server uses to say "prefer me over the general-purpose tools"; a server whose instructions route the model to its own search tool instead of a grep-and-read loop needs no prompt engineering in the deployment.
+
 ### Startup, updates, and reconnection
 
 The server's tools appear before the harness starts its first turn. When the server changes its tool list, the model's tool set updates automatically; if the update fails, the previous tool set keeps working.
@@ -107,13 +113,14 @@ This section explains the design decisions behind the bridge and points at the c
 - **The raw name is the only wire name.** `tools/call` always receives the raw name; the public name is never sent to the server and never parsed to recover the raw name.
 - **Full generation or none.** Syncs swap generations atomically: a fetch failure keeps the previous generation, and a registration conflict rolls back the entire attempted generation.
 - **One canonical value, one projection.** The executor returns the protocol-complete canonical `McpResult`; a separate ordered projection prepares Native content, and `finalizeContent` installs it only when the registry's post-execute result is unchanged, so policy blocks and value replacements stay authoritative.
+- **The server owns its own guidance.** Advertised `instructions` publish verbatim as one prompt section. The harness neither rewrites nor caps them, because the author who knows a tool's intended use is the server, not the deployment.
 
 ### Source map
 
 | File | Role |
 |---|---|
-| [`src/index.ts`](src/index.ts) | Plugin entry: `Config` schema, `serverName` reservation, activation await |
-| [`src/connection.ts`](src/connection.ts) | Connection supervisor: client generations, reconnect policy, attempt budget, disposal |
+| [`src/index.ts`](src/index.ts) | Plugin entry: `Config` schema, `serverName` reservation, instructions section, activation await |
+| [`src/connection.ts`](src/connection.ts) | Connection supervisor: client generations, reconnect policy, attempt budget, live instructions, disposal |
 | [`src/tools.ts`](src/tools.ts) | Tool bridge: discovery, naming, registration swap, execution, image projection |
 | [`src/transport.ts`](src/transport.ts) | Transport factory: stdio spawn with scrubbed env, Streamable HTTP |
 | — | No runtime invariant companion is published; MCP generations contribute through the tool registry, but the bridge exposes no independent server-to-tool snapshot after an asynchronous resync. |
@@ -153,6 +160,20 @@ Read these pages when the package-level contract is not enough. They move from t
 <a id="model-experience"></a>
 ## Model Experience
 
+### Server instructions
+
+#### What the model sees
+
+The connected server's advertised `instructions` render as one system-prompt section named `mcp:<serverName>`. The section carries text while a generation is connected and the server advertised some; a server that advertises none, or a connection that has gone down, renders no section at all. A reconnect delivering different instructions changes the text on the next assembled request.
+
+#### Token effect
+
+The instruction text enters every request while it is non-empty, in addition to the tool definitions. The bridge adds no cap of its own, so an unusually long block is paid for on every step until the server changes it or the connection drops.
+
+#### KV Cache effect
+
+The text sits in the system-prompt prefix. Instructions that stay byte-identical across requests preserve prefix reuse; a reconnect that changes or drops them invalidates reuse from that section onward.
+
 ### Discovered MCP tools
 
 #### What the model sees
@@ -188,7 +209,7 @@ Append-only; newly visible content follows the reusable request prefix and does 
 
 These limits describe what you cannot do with this plugin and when it needs operational attention. They are current package constraints, not a comparison with other MCP clients or a task backlog.
 
-- **Tools are the only bridged MCP capability** — Resources and Prompts have no harness consumer mechanism and are deferred.
+- **Tools and server instructions are the only bridged MCP surface** — the server's `initialize` instructions publish as prompt text, while Resources and Prompts have no harness consumer mechanism and are deferred.
 - **Startup and discovery timeouts are inherited from the MCP SDK** — the plugin exposes no connection or discovery timeout; each `initialize` and paginated `tools/list` request uses the SDK's 60-second request default, so an unresponsive server or cursor chain can delay both activation and teardown while the initial synchronization settles.
 - **Reconnect triggers on transport close** — a crashed stdio child fires it; Streamable HTTP failures surface per request through the SDK transport's own recovery, so an unreachable HTTP server is retried per call rather than respawned by the supervisor.
 - **Image is the only durable rich-result bridge** — PNG, JPEG, WebP, and GIF enter Native context after exact capability proof. Audio and embedded-resource payloads remain execution-local with explicit diagnostics, while resource links preserve only their name and URI as text.
@@ -206,7 +227,7 @@ This Dev Note is working context for maintainers: open design questions and dire
 - The public-name algorithm is a v1 contract pinned by tests; changing it after release would break session history and permission rules.
 - An explicit DSH-owned connection and discovery timeout is an open direction; the SDK's 60-second default bounds startup and teardown.
 - Reconnect ownership for Streamable HTTP is open: per-request retry is SDK behavior, and the supervisor could also own the HTTP generation.
-- Bridging MCP Resources needs a harness-side injection decision (system prompt, on demand, or model-triggered); bridging Prompts needs a prompt-template concept the harness lacks.
+- Bridging MCP Resources needs a harness-side injection decision (system prompt, on demand, or model-triggered); the handshake-instructions section is the shipped system-prompt precedent. Bridging Prompts needs a prompt-template concept the harness lacks.
 - The pinned MCP SDK is still evolving; a breaking upstream change requires updating the bridge.
 
 </details>

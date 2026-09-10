@@ -71,6 +71,15 @@ Configure `buckets` (ordered routing categories), `pageSize`, and `descriptionMa
 
 </details>
 
+<details>
+<summary><b>MCP server instructions in the system prompt</b> — click to expand</summary>
+
+An MCP server can advertise a free-form `instructions` string during the protocol handshake — its own statement of how and when to use it. `@deepseek-ai/dsh-mcp-client` previously discarded that field. It now publishes the text into the system prompt as one section per server (`mcp:<serverName>`), so the model reads the server's guidance before choosing a tool.
+
+This matters for servers whose value depends on being chosen over general-purpose tools: CodeGraph ships instructions routing the model to its own `codegraph_explore` tool instead of a grep-and-read loop, and with the field discarded the model kept grepping even though the tool was connected and working. The text belongs to the server, so it follows the server's own releases; nothing in the plugin config controls it, and a server that advertises none contributes no text.
+
+</details>
+
 ### Plugins
 
 These bundles live in [`Custom Plugins/`](Custom Plugins/). They are intentionally kept outside the core `packages/` tree and are installed per profile via `dsh plugin --profile <name> add <path>`.

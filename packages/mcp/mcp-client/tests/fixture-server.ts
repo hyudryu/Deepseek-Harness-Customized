@@ -8,10 +8,11 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import { z } from 'zod'
+import { FIXTURE_INSTRUCTIONS } from './fixture-manifest.ts'
 
 const server = new McpServer(
   { name: 'fixture-server', version: '1.0.0' },
-  { capabilities: { tools: { listChanged: true } } },
+  { capabilities: { tools: { listChanged: true } }, instructions: FIXTURE_INSTRUCTIONS },
 )
 
 server.registerTool('add', {
