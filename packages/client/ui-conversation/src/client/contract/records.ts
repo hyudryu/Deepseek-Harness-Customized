@@ -29,13 +29,29 @@ export interface AssistantProvenanceView {
   model: string
 }
 
-/** Assistant content blocks sorted by what a UI target presents. */
+/**
+ * Assistant content blocks sorted by what a UI target presents.
+ *
+ * Only a reasoning block carries {@link ReasoningBlock.startedAt}, because it
+ * is the one block kind the transcript times on its own: text and tool-call
+ * heads are presented through rows that already own their timing.
+ */
 export type AssistantBlock =
   | { kind: 'text'; text: string }
-  | { kind: 'reasoning'; text: string }
+  | ReasoningBlock
   | { kind: 'image'; attachment: ImageAttachmentRef }
   | { kind: 'tool-call'; callId: string; name: string; argsRaw: string }
   | { kind: 'other'; block: unknown }
+
+/** One thinking block plus the span it occupied in the recorded stream. */
+export interface ReasoningBlock {
+  kind: 'reasoning'
+  text: string
+  /** Unix epoch ms of this block's first streamed delta; absent when the window recorded no chunk time for it. */
+  startedAt?: number
+  /** Unix epoch ms the block closed; absent while it is still streaming or when no close was recorded. */
+  endedAt?: number
+}
 
 /** A finalized user message. */
 export interface UserMessageNode {

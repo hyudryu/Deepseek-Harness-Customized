@@ -200,6 +200,23 @@
   color: var(--dsw-alias-state-error-primary);
 }
 
+/* Trailing elapsed-time label for a settled Bash call — the row a long command
+   lands on, so the measurement matters most here. Kept out of .summary's
+   ellipsis so the command never clips it, and `flex: none` holds it at the
+   row's right edge while .summary absorbs the free space. Caption tone (one
+   step dimmer than the summary's tertiary) keeps a measurement from competing
+   with the command it measures; tabular figures stop the label from changing
+   width as its digits change. */
+.duration {
+  flex: none;
+  margin-left: 10px;
+  white-space: nowrap;
+  font-size: var(--dsh-content-font-size-secondary, 13px);
+  line-height: calc(24px + var(--dsh-content-font-delta, 0px));
+  font-variant-numeric: tabular-nums;
+  color: var(--dsw-alias-label-caption);
+}
+
 /* Hover-revealed Inspect pill under the expanded terminal's bottom-left —
    ToolRow's .bodyWrap/.inspectButton treatment, replicated per the registrant
    posture: real flow (it reserves its line), revealed by hovering anywhere on

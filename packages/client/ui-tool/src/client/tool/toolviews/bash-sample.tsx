@@ -14,6 +14,7 @@ import {
   terminalFailed,
 } from '../models/terminal-card-model.ts'
 import { formatToolBody, toolRowModel, type ToolRowState } from '../models/tool-call-model.ts'
+import { rowDurationLabel } from '../models/row-duration.ts'
 import { CONVERSATION_NS as NS } from '../../locale.ts'
 import css from './bash-sample.module.css'
 
@@ -107,6 +108,9 @@ export function BashRow({ toolName, block, sessionId, useSessions, inspect, t }:
         <span className={clsx(css.summary, failureLine !== null && css.errorSummary)}>
           {failureLine ?? terminal?.description ?? model.summary}
         </span>
+        {model.durationMs !== null && (
+          <span className={css.duration}>{rowDurationLabel(model.durationMs, t)}</span>
+        )}
       </div>
       {open && (
         <div className={css.bodyWrap}>

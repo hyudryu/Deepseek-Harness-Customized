@@ -104,6 +104,21 @@
   color: var(--dsw-alias-label-caption);
 }
 
+/* Trailing elapsed-time label for a settled define call: how long the
+   registration took, kept out of the purpose's ellipsis so the name and the run
+   switch stay the parts that survive a narrow row. Caption tone sets the
+   measurement behind the definition it qualifies; tabular figures keep its
+   width stable across spans. */
+.duration {
+  flex: none;
+  margin-left: 8px;
+  white-space: nowrap;
+  font-size: 14px;
+  line-height: 24px;
+  font-variant-numeric: tabular-nums;
+  color: var(--dsw-alias-label-caption);
+}
+
 /* The model's question, shown beside the approve/decline pair. */
 .approvalPrompt {
   flex: none;

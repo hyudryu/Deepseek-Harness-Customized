@@ -7,6 +7,7 @@ import {
 import type { InjectFace, PropsLocale } from '@deepseek-ai/dsh-client-ui-slots'
 import type { ToolCallViewProps } from '@deepseek-ai/dsh-client-ui-tool/client'
 import { cordisDefineCard, type CordisToolState } from './card-model.ts'
+import { durationLabel, settledDurationMs } from './row-duration.ts'
 import type { CordisCardFace } from './slots.ts'
 import { cordisVisibleStatus, type CordisVisibleStatus } from './status.ts'
 import type { CordisKey } from './locales.ts'
@@ -72,6 +73,8 @@ export function CordisDefineRow({
       ? 'host'
       : card.clientCode !== null ? 'client' : 'host'
   const activeCode = activeSource === 'client' ? card.clientCode : card.hostCode
+  const durationMs = settledDurationMs(block)
+  const duration = durationMs === null ? null : durationLabel(durationMs, t)
 
   return (
     <div
@@ -109,6 +112,7 @@ export function CordisDefineRow({
                 <span className={css.statusLabel}>{t(READING_LABELS[reading])}</span>
               </span>
             )}
+            {duration !== null && <span className={css.duration}>{duration}</span>}
           </>
         )}
       >

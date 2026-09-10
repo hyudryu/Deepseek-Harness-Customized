@@ -20,6 +20,7 @@ import type { AskQuestionCardModel } from '../models/ask-question-card-model.ts'
 import {
   formatToolBody, type ToolRowState, type ToolRowVariant,
 } from '../models/tool-call-model.ts'
+import { rowDurationLabel } from '../models/row-duration.ts'
 import type { WebCardModelProps } from '../models/web-card-model.ts'
 import { AskQuestionCard } from './AskQuestionCard.tsx'
 import css from './ToolRow.module.css'
@@ -48,6 +49,12 @@ export interface ToolRowProps {
   askQuestion?: AskQuestionCardModel | null | undefined
   /** Error first line shown as the collapsed summary on an error row; null/absent = keep `summary`. */
   errorSummary?: string | null | undefined
+  /**
+   * Settled call wall time rendered as the row's trailing label. null/absent =
+   * no label: a running call has no elapsed span yet, and a settled result
+   * whose call head is outside the window has no start to difference against.
+   */
+  durationMs?: number | null | undefined
   /** Terminal card; card fields are mutually exclusive and replace text sections. */
   terminal?: TerminalCardModel | null | undefined
   diff?: DiffCardModel | null | undefined
@@ -117,6 +124,7 @@ export function ToolRow({
   output,
   askQuestion,
   errorSummary,
+  durationMs,
   terminal,
   diff,
   read,
@@ -168,6 +176,7 @@ export function ToolRow({
     return `+${added} -${removed}`
   }, [diffBody])
   const suffix = failureLine === null ? summarySuffix ?? diffStat : null
+  const duration = durationMs === undefined || durationMs === null ? null : rowDurationLabel(durationMs, t)
   const fileLink = filePath !== undefined && onOpenFile !== undefined && failureLine === null
   const toggleExpand = () => {
     setExpanded(v => !v)
@@ -225,6 +234,7 @@ export function ToolRow({
             {suffix !== null && (
               <span className={clsx(css.summarySuffix, suffix === diffStat && css.diffStat)}>{suffix}</span>
             )}
+            {duration !== null && <span className={css.duration}>{duration}</span>}
           </>
         )}
       >

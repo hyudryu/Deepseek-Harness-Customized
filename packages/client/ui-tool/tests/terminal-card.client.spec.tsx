@@ -413,6 +413,27 @@ describe('BashRow terminal card', () => {
     expect(view.getByText('List files')).toBeTruthy()
   })
 
+  it('labels a settled command with its elapsed span and stays silent while it runs', () => {
+    const view = render(<BashRow {...rowProps(settled({ time: 46_230, callTime: 1_000 }))} />)
+    const summary = view.getByText('List files')
+    const duration = view.getByText('45.2秒')
+    // Separate spans: .summary truncates, the measurement must not travel inside it.
+    expect(summary.contains(duration)).toBe(false)
+    view.unmount()
+
+    const minutes = render(<BashRow {...rowProps(settled({ time: 163_000, callTime: 1_000 }))} />)
+    expect(minutes.getByText('2分42秒')).toBeTruthy()
+    minutes.unmount()
+
+    // A running command has no paired result yet, and one whose call head fell
+    // outside the loaded window has no span to measure.
+    const runningView = render(<BashRow {...rowProps(running())} />)
+    expect(runningView.container.querySelector('[class*="duration"]')).toBeNull()
+    runningView.unmount()
+    const headless = render(<BashRow {...rowProps(settled({ callTime: null }))} />)
+    expect(headless.container.querySelector('[class*="duration"]')).toBeNull()
+  })
+
   // The row's leading StateDot and the card's run-state dot describe the same
   // command, so a running row whose card claimed 'done' would be a contradiction
   // the reader sees on one line.

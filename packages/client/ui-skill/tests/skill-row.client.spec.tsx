@@ -12,6 +12,9 @@ type SkillRowProps = Parameters<typeof SkillRow>[0]
 
 const t: SkillRowProps['t'] = makeTranslate(zh, commonZh)
 
+/** Any rendered duration label, including the `NaN` a missing call head would produce. */
+const DURATION_LABEL = /NaN|\d+(?:\.\d+)?秒/
+
 afterEach(cleanup)
 
 function settled(over: Partial<ToolResultNode> = {}): ToolResultNode {
@@ -51,7 +54,7 @@ describe('SkillRow', () => {
   it('renders a compact Bash-shaped summary and discloses the exact instructions', () => {
     const inspect = vi.fn()
     const view = render(<SkillRow {...props(settled(), inspect)} />)
-    const row = screen.getByRole('button', { name: 'Skilldsh-manage-issues' })
+    const row = screen.getByRole('button', { name: 'Skilldsh-manage-issues1秒' })
     expect(row.getAttribute('aria-expanded')).toBe('false')
     expect(view.container.querySelector('[data-tool="skill"]')?.getAttribute('data-state')).toBe('ok')
     expect(view.container.querySelector('[data-tool="skill"] svg')?.getAttribute('width')).toBe('14')
@@ -89,13 +92,35 @@ describe('SkillRow', () => {
     expect(view.container.querySelector('svg [fill="currentColor"]')).not.toBeNull()
   })
 
+  it('labels a settled call with its elapsed span and stays silent without one', () => {
+    const seconds = render(<SkillRow {...props(settled({ time: 46_230, callTime: 1_000 }))} />)
+    // 45_230 ms: a sub-minute span keeps one decimal rather than flattening to `45秒`.
+    expect(seconds.getByText('45.2秒')).toBeTruthy()
+    cleanup()
+
+    const minutes = render(<SkillRow {...props(settled({ time: 163_000, callTime: 1_000 }))} />)
+    // 162_000 ms: a minute and over reports whole minutes plus two-digit seconds.
+    expect(minutes.getByText('2分42秒')).toBeTruthy()
+    cleanup()
+
+    // A running call has no paired result yet, and a result whose call head fell
+    // outside the loaded window has no span to measure: neither shows a label.
+    const runningView = render(<SkillRow {...props(running())} />)
+    expect(runningView.queryByText(DURATION_LABEL)).toBeNull()
+    cleanup()
+
+    const headless = render(<SkillRow {...props(settled({ callTime: null }))} />)
+    expect(headless.queryByText(DURATION_LABEL)).toBeNull()
+    expect(headless.getByText('dsh-manage-issues')).toBeTruthy()
+  })
+
   it('uses the first failure line in the summary and exposes the full error', () => {
     const view = render(<SkillRow {...props(settled({
       content: [{ type: 'text', text: 'SkillError: missing resource\nCheck SKILL.md.' }],
       isError: true,
       error: { name: 'SkillError', code: 'missing' },
     }))} />)
-    const row = screen.getByRole('button', { name: 'skill 加载失败SkillSkillError: missing resource' })
+    const row = screen.getByRole('button', { name: 'skill 加载失败SkillSkillError: missing resource1秒' })
     expect(view.container.querySelector('[data-tool="skill"]')?.getAttribute('data-state')).toBe('error')
     expect(row.textContent).not.toContain('Check SKILL.md.')
     fireEvent.click(row)
@@ -124,7 +149,7 @@ describe('SkillRow', () => {
       isError: true,
       error: { name: 'SkillError', code: 'missing' },
     }))} />)
-    const errorRow = screen.getByRole('button', { name: 'skill 加载失败SkillSkillError: missing' })
+    const errorRow = screen.getByRole('button', { name: 'skill 加载失败SkillSkillError: missing1秒' })
     fireEvent.click(errorRow)
     expect(screen.getAllByText('SkillError: missing')).toHaveLength(2)
   })

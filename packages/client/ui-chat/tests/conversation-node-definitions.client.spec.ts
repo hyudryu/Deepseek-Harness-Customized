@@ -327,6 +327,77 @@ describe('built-in conversation node Definitions', () => {
     expect(hasAssistantReplyContent([{ kind: 'other', block: { type: 'future' } }])).toBe(true)
   })
 
+  it('times each reasoning block from its own recorded stream span', () => {
+    const base = 1_700_000_000_000
+    const live = (seq: number, chunk: unknown) => at(seq, 'assistant/live-chunk', { turn: 1, step: 1, chunk })
+    const value = assembler([
+      at(1, 'turn/start', { turn: 1 }),
+      at(2, 'step/start', { turn: 1, step: 1 }),
+      live(3, { type: 'block-start', index: 0, blockType: 'reasoning' }),
+      live(4, { type: 'reasoning-delta', index: 0, text: 'think' }),
+      live(9, { type: 'block-end', index: 0, block: { type: 'reasoning', text: 'think' } }),
+      // Index 1 stays a hole: a streamed block-start may name an index ahead of
+      // the ones already seen, so spans are read at the block's own index.
+      live(10, { type: 'block-start', index: 2, blockType: 'text' }),
+      live(11, { type: 'text-delta', index: 2, text: 'answer' }),
+      live(12, { type: 'block-start', index: 3, blockType: 'reasoning' }),
+      live(13, { type: 'reasoning-delta', index: 3, text: 'still going' }),
+    ])
+    const blocks = (node(snapshot(value), 'assistant-step')?.data as AssistantChatData).blocks
+    expect(blocks).toEqual([
+      { kind: 'reasoning', text: 'think', startedAt: base + 3, endedAt: base + 9 },
+      { kind: 'text', text: 'answer' },
+      // Still open: the row counts it up from its own start.
+      { kind: 'reasoning', text: 'still going', startedAt: base + 12 },
+    ])
+  })
+
+  it('closes an unterminated reasoning span at the message that settled it', () => {
+    const base = 1_700_000_000_000
+    const settledValue = assembler([
+      at(1, 'turn/start', { turn: 1 }),
+      at(2, 'step/start', { turn: 1, step: 1 }),
+      at(3, 'assistant/live-chunk', {
+        turn: 1, step: 1, chunk: { type: 'block-start', index: 0, blockType: 'reasoning' },
+      }),
+      at(4, 'assistant/live-chunk', {
+        turn: 1, step: 1, chunk: { type: 'reasoning-delta', index: 0, text: 'think' },
+      }),
+      at(20, 'assistant/message', {
+        turn: 1,
+        step: 1,
+        message: {
+          id: 'reasoning-1',
+          role: 'assistant',
+          content: [{ type: 'reasoning', text: 'think' }],
+          source: { kind: 'model', provider: 'fake', model: 'fake' },
+        },
+      }, { surfaceOp: 'append' }),
+    ])
+    const settledBlocks = (node(snapshot(settledValue), 'assistant-step')?.data as AssistantChatData).blocks
+    // No block-end chunk reached the log, so the message's own instant closes it.
+    expect(settledBlocks).toEqual([{ kind: 'reasoning', text: 'think', startedAt: base + 3, endedAt: base + 20 }])
+
+    // A message whose stream recorded no chunk time at all leaves the block
+    // untimed rather than inventing a zero-length span for it.
+    const streamlessValue = assembler([
+      at(30, 'turn/start', { turn: 1 }),
+      at(31, 'step/start', { turn: 1, step: 1 }),
+      at(40, 'assistant/message', {
+        turn: 1,
+        step: 1,
+        message: {
+          id: 'reasoning-2',
+          role: 'assistant',
+          content: [{ type: 'reasoning', text: 'think' }],
+          source: { kind: 'model', provider: 'fake', model: 'fake' },
+        },
+      }, { surfaceOp: 'append' }),
+    ])
+    const streamlessBlocks = (node(snapshot(streamlessValue), 'assistant-step')?.data as AssistantChatData).blocks
+    expect(streamlessBlocks).toEqual([{ kind: 'reasoning', text: 'think' }])
+  })
+
   it('projects one reversible process window before the finalized answer', () => {
     const value = assembler([
       at(1, 'turn/start', { turn: 1 }),

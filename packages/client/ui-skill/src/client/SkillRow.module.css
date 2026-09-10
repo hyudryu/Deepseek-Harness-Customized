@@ -107,6 +107,20 @@
   color: var(--dsw-alias-state-error-primary);
 }
 
+/* Trailing elapsed-time label for a settled skill call: the load's own
+   duration, kept outside .summary's ellipsis so a long skill name never clips
+   it. Caption tone sets the measurement behind the name it qualifies, and
+   tabular figures keep its width from moving as the span's digits change. */
+.duration {
+  flex: none;
+  margin-left: 8px;
+  white-space: nowrap;
+  font-size: 14px;
+  line-height: 24px;
+  font-variant-numeric: tabular-nums;
+  color: var(--dsw-alias-label-caption);
+}
+
 .bodyWrap {
   display: flex;
   flex-direction: column;

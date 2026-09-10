@@ -49,6 +49,7 @@ export function readFamilyRow(
       bodyRaw={null}
       output={model.output}
       errorSummary={model.errorSummary}
+      durationMs={model.durationMs}
       {...card}
       state={model.state}
       filePath={model.filePath}

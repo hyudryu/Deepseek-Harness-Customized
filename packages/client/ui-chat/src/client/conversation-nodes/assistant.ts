@@ -31,6 +31,8 @@ interface AssistantState {
   readonly turn: number
   readonly step: number
   readonly blocks: readonly (AssistantBlock | undefined)[]
+  /** Per-block-index stream span, aligned with {@link blocks}; holes where no chunk time was recorded. */
+  readonly blockTimes: readonly (BlockSpan | undefined)[]
   readonly visibleBlocks: number
   readonly firstVisibleSeq: number | undefined
   readonly firstVisibleTime: number | undefined
@@ -40,11 +42,18 @@ interface AssistantState {
   readonly usage: unknown
 }
 
+/** First and last recorded instant of one streamed block, by block index. */
+interface BlockSpan {
+  readonly start: number
+  readonly end: number | undefined
+}
+
 function initialState(turn: number, step: number): AssistantState {
   return {
     turn,
     step,
     blocks: [],
+    blockTimes: [],
     visibleBlocks: 0,
     firstVisibleSeq: undefined,
     firstVisibleTime: undefined,
@@ -55,8 +64,56 @@ function initialState(turn: number, step: number): AssistantState {
   }
 }
 
-function compactBlocks(blocks: readonly (AssistantBlock | undefined)[]): AssistantBlock[] {
-  return blocks.filter((block): block is AssistantBlock => block !== undefined)
+/** Record a block's first instant without moving an already-recorded start. */
+function opened(span: BlockSpan | undefined, time: number): BlockSpan {
+  return span ?? { start: time, end: undefined }
+}
+
+/**
+ * Attach one block's recorded span to its reasoning form. Other kinds return
+ * unchanged — a text block and a tool-call head are presented by rows that own
+ * their own timing — and a block with no recorded start shows none.
+ * @param block - the block to annotate.
+ * @param span - its span, when the stream recorded one.
+ * @param settledEnd - instant an unterminated span closed at, for a node that already settled.
+ * @returns the block, annotated for a reasoning block with a known start.
+ */
+function withTiming(
+  block: AssistantBlock,
+  span: BlockSpan | undefined,
+  settledEnd: number | undefined,
+): AssistantBlock {
+  if (block.kind !== 'reasoning' || span === undefined) return block
+  const end = span.end ?? settledEnd
+  return {
+    kind: 'reasoning',
+    text: block.text,
+    startedAt: span.start,
+    ...end === undefined ? {} : { endedAt: end },
+  }
+}
+
+/**
+ * Compact blocks into render order, keeping each paired with its own span: the
+ * sparse array exists because a streamed `block-start` can name an index ahead
+ * of the ones already seen, so spans must be read at the block's own index and
+ * never at its position in the compacted list.
+ * @param blocks - sparse per-index blocks.
+ * @param times - spans aligned with `blocks`.
+ * @param settledEnd - instant an unterminated span closed at, absent while streaming.
+ * @returns the timed blocks in render order.
+ */
+function timedBlocks(
+  blocks: readonly (AssistantBlock | undefined)[],
+  times: readonly (BlockSpan | undefined)[],
+  settledEnd?: number | undefined,
+): AssistantBlock[] {
+  const out: AssistantBlock[] = []
+  for (let index = 0; index < blocks.length; index++) {
+    const block = blocks[index]
+    if (block !== undefined) out.push(withTiming(block, times[index], settledEnd))
+  }
+  return out
 }
 
 function blockIsVisible(block: AssistantBlock | undefined): boolean {
@@ -97,6 +154,7 @@ function updateChunk(
   time: number,
 ): AssistantState {
   const blocks = [...state.blocks]
+  const times = [...state.blockTimes]
   let changedIndex = -1
   let previousVisible = false
   switch (chunk.type) {
@@ -104,12 +162,14 @@ function updateChunk(
       changedIndex = chunk.index
       previousVisible = blockIsVisible(blocks[chunk.index])
       blocks[chunk.index] = emptyAssistantBlock(chunk.blockType)
+      times[chunk.index] = opened(times[chunk.index], time)
       break
     case 'text-delta': {
       const previous = blocks[chunk.index]
       changedIndex = chunk.index
       previousVisible = blockIsVisible(previous)
       blocks[chunk.index] = { kind: 'text', text: (previous?.kind === 'text' ? previous.text : '') + chunk.text }
+      times[chunk.index] = opened(times[chunk.index], time)
       break
     }
     case 'reasoning-delta': {
@@ -117,6 +177,7 @@ function updateChunk(
       changedIndex = chunk.index
       previousVisible = blockIsVisible(previous)
       blocks[chunk.index] = { kind: 'reasoning', text: (previous?.kind === 'reasoning' ? previous.text : '') + chunk.text }
+      times[chunk.index] = opened(times[chunk.index], time)
       break
     }
     case 'tool-call-delta': {
@@ -132,12 +193,14 @@ function updateChunk(
         name: chunk.name ?? base.name,
         argsRaw: base.argsRaw + chunk.argumentsDelta,
       }
+      times[chunk.index] = opened(times[chunk.index], time)
       break
     }
     case 'block-end':
       changedIndex = chunk.index
       previousVisible = blockIsVisible(blocks[chunk.index])
       blocks[chunk.index] = toAssistantBlock(chunk.block)
+      times[chunk.index] = { start: times[chunk.index]?.start ?? time, end: time }
       break
     case 'usage':
       return { ...state, usage: chunk.usage }
@@ -151,6 +214,7 @@ function updateChunk(
   return {
     ...state,
     blocks,
+    blockTimes: times,
     visibleBlocks,
     hidden: visibleBlocks > 0 ? false : state.hidden,
     ...visibleBlocks > 0 && state.firstVisibleSeq === undefined
@@ -198,7 +262,9 @@ function finalNode(
       time: event.time,
       turn: state.turn,
       step: state.step,
-      blocks: toAssistantBlocks(event.data.message.content),
+      // The message's own instant closes a thinking block whose `block-end`
+      // chunk the recording dropped; without it the row would keep counting.
+      blocks: timedBlocks(toAssistantBlocks(event.data.message.content), state.blockTimes, event.time),
       usage: event.data.usage,
       timing: {
         stepStartTime: context.start?.event.time ?? null,
@@ -211,7 +277,7 @@ function finalNode(
   const location = context.start?.location ?? context.matches.at(-1)?.location
   const boundary = location === undefined ? undefined : closedBoundary(location)
   if (boundary === undefined) return undefined
-  const blocks = compactBlocks(state.blocks)
+  const blocks = timedBlocks(state.blocks, state.blockTimes, boundary.time)
   if (!hasInterruptionEvidence(blocks)) return undefined
   return {
     kind: 'assistant',
@@ -267,7 +333,7 @@ function projectAssistant(context: ConversationNodeContext<AssistantState>): Ass
   const state = context.state ?? fallbackState(context)
   if (state === undefined) return undefined
   const settled = finalNode(state, context)
-  const blocks = settled?.blocks ?? compactBlocks(state.blocks)
+  const blocks = settled?.blocks ?? timedBlocks(state.blocks, state.blockTimes)
   const visible = settled === undefined ? state.visibleBlocks > 0 : hasVisibleContent(blocks)
   const status = settled?.interrupted === true
     ? 'interrupted'

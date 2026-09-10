@@ -150,6 +150,23 @@
   text-decoration-color: currentColor;
 }
 
+/* Trailing elapsed-time label for a settled call: the row's own fact about how
+   long the call took, kept out of .summary's ellipsis so a long path or command
+   never clips it. `flex: none` holds it at the row's right edge while .summary
+   absorbs the free space and shrinks. Caption tone (one step dimmer than the
+   summary's tertiary) keeps a measurement from competing with the call itself;
+   tabular figures stop the label from changing width as it counts through a
+   live span. The 10px gap matches the diff totals' separation from the path. */
+.duration {
+  flex: none;
+  margin-left: 10px;
+  white-space: nowrap;
+  font-size: var(--dsh-content-font-size-secondary, 13px);
+  line-height: calc(24px + var(--dsh-content-font-delta, 0px));
+  font-variant-numeric: tabular-nums;
+  color: var(--dsw-alias-label-caption);
+}
+
 /* Error row's collapsed summary: the failure's first line in the error color. */
 .errorSummary {
   color: var(--dsw-alias-state-error-primary);

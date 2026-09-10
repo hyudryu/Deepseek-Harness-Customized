@@ -203,6 +203,17 @@ describe('tool-call-model', () => {
     expect(toolRowModel('bash', running()).errorSummary).toBeNull()
   })
 
+  it('derives durationMs from the paired call and result times, settled rows only', () => {
+    expect(toolRowModel('bash', result({ time: 46_230, callTime: 1_000 })).durationMs).toBe(45_230)
+    expect(toolRowModel('bash', result({ time: 1_000, callTime: 1_000 })).durationMs).toBe(0)
+    // A running call has no elapsed span yet, and a window-truncated result has
+    // no call head to difference against.
+    expect(toolRowModel('bash', running()).durationMs).toBeNull()
+    expect(toolRowModel('bash', result({ callTime: null })).durationMs).toBeNull()
+    // Clock skew must not print a negative span.
+    expect(toolRowModel('bash', result({ time: 500, callTime: 1_000 })).durationMs).toBe(0)
+  })
+
   it('gives Cordis lifecycle tools action titles over their generic variants', () => {
     expect(toolRowModel('cordis_runtime_inspect', running({
       name: 'cordis_runtime_inspect',
@@ -371,6 +382,24 @@ describe('ToolRow', () => {
       <ToolRow {...rowProps} state="error" errorSummary="boom" summarySuffix="+2" />,
     )
     expect(failed.queryByText('+2')).toBeNull()
+  })
+
+  it('renders the settled duration outside the ellipsized summary span, and nothing while running', () => {
+    const view = render(<ToolRow {...rowProps} durationMs={45_230} />)
+    const summary = view.getByText('List files')
+    const duration = view.getByText('45.2秒')
+    // Separate spans: .summary truncates, the measurement must not travel inside it.
+    expect(summary.contains(duration)).toBe(false)
+    view.unmount()
+
+    const minutes = render(<ToolRow {...rowProps} durationMs={162_000} />)
+    expect(minutes.getByText('2分42秒')).toBeTruthy()
+    minutes.unmount()
+
+    // Running rows and window-truncated results carry no durationMs at all.
+    const absent = render(<ToolRow {...rowProps} durationMs={null} />)
+    expect(absent.getByText('List files')).toBeTruthy()
+    expect(absent.container.querySelector('[class*="duration"]')).toBeNull()
   })
 
   it('an error file row drops the open-file link (the summary is failure prose, not the path)', () => {
