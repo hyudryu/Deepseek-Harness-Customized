@@ -57,7 +57,7 @@ function panel(overrides: Partial<BrowserPanelProps> = {}) {
   const props = {
     t, useBrowser, start: vi.fn(async () => {}), navigate: vi.fn(async () => {}),
     createTab: vi.fn(async () => {}), selectTab: vi.fn(async () => {}), closeTab: vi.fn(async () => {}),
-    stop: vi.fn(async () => {}), closePanel: vi.fn(), ...overrides,
+    stop: vi.fn(async () => {}), openPanel: vi.fn(), sendInput: vi.fn(async () => {}), closePanel: vi.fn(), ...overrides,
   }
   // This component consumes none of the renderer's global/session selector hooks.
   const view = render(<BrowserPanel {...props as BrowserPanelProps} />)
@@ -294,6 +294,7 @@ it.each([false, true])('opens and controls a Session through registered callback
   const createTab = vi.fn(async () => ({ ok: true }))
   const selectTab = vi.fn(async () => ({ ok: true }))
   const closeTab = vi.fn(async () => ({ ok: true }))
+  const input = vi.fn(async () => ({ ok: true }))
   const watch = vi.fn()
   let streamOptions!: { open: (signal: AbortSignal) => unknown; ended: (accepted: boolean) => Error }
   const remoteStream = vi.fn((options: typeof streamOptions) => {
@@ -307,7 +308,7 @@ it.each([false, true])('opens and controls a Session through registered callback
   const openBrowser = vi.fn()
   const closeBrowser = vi.fn()
   const registrations = new Map<string, (sessionId: SessionId) => BrowserInjected>()
-  ctx.provide('remote', { browser: { open, close, watch, createTab, selectTab, closeTab }, $stream: remoteStream })
+  ctx.provide('remote', { browser: { open, close, watch, createTab, selectTab, closeTab, input }, $stream: remoteStream })
   ctx.provide('layout', { openBrowser, closeBrowser })
   ctx.provide('locale', { register: () => () => {} })
   ctx.provide('slots', {
@@ -350,9 +351,15 @@ it.each([false, true])('opens and controls a Session through registered callback
     await injected.stop()
     close.mockResolvedValueOnce({ ok: false, error: { message: 'close failed' } } as never)
     await expect(injected.stop()).rejects.toThrow('close failed')
+    await injected.sendInput({ kind: 'move', x: 1, y: 2 })
+    expect(input).toHaveBeenLastCalledWith({ sessionId, event: { kind: 'move', x: 1, y: 2 } })
+    input.mockResolvedValueOnce({ ok: false, error: { message: 'input failed' } } as never)
+    await expect(injected.sendInput({ kind: 'text', text: 'x' })).rejects.toThrow('input failed')
     injected.closePanel()
     registrations.get('browser.toggle')!(sessionId).closePanel()
     expect(closeBrowser).toHaveBeenCalledTimes(2)
+    injected.openPanel()
+    expect(openBrowser).toHaveBeenCalledTimes(3)
     unsubscribe()
     await ctx.fiber.dispose()
     if (cleanupFails) expect(reported).toHaveBeenCalledWith(expect.objectContaining({ message: 'Browser subscriptions failed to close' }))
@@ -418,7 +425,7 @@ it('shows selected tabs and delegates creation, keyboard selection, and close wi
     tabs: [{ id: first, title: 'First', url: 'https://first.test/' }, { id: second, title: 'Second', url: 'https://second.test/' }],
     activeTabId: first }
   await act(async () => { fixture.push(snapshot) })
-  expect(screen.getByText(en.chromeInteraction)).toBeTruthy()
+  expect(screen.getByText(en.interactionHint)).toBeTruthy()
   expect(screen.getAllByRole('tab').map(tab => ({ label: tab.textContent, selected: tab.getAttribute('aria-selected') })))
     .toMatchInlineSnapshot(`
       [
@@ -447,13 +454,91 @@ it('shows selected tabs and delegates creation, keyboard selection, and close wi
   expect(fixture.props.closeTab).toHaveBeenCalledWith(first)
 })
 
-it('keeps a tab visible when closing it fails and never shows Chrome interaction advice for Playwright', async () => {
+it('reveals the panel once per browser open transition, including opens the agent started', async () => {
+  const fixture = panel()
+  expect(fixture.props.openPanel).not.toHaveBeenCalled()
+  await act(async () => { fixture.push({ open: true, url: 'about:blank', title: '', actions: [] }) })
+  expect(fixture.props.openPanel).toHaveBeenCalledTimes(1)
+  await act(async () => { fixture.push({ open: true, url: 'https://example.test/', title: 'Next', actions: [] }) })
+  expect(fixture.props.openPanel).toHaveBeenCalledTimes(1)
+  await act(async () => { fixture.push({ open: false, url: '', title: '', actions: [] }) })
+  await act(async () => { fixture.push({ open: true, url: 'about:blank', title: '', actions: [] }) })
+  expect(fixture.props.openPanel).toHaveBeenCalledTimes(2)
+})
+
+it('forwards pointer, wheel, and keyboard input in page coordinates', async () => {
+  vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockReturnValue({
+    width: 400, height: 400, left: 0, top: 0, right: 400, bottom: 400, x: 0, y: 0, toJSON: () => ({}),
+  })
+  const fixture = panel()
+  await act(async () => { fixture.push({
+    open: true, title: 'Page', url: 'about:blank', frame: 'data:image/png;base64,frame', frameWidth: 800, frameHeight: 400, actions: [],
+  }) })
+  const viewport = fixture.container.querySelector<HTMLElement>('[class*="viewport"]')!
+  // The contained frame is 800x400 inside a 400x400 viewport: scale 0.5, 100px letterbox on top.
+  await act(async () => { fireEvent.pointerDown(viewport, { clientX: 100, clientY: 200, button: 0, detail: 2 }) })
+  expect(fixture.props.sendInput).toHaveBeenLastCalledWith({ kind: 'down', x: 200, y: 200, button: 'left', clickCount: 2 })
+  await act(async () => { fireEvent.pointerUp(viewport, { clientX: 100, clientY: 200, button: 2, detail: 1 }) })
+  expect(fixture.props.sendInput).toHaveBeenLastCalledWith({ kind: 'up', x: 200, y: 200, button: 'right', clickCount: 1 })
+  // Outside the contained frame: the letterbox row belongs to the panel, not the page.
+  await act(async () => { fireEvent.pointerDown(viewport, { clientX: 100, clientY: 50, button: 0 }) })
+  expect(fixture.props.sendInput).toHaveBeenCalledTimes(2)
+
+  const wheel = new WheelEvent('wheel', { deltaX: 3, deltaY: 120, clientX: 100, clientY: 200, bubbles: true, cancelable: true })
+  await act(async () => { viewport.dispatchEvent(wheel) })
+  expect(fixture.props.sendInput).toHaveBeenLastCalledWith({ kind: 'wheel', x: 200, y: 200, deltaX: 3, deltaY: 120 })
+  expect(wheel.defaultPrevented).toBe(true)
+
+  await act(async () => { fireEvent.keyDown(viewport, { key: 'a' }) })
+  expect(fixture.props.sendInput).toHaveBeenLastCalledWith({ kind: 'text', text: 'a' })
+  await act(async () => { fireEvent.keyDown(viewport, { key: ' ' }) })
+  expect(fixture.props.sendInput).toHaveBeenLastCalledWith({ kind: 'key', key: 'Space' })
+  await act(async () => { fireEvent.keyDown(viewport, { key: 'Enter' }) })
+  expect(fixture.props.sendInput).toHaveBeenLastCalledWith({ kind: 'key', key: 'Enter' })
+  await act(async () => { fireEvent.keyDown(viewport, { key: 'ArrowLeft', shiftKey: true }) })
+  expect(fixture.props.sendInput).toHaveBeenLastCalledWith({ kind: 'key', key: 'Shift+ArrowLeft' })
+  await act(async () => { fireEvent.keyDown(viewport, { key: 'a', ctrlKey: true }) })
+  expect(fixture.props.sendInput).toHaveBeenLastCalledWith({ kind: 'key', key: 'Control+A' })
+  await act(async () => { fireEvent.keyDown(viewport, { key: 'F5', metaKey: true }) })
+  expect(fixture.props.sendInput).toHaveBeenLastCalledWith({ kind: 'key', key: 'Meta+F5' })
+  const forwarded = vi.mocked(fixture.props.sendInput).mock.calls.length
+  await act(async () => { fireEvent.keyDown(viewport, { key: 'Shift' }) })
+  await act(async () => { fireEvent.keyDown(viewport, { key: 'Dead' }) })
+  expect(fixture.props.sendInput).toHaveBeenCalledTimes(forwarded)
+})
+
+it('throttles forwarded pointer movement and reports an input failure', async () => {
+  vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockReturnValue({
+    width: 400, height: 400, left: 0, top: 0, right: 400, bottom: 400, x: 0, y: 0, toJSON: () => ({}),
+  })
+  const now = vi.spyOn(Date, 'now')
+  const sendInput = vi.fn(async () => { throw 'input rejected' })
+  const fixture = panel({ sendInput })
+  await act(async () => { fixture.push({
+    open: true, title: 'Page', url: 'about:blank', frame: 'data:image/png;base64,frame', frameWidth: 800, frameHeight: 400, actions: [],
+  }) })
+  const viewport = fixture.container.querySelector<HTMLElement>('[class*="viewport"]')!
+  now.mockReturnValue(1_000)
+  await act(async () => { fireEvent.pointerMove(viewport, { clientX: 100, clientY: 200 }) })
+  expect(sendInput).toHaveBeenLastCalledWith({ kind: 'move', x: 200, y: 200 })
+  now.mockReturnValue(1_010)
+  await act(async () => { fireEvent.pointerMove(viewport, { clientX: 120, clientY: 200 }) })
+  expect(sendInput).toHaveBeenCalledTimes(1)
+  now.mockReturnValue(1_100)
+  await act(async () => { fireEvent.pointerMove(viewport, { clientX: 140, clientY: 200 }) })
+  expect(sendInput).toHaveBeenCalledTimes(2)
+  await act(async () => { fireEvent.pointerMove(viewport, { clientX: 140, clientY: 10 }) })
+  expect(sendInput).toHaveBeenCalledTimes(2)
+  await waitFor(() => { expect(screen.getByRole('alert').textContent).toBe('input rejected') })
+})
+
+it('keeps a tab visible when closing it fails and shows the interaction hint for either backend', async () => {
   const closeTab = vi.fn(async () => { throw new Error('Tab cleanup failed') })
   const fixture = panel({ closeTab })
   const id = 'tab-first' as BrowserTabId
   await act(async () => { fixture.push({ open: true, backend: 'playwright', title: '', url: '', actions: [], activeTabId: id,
     tabs: [{ id, title: '', url: '' }] }) })
-  expect(screen.queryByText(en.chromeInteraction)).toBeNull()
+  expect(screen.queryByText(en.interactionHint)).not.toBeNull()
   await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Close tab Untitled tab' })) })
   expect(screen.getByRole('alert').textContent).toBe('Tab cleanup failed')
   expect(screen.getByRole('tab', { name: en.untitledTab })).toBeTruthy()

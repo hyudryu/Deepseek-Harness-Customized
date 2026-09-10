@@ -100,7 +100,7 @@ Use the four detailed references according to the extension being added:
 
 ## Session browser viewing
 
-The [browser controller](../../packages/api/browser-controller/README.md) forwards `ctx.browserControl` operations and a `BrowserSnapshot` stream to the [browser panel](../../packages/client/ui-browser/README.md). Each snapshot replaces the open state, current page URL and title, session-owned tabs, active tab identity, action history, and optional screenshot frame. An opaque `BrowserTabId` identifies one owned tab; create, select, and close operations remain scoped to the requested live Session. These live browser facts are separate from durable Session history; hiding the panel does not close the session’s browser.
+The [browser controller](../../packages/api/browser-controller/README.md) forwards `ctx.browserControl` operations and a `BrowserSnapshot` stream to the [browser panel](../../packages/client/ui-browser/README.md). Each snapshot replaces the open state, current page URL and title, session-owned tabs, active tab identity, action history, and optional screenshot frame. An opaque `BrowserTabId` identifies one owned tab; create, select, and close operations remain scoped to the requested live Session. A `BrowserInputEvent` carries one panel pointer, wheel, or keyboard event to the active page as page CSS pixels. These live browser facts are separate from durable Session history; hiding the panel does not close the session’s browser.
 
 <!-- BEGIN GENERATED cordis-surface (gen-cordis-catalog.ts) — do not edit between markers -->
 
@@ -167,6 +167,14 @@ selectTab(sessionId: SessionId, tabId: BrowserTabId): Promise<void>
  * @param tabId - opaque identity from that session's snapshot.
  */
 closeTab(sessionId: SessionId, tabId: BrowserTabId): Promise<void>
+
+/**
+ * Forward one panel input event to the session's active page.
+ * @param sessionId - session whose browser receives the input.
+ * @param event - pointer, wheel, or keyboard event in page CSS pixels.
+ * @throws when the session has no open browser or no active page.
+ */
+input(sessionId: SessionId, event: BrowserInputEvent): Promise<void>
 ```
 
 Types: [SessionId](core.md)

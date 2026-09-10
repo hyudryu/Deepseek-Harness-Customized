@@ -9,7 +9,7 @@ it('delivers updates after the baseline and releases the subscriber on cancellat
   const ctx = new Context()
   const listeners = new Set<(snapshot: BrowserSnapshot) => void>()
   const control: BrowserControl = {
-    createTab: async () => {}, selectTab: async () => {}, closeTab: async () => {},
+    createTab: async () => {}, selectTab: async () => {}, closeTab: async () => {}, input: async () => {},
     snapshot: () => closed,
     subscribe: (_id, listener) => {
       listeners.add(listener)
@@ -49,7 +49,7 @@ it('waits for browser cleanup before acknowledging close', async () => {
   const ctx = new Context()
   let finish!: () => void
   ctx.provide('browserControl', {
-    createTab: async () => {}, selectTab: async () => {}, closeTab: async () => {},
+    createTab: async () => {}, selectTab: async () => {}, closeTab: async () => {}, input: async () => {},
     snapshot: () => closed,
     subscribe: () => () => {},
     open: async () => {},
@@ -77,7 +77,7 @@ it('opens only a live session and rejects unknown and disposed identities', asyn
   await ctx.plugin(SessionStore)
   const open = vi.fn(async () => {})
   ctx.provide('browserControl', {
-    createTab: async () => {}, selectTab: async () => {}, closeTab: async () => {},
+    createTab: async () => {}, selectTab: async () => {}, closeTab: async () => {}, input: async () => {},
     snapshot: () => closed,
     subscribe: () => () => {},
     open,
@@ -105,7 +105,7 @@ it('releases a paused subscription when the consumer returns', async () => {
   const ctx = new Context()
   const unsubscribe = vi.fn()
   ctx.provide('browserControl', {
-    createTab: async () => {}, selectTab: async () => {}, closeTab: async () => {},
+    createTab: async () => {}, selectTab: async () => {}, closeTab: async () => {}, input: async () => {},
     snapshot: () => closed,
     subscribe: () => unsubscribe,
     open: async () => {},
@@ -127,7 +127,7 @@ it('closes a disposed session browser without closing other sessions', async () 
   await ctx.plugin(SessionStore)
   const close = vi.fn(async () => {})
   ctx.provide('browserControl', {
-    createTab: async () => {}, selectTab: async () => {}, closeTab: async () => {},
+    createTab: async () => {}, selectTab: async () => {}, closeTab: async () => {}, input: async () => {},
     snapshot: () => closed, subscribe: () => () => {}, open: async () => {}, close,
   } satisfies BrowserControl)
   new BrowserController(ctx)
@@ -152,7 +152,7 @@ it('rejects a pending open after its session is disposed and awaits browser clea
   const cleaning = new Promise<void>((resolve) => { cleaned = resolve })
   const close = vi.fn(async () => { await opening; await cleaning })
   ctx.provide('browserControl', {
-    createTab: async () => {}, selectTab: async () => {}, closeTab: async () => {},
+    createTab: async () => {}, selectTab: async () => {}, closeTab: async () => {}, input: async () => {},
     snapshot: () => closed, subscribe: () => () => {}, open: () => opening, close,
   } satisfies BrowserControl)
   const controller = new BrowserController(ctx)
@@ -179,7 +179,7 @@ it('reports disposal cleanup failures through session observers and allows expli
   const warn = vi.spyOn(ctx.logger, 'warn').mockImplementation(() => {})
   const close = vi.fn(async () => {}).mockRejectedValueOnce(new Error('browser close failed'))
   ctx.provide('browserControl', {
-    createTab: async () => {}, selectTab: async () => {}, closeTab: async () => {},
+    createTab: async () => {}, selectTab: async () => {}, closeTab: async () => {}, input: async () => {},
     snapshot: () => closed, subscribe: () => () => {}, open: async () => {}, close,
   } satisfies BrowserControl)
   const controller = new BrowserController(ctx)
@@ -197,7 +197,7 @@ it('reports disposal cleanup failures through session observers and allows expli
 it('propagates context cleanup failure without a close acknowledgement', async () => {
   const ctx = new Context()
   ctx.provide('browserControl', {
-    createTab: async () => {}, selectTab: async () => {}, closeTab: async () => {},
+    createTab: async () => {}, selectTab: async () => {}, closeTab: async () => {}, input: async () => {},
     snapshot: () => closed,
     subscribe: () => () => {},
     open: async () => {},
@@ -219,7 +219,7 @@ it.each(['createTab', 'selectTab', 'closeTab'] as const)('guards the live sessio
   const operation = vi.fn(() => new Promise<void>((resolve) => { finish = resolve }))
   const control: BrowserControl = {
     snapshot: () => closed, subscribe: () => () => {}, open: async () => {}, close: async () => {},
-    createTab: operation, selectTab: operation, closeTab: operation,
+    createTab: operation, selectTab: operation, closeTab: operation, input: async () => {},
   }
   ctx.provide('browserControl', control)
   const controller = new BrowserController(ctx)
@@ -241,6 +241,34 @@ it.each(['createTab', 'selectTab', 'closeTab'] as const)('guards the live sessio
   } finally { finish?.(); await ctx.fiber.dispose() }
 })
 
+it('forwards panel input to a live session and rejects unknown sessions', async () => {
+  const ctx = new Context()
+  await ctx.plugin(SessionStore)
+  const input = vi.fn(async () => {})
+  ctx.provide('browserControl', {
+    createTab: async () => {}, selectTab: async () => {}, closeTab: async () => {},
+    snapshot: () => closed, subscribe: () => () => {}, open: async () => {}, close: async () => {}, input,
+  } satisfies BrowserControl)
+  const controller = new BrowserController(ctx)
+  const sessionId = SessionId('input-owner')
+  const event = { kind: 'down', x: 12, y: 34, button: 'left', clickCount: 1 } as const
+  try {
+    await expect(controller.input({ sessionId, event })).rejects.toThrow('not found')
+    expect(input).not.toHaveBeenCalled()
+    const session = ctx.sessions.prepare(sessionId)
+    const detach = ctx.sessions.enter(session)
+    ctx.sessions.announce(session)
+    try {
+      await expect(controller.input({ sessionId, event })).resolves.toEqual({ ok: true })
+      expect(input).toHaveBeenCalledWith(sessionId, event)
+      input.mockRejectedValueOnce(new Error('session browser is closed'))
+      await expect(controller.input({ sessionId, event })).rejects.toThrow('session browser is closed')
+    } finally { detach() }
+  } finally {
+    await ctx.fiber.dispose()
+  }
+})
+
 it('cleans up a tab creation that completes after its session is disposed', async () => {
   const ctx = new Context()
   await ctx.plugin(SessionStore)
@@ -249,6 +277,7 @@ it('cleans up a tab creation that completes after its session is disposed', asyn
   ctx.provide('browserControl', {
     snapshot: () => closed, subscribe: () => () => {}, open: async () => {}, close,
     createTab: () => new Promise<void>((resolve) => { finish = resolve }), selectTab: async () => {}, closeTab: async () => {},
+    input: async () => {},
   } satisfies BrowserControl)
   const controller = new BrowserController(ctx)
   const session = ctx.sessions.prepare(SessionId('disposed-tab-owner'))

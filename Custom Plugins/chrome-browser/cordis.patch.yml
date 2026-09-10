@@ -5,6 +5,7 @@
         backend: chrome
         homepage: https://www.google.com/
         chromeEndpoint: http://127.0.0.1:9222
+        chromeHeadless: true
         headless: true
         defaultTimeoutMs: 10000
         navigationTimeoutMs: 30000

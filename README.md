@@ -78,11 +78,11 @@ These bundles live in [`Custom Plugins/`](Custom Plugins/). They are intentional
 #### 1. `dsh-chrome-browser` / `dsh-browser-control`
 
 <details>
-<summary><b>Visible Chrome browser with session-owned tabs</b> — click to expand</summary>
+<summary><b>Hidden Chrome browser with an interactive session panel</b> — click to expand</summary>
 
 The [Chrome bundle](<Custom Plugins/chrome-browser/README.md>) and [browser-control bundle](<Custom Plugins/browser-control/README.md>) install the same provider, controller, and DSH browser panel; choose one per profile. Run `pnpm run install:custom-plugins`, then `pnpm dsh plugin --profile web add "./Custom Plugins/chrome-browser"` to install the Chrome bundle.
 
-Chrome is the default backend, using local debugging on port 9222 and a dedicated persistent profile for manual login. New sessions open Google. The integrated `browser` tool and panel list, create, select, and close only the current session's tabs; preexisting tabs and other sessions' tabs are excluded. Playwright is available only by explicit selection. See the provider README for endpoint, profile, and backend configuration.
+Chrome is the default backend, using local debugging on port 9222 and a dedicated persistent profile for login. The dedicated-profile Chrome is launched hidden (`chromeHeadless: false` shows its window), so the panel is the only browser surface. Opening a browser expands the panel, including when the agent's `browser` tool started it. Clicks, drags, the wheel, and typing over the panel frame are forwarded to the active page, so sign-in and manual checks happen in the page instead of a taskbar window. New sessions open Google. The integrated `browser` tool and panel list, create, select, and close only the current session's tabs; preexisting tabs and other sessions' tabs are excluded. Playwright is available only by explicit selection. See the provider README for endpoint, profile, and backend configuration.
 
 Capabilities include semantic locators, ARIA snapshots, click/fill/press/select/check/uncheck, polling assertions, browser diagnostics, screenshots, and viewport changes.
 

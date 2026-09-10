@@ -17,6 +17,7 @@ const DEFAULTS = Object.freeze({
   chromeEndpoint: 'http://127.0.0.1:9222',
   chromeConnectTimeoutMs: 10000,
   chromeUserDataDir: join(homedir(), '.dsh', 'chrome-profile'),
+  chromeHeadless: true,
   headless: true,
   defaultTimeoutMs: 10_000,
   navigationTimeoutMs: 30_000,
@@ -26,6 +27,17 @@ const DEFAULTS = Object.freeze({
   maxActions: 50,
   frameQuality: 60,
 })
+
+// Panel input arrives over the Remote API, so kinds, coordinates, and payload
+// sizes are validated here before they reach Playwright.
+const INPUT_KINDS = ['move', 'down', 'up', 'wheel', 'key', 'text']
+const MOUSE_BUTTONS = ['left', 'right', 'middle']
+const MAX_KEY_CHARS = 64
+const MAX_TEXT_CHARS = 2048
+const MAX_CLICK_COUNT = 3
+// Panel input coalesces its frame refresh: a burst of pointer or key events
+// publishes one refreshed frame instead of one screenshot per event.
+const INPUT_REFRESH_MS = 120
 
 function positiveInt(value, fallback, name) {
   if (value === undefined) return fallback
@@ -66,6 +78,9 @@ function normalizeConfig(input = {}) {
   if (!Number.isInteger(frameQuality) || frameQuality < 0 || frameQuality > 100) {
     throw new Error('frameQuality must be an integer between 0 and 100')
   }
+  if (input.chromeHeadless !== undefined && typeof input.chromeHeadless !== 'boolean') {
+    throw new Error('chromeHeadless must be a boolean')
+  }
   return {
     backend,
     homepage: normalizeUrl(input.homepage ?? DEFAULTS.homepage),
@@ -73,6 +88,7 @@ function normalizeConfig(input = {}) {
     chromeConnectTimeoutMs: positiveInt(input.chromeConnectTimeoutMs, DEFAULTS.chromeConnectTimeoutMs, 'chromeConnectTimeoutMs'),
     chromeUserDataDir: resolve(input.chromeUserDataDir ?? DEFAULTS.chromeUserDataDir),
     chromeExecutablePath: input.chromeExecutablePath,
+    chromeHeadless: input.chromeHeadless ?? DEFAULTS.chromeHeadless,
     headless: input.headless ?? DEFAULTS.headless,
     defaultTimeoutMs: positiveInt(input.defaultTimeoutMs, DEFAULTS.defaultTimeoutMs, 'defaultTimeoutMs'),
     navigationTimeoutMs: positiveInt(input.navigationTimeoutMs, DEFAULTS.navigationTimeoutMs, 'navigationTimeoutMs'),
@@ -196,6 +212,74 @@ async function pollAssertion(fn, timeoutMs, signal) {
 
 function asString(value) {
   return value === null || value === undefined ? '' : String(value)
+}
+
+function requirePoint(event) {
+  const { x, y } = event
+  if (!Number.isFinite(x) || !Number.isFinite(y) || x < 0 || y < 0) {
+    throw new Error(`browser input ${event.kind}: x and y must be non-negative finite numbers`)
+  }
+  return { x, y }
+}
+
+/** Normalize one panel input event, rejecting kinds and payloads the panel never sends. */
+function normalizeInput(raw) {
+  if (typeof raw !== 'object' || raw === null) throw new Error('browser input requires an event object')
+  if (!INPUT_KINDS.includes(raw.kind)) throw new Error(`unsupported browser input kind: ${String(raw.kind)}`)
+  if (raw.kind === 'key' || raw.kind === 'text') {
+    const field = raw.kind === 'key' ? 'key' : 'text'
+    const max = raw.kind === 'key' ? MAX_KEY_CHARS : MAX_TEXT_CHARS
+    const value = raw[field]
+    if (typeof value !== 'string' || value === '' || value.length > max) {
+      throw new Error(`browser input ${raw.kind}: ${field} must be a non-empty string of at most ${max} characters`)
+    }
+    return { kind: raw.kind, [field]: value }
+  }
+  const { x, y } = requirePoint(raw)
+  if (raw.kind === 'move') return { kind: raw.kind, x, y }
+  if (raw.kind === 'wheel') {
+    const deltas = {}
+    for (const field of ['deltaX', 'deltaY']) {
+      if (!Number.isFinite(raw[field])) throw new Error(`browser input wheel: ${field} must be a finite number`)
+      deltas[field] = raw[field]
+    }
+    return { kind: raw.kind, x, y, ...deltas }
+  }
+  const button = raw.button ?? 'left'
+  if (!MOUSE_BUTTONS.includes(button)) throw new Error('browser input button must be left, right, or middle')
+  const clickCount = raw.clickCount ?? 1
+  if (!Number.isInteger(clickCount) || clickCount < 1 || clickCount > MAX_CLICK_COUNT) {
+    throw new Error(`browser input clickCount must be an integer between 1 and ${MAX_CLICK_COUNT}`)
+  }
+  return { kind: raw.kind, x, y, button, clickCount }
+}
+
+async function dispatchInput(page, event) {
+  switch (event.kind) {
+    case 'move':
+      await page.mouse.move(event.x, event.y)
+      return
+    case 'down':
+      await page.mouse.move(event.x, event.y)
+      await page.mouse.down({ button: event.button, clickCount: event.clickCount })
+      return
+    case 'up':
+      await page.mouse.move(event.x, event.y)
+      await page.mouse.up({ button: event.button, clickCount: event.clickCount })
+      return
+    case 'wheel':
+      await page.mouse.move(event.x, event.y)
+      await page.mouse.wheel(event.deltaX, event.deltaY)
+      return
+    case 'key':
+      await page.keyboard.press(event.key)
+      return
+    case 'text':
+      await page.keyboard.insertText(event.text)
+      return
+    default:
+      throw new Error(`unsupported browser input kind: ${String(event.kind)}`)
+  }
 }
 
 function outputSchema() {
@@ -420,6 +504,26 @@ export function apply(ctx, rawConfig = {}) {
     state.open = false
   }
 
+  // Panel input publishes one coalesced frame refresh instead of one screenshot
+  // per pointer or key event.
+  let inputRefresh
+  function scheduleInputRefresh(state) {
+    if (inputRefresh !== undefined) return
+    inputRefresh = setTimeout(() => {
+      inputRefresh = undefined
+      if (!state.open || states.get(state.key) !== state) return
+      void refreshAndNotify(state).catch(error => ctx.logger?.warn(`Browser frame refresh failed: ${String(error)}`))
+    }, INPUT_REFRESH_MS)
+  }
+
+  async function inputState(key, event) {
+    const state = states.get(key)
+    if (!state?.open || !state.page) throw new Error('Session browser is closed')
+    const normalized = normalizeInput(event)
+    await dispatchInput(state.page, normalized)
+    scheduleInputRefresh(state)
+  }
+
   async function queueLifecycle(key, operation) {
     const preceding = pendingLifecycle.get(key)
     const current = (async () => {
@@ -511,6 +615,7 @@ export function apply(ctx, rawConfig = {}) {
   ctx.effect(() => {
     return async () => {
       subscribers.clear()
+      if (inputRefresh !== undefined) { clearTimeout(inputRefresh); inputRefresh = undefined }
       await Promise.allSettled([...pendingStates.values()])
       await Promise.allSettled([...pendingLifecycle.values()])
       const results = await Promise.allSettled([...states.keys()].map(closeState))
@@ -552,6 +657,7 @@ export function apply(ctx, rawConfig = {}) {
     async createTab(sessionId, url) { return queueLifecycle(sessionId, () => createTab(sessionId, url)) },
     async selectTab(sessionId, id) { return queueLifecycle(sessionId, () => selectTab(sessionId, id)) },
     async closeTab(sessionId, id) { return queueLifecycle(sessionId, () => closeTab(sessionId, id)) },
+    async input(sessionId, event) { return inputState(sessionId, event) },
     async close(sessionId) {
       await queueLifecycle(sessionId, () => closeState(sessionId))
     },

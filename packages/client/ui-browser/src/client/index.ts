@@ -5,7 +5,7 @@
  */
 import type { Context as ClientContext } from '@deepseek-ai/cordis'
 import type { SessionId } from '@deepseek-ai/dsh-session/types'
-import type { BrowserSnapshot, BrowserTabId } from '@deepseek-ai/dsh-api-browser-controller/types'
+import type { BrowserInputEvent, BrowserSnapshot, BrowserTabId } from '@deepseek-ai/dsh-api-browser-controller/types'
 import type { ClientRemote } from '@deepseek-ai/dsh-api-gateway/client'
 // Type-only: pulls the generated Remote API and ctx.remote merge (remote.browser).
 import type {} from '@deepseek-ai/dsh-api-remotes/client'
@@ -48,6 +48,10 @@ export interface BrowserInjected {
   selectTab: (tabId: BrowserTabId) => Promise<void>
   /** Close one session-owned tab. */
   closeTab: (tabId: BrowserTabId) => Promise<void>
+  /** Reveal the panel for a browser that opened without a panel gesture. */
+  openPanel: () => void
+  /** Forward one pointer, wheel, or keyboard event to the session's page. */
+  sendInput: (event: BrowserInputEvent) => Promise<void>
   /** Close the right-side browser panel. */
   closePanel: () => void
 }
@@ -135,6 +139,11 @@ export function apply(ctx: ClientContext): void {
         },
         closeTab: async (tabId) => {
           const result = await ctx.remote.browser.closeTab({ sessionId, tabId })
+          if (!result.ok) throw new Error(result.error.message)
+        },
+        openPanel: () => { ctx.layout.openBrowser() },
+        sendInput: async (event) => {
+          const result = await ctx.remote.browser.input({ sessionId, event })
           if (!result.ok) throw new Error(result.error.message)
         },
         stop: async () => {

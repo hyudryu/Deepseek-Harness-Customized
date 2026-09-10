@@ -1,4 +1,4 @@
-/** Visible Chrome connection and session-owned tabs in its persistent default context. */
+/** Chrome debugging-port connection and session-owned tabs in its persistent default context. */
 import { EventEmitter } from 'node:events'
 import { mkdir } from 'node:fs/promises'
 import { launch } from 'chrome-launcher'
@@ -17,7 +17,26 @@ async function endpointAvailable(endpoint, timeout) {
   }
 }
 
-/** Connect to local Chrome, launching a visible persistent-profile window only when its port is unavailable. */
+/**
+ * Flags for the launched persistent-profile Chrome.
+ * @param config - normalized provider configuration.
+ * @returns the flag list; hidden Chrome runs the new headless mode at a fixed page size.
+ */
+export function chromeLaunchFlags(config) {
+  return [
+    ...(config.chromeHeadless ? ['--headless=new', '--window-size=1280,800'] : []),
+    '--no-first-run',
+    '--no-default-browser-check',
+    '--remote-debugging-address=127.0.0.1',
+  ]
+}
+
+/**
+ * Connect to local Chrome, launching it with the dedicated persistent profile
+ * only when its debugging port is unavailable. The launched process is hidden
+ * unless `chromeHeadless` is false: the panel mirrors and drives that browser,
+ * so a taskbar window would be a second, redundant surface.
+ */
 export async function connectChrome(config) {
   let pending = launches.get(config.chromeEndpoint)
   if (!pending) {
@@ -31,7 +50,7 @@ export async function connectChrome(config) {
         startingUrl: 'about:blank',
         handleSIGINT: false,
         ignoreDefaultFlags: true,
-        chromeFlags: ['--no-first-run', '--no-default-browser-check', '--remote-debugging-address=127.0.0.1'],
+        chromeFlags: chromeLaunchFlags(config),
       })
       launched.process.unref()
     })().finally(() => { launches.delete(config.chromeEndpoint) })

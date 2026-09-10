@@ -24,7 +24,7 @@ kind: "package-reference"
 <a id="use-this-package"></a>
 ## 使用本包
 
-Web 应用组合同时挂载此控制器和 `ctx.browserControl` 提供方。[浏览器面板](../../client/ui-browser/README.zh.md) 使用其生成的 `remote.browser` API。控制器没有配置字段。
+Web 应用组合同时挂载此控制器和 `ctx.browserControl` 提供方。[浏览器面板](../../client/ui-browser/README.zh.md) 使用其生成的 `remote.browser` API。控制器没有配置字段。`input` 把一个来自面板的指针、滚轮或键盘事件按页面 CSS 像素转发给活动会话的当前标签页，并在页面收到事件后确认；未知会话或已关闭的浏览器会被拒绝。
 
 -----
 

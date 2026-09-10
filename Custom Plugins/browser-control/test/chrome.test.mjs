@@ -7,6 +7,7 @@ import { createServer } from 'node:http'
 import { launch } from 'chrome-launcher'
 import { chromium } from 'playwright'
 import { apply, normalizeUrl } from '../index.js'
+import { chromeLaunchFlags } from '../chrome-backend.js'
 
 test('addresses normalize before navigation and reject unsupported schemes', () => {
   assert.equal(normalizeUrl(' jackandjill.com '), 'https://jackandjill.com/')
@@ -23,13 +24,38 @@ test('Chrome configuration rejects nonlocal endpoints and invalid backend before
     { chromeEndpoint: 'http://example.com:9222' }, { chromeEndpoint: 'https://localhost:9222' },
     { chromeEndpoint: 'http://127.0.0.1:9222/path' }, { chromeEndpoint: 'http://user@localhost:9222' },
     { backend: 'firefox' }, { chromeUserDataDir: '' }, { chromeExecutablePath: 'relative' },
+    { chromeHeadless: 'yes' }, { frameQuality: 200 },
   ]) assert.throws(() => apply({ effect() { assert.fail('invalid config registered effects') } }, config))
+})
+
+test('the launched session Chrome stays hidden unless visibility is requested', () => {
+  const hidden = chromeLaunchFlags({ chromeHeadless: true })
+  assert.ok(hidden.includes('--headless=new'))
+  assert.ok(hidden.includes('--window-size=1280,800'))
+  const shown = chromeLaunchFlags({ chromeHeadless: false })
+  assert.deepEqual(shown.filter(flag => flag.startsWith('--headless')), [])
+  for (const flags of [hidden, shown]) {
+    assert.ok(flags.includes('--no-first-run'))
+    assert.ok(flags.includes('--no-default-browser-check'))
+    assert.ok(flags.includes('--remote-debugging-address=127.0.0.1'))
+  }
 })
 
 test('Chrome session tabs persist cookies and disposal preserves existing user tabs and process', { timeout: 60000 }, async () => {
   const root = await mkdtemp(join(tmpdir(), 'dsh-chrome-provider-'))
   const server = createServer((request, response) => {
-    response.end(`<title>${request.url}</title><h1>Chrome fixture</h1>`)
+    response.end(`<title>${request.url}</title><h1>Chrome fixture</h1>
+      <button id="press">Press</button><output id="presses">0</output>
+      <input id="field" aria-label="Field"><output id="typed"></output>
+      <script>
+        document.querySelector('#press').addEventListener('click', () => {
+          const presses = document.querySelector('#presses')
+          presses.textContent = String(Number(presses.textContent) + 1)
+        })
+        document.querySelector('#field').addEventListener('input', (event) => {
+          document.querySelector('#typed').textContent = event.target.value
+        })
+      </script>`)
   })
   await new Promise(resolve => server.listen(0, '127.0.0.1', resolve))
   const origin = `http://127.0.0.1:${server.address().port}`
@@ -57,6 +83,40 @@ test('Chrome session tabs persist cookies and disposal preserves existing user t
     assert.equal(first.url, `${origin}/home`)
     assert.equal(first.tabs.length, 1)
     assert.ok(first.frameWidth > 0 && first.frameHeight > 0)
+
+    // Panel input drives the same page the panel mirrors: a forwarded click
+    // presses the button, and forwarded text and keys reach the focused field.
+    const opened = shared.pages().find(candidate => candidate.url().endsWith('/home') && candidate !== existing)
+    const press = await opened.locator('#press').boundingBox()
+    const center = { x: Math.round(press.x + press.width / 2), y: Math.round(press.y + press.height / 2) }
+    await control.input('first', { kind: 'move', ...center })
+    await control.input('first', { kind: 'down', ...center, button: 'left', clickCount: 1 })
+    await control.input('first', { kind: 'up', ...center, button: 'left', clickCount: 1 })
+    await control.input('first', { kind: 'down', ...center })
+    await control.input('first', { kind: 'up', ...center })
+    assert.equal(await opened.textContent('#presses'), '2')
+    const field = await opened.locator('#field').boundingBox()
+    await control.input('first', { kind: 'down', x: Math.round(field.x + 4), y: Math.round(field.y + 4) })
+    await control.input('first', { kind: 'up', x: Math.round(field.x + 4), y: Math.round(field.y + 4) })
+    await control.input('first', { kind: 'text', text: 'panel input' })
+    assert.equal(await opened.textContent('#typed'), 'panel input')
+    await control.input('first', { kind: 'wheel', ...center, deltaX: 0, deltaY: 120 })
+    await control.input('first', { kind: 'key', key: 'Control+A' })
+    for (const [event, message] of [
+      [null, /event object/],
+      [{ kind: 'tap' }, /unsupported browser input kind/],
+      [{ kind: 'move', x: -1, y: 0 }, /non-negative finite numbers/],
+      [{ kind: 'move', x: 1 }, /non-negative finite numbers/],
+      [{ kind: 'wheel', x: 1, y: 1, deltaX: 0 }, /deltaY must be a finite number/],
+      [{ kind: 'down', x: 1, y: 1, button: 'thumb' }, /left, right, or middle/],
+      [{ kind: 'up', x: 1, y: 1, clickCount: 9 }, /clickCount must be an integer/],
+      [{ kind: 'key', key: '' }, /key must be a non-empty string/],
+      [{ kind: 'text', text: 'x'.repeat(2049) }, /text must be a non-empty string/],
+    ]) {
+      await assert.rejects(control.input('first', event), message)
+    }
+    await assert.rejects(control.input('unopened', { kind: 'move', x: 1, y: 1 }), /Session browser is closed/)
+
     await control.createTab('first', `${origin}/second`)
     const second = control.snapshot('first')
     assert.equal(second.tabs.length, 2)

@@ -4,7 +4,8 @@ export const NS = 'browser'
 
 /** Chinese browser panel dictionary. */
 export const zh = {
-  chromeInteraction: '\u8bf7\u5728 Chrome \u7a97\u53e3\u4e2d\u767b\u5f55\u6216\u64cd\u4f5c\u6b64\u9875\u9762\u3002',
+  interactionHint: '\u53ef\u76f4\u63a5\u5728\u6b64\u89c6\u56fe\u4e2d\u70b9\u51fb\u3001\u8f93\u5165\u548c\u6eda\u52a8\u4ee5\u64cd\u4f5c\u9875\u9762\u3002',
+  viewport: '\u9875\u9762\u89c6\u56fe',
   tabs: '\u6807\u7b7e\u9875',
   newTab: '\u65b0\u5efa\u6807\u7b7e\u9875',
   closeTab: '\u5173\u95ed\u6807\u7b7e\u9875',
@@ -33,7 +34,8 @@ export type BrowserKey = keyof typeof zh
 
 /** English browser panel dictionary. */
 export const en: Record<BrowserKey, string> = {
-  chromeInteraction: 'Use the Chrome window to sign in or interact with this page.',
+  interactionHint: 'Click, type, and scroll directly in this view to use the page.',
+  viewport: 'Page view',
   tabs: 'Browser tabs',
   newTab: 'New tab',
   closeTab: 'Close tab',
