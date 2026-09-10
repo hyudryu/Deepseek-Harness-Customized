@@ -29,7 +29,7 @@ export type { ReconnectConfig, ResolvedReconnectPolicy } from './connection.ts'
 export const name = 'mcp-client'
 
 /** Services required by this plugin. */
-export const inject = ['tools']
+export const inject = ['tools', 'systemPrompt']
 
 /** Default timeout for individual MCP tool calls (ms). */
 const DEFAULT_TOOL_CALL_TIMEOUT_MS = 60_000
@@ -171,6 +171,15 @@ export async function apply(ctx: Context, config: Config): Promise<void> {
   // loop, and the live tool registrations; disposal stops reconnection,
   // quiesces in-flight work, and unregisters the current generation.
   const connection = startConnection(ctx, config, reconnect)
+
+  // The server's own usage instructions, read at assembly time so a reconnect
+  // that changes or drops them reaches the next request under one stable
+  // section identity. No advertised instructions render as no section.
+  ctx.effect(() => ctx.systemPrompt.section({
+    name: `mcp:${config.serverName}`,
+    order: ctx.systemPrompt.getSectionOrder('MCP_SERVER_INSTRUCTIONS'),
+    text: () => connection.instructions() ?? '',
+  }), 'mcp-client.instructions')
 
   ctx.effect(() => {
     return () => connection.dispose()

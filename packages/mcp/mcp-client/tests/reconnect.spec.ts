@@ -23,6 +23,7 @@ const { mockConnect, mockClose, mockListTools, mockCallTool, mockSetNotification
     _params?: Record<string, unknown>, _compatibilitySchema?: unknown, _options?: unknown,
   ) => Promise<unknown>>()
   const mockSetNotificationHandler = vi.fn()
+  const mockGetInstructions = vi.fn<() => string | undefined>()
   const mockRequest = vi.fn(async (
     request: { method: string; params?: Record<string, unknown> },
     _schema: unknown,
@@ -38,6 +39,7 @@ const { mockConnect, mockClose, mockListTools, mockCallTool, mockSetNotification
     close = mockClose
     request = mockRequest
     setNotificationHandler = mockSetNotificationHandler
+    getInstructions = mockGetInstructions
     constructor() { instances.push(this) }
   }
   const instances: MockClient[] = []
@@ -309,7 +311,7 @@ describe('reconnect supervisor', () => {
   })
 
   it('a transport close after dispose schedules nothing', async () => {
-    const fiber = ctx.plugin({ name: 'mcp-client', inject: ['tools'], apply }, stdioConfig())
+    const fiber = ctx.plugin({ name: 'mcp-client', inject: ['tools', 'systemPrompt'], apply }, stdioConfig())
     await vi.waitFor(() => { expect(ctx.tools.get('mcp__srv__remote')).toBeDefined() })
 
     await fiber.dispose()
@@ -419,7 +421,7 @@ describe('reconnect supervisor', () => {
   })
 
   it('dispose during an in-flight initial sync quiesces without leaking tools', async () => {
-    const fiber = ctx.plugin({ name: 'mcp-client', inject: ['tools'], apply }, stdioConfig({ initialDelayMs: 2, maxDelayMs: 8, maxAttempts: 5 }))
+    const fiber = ctx.plugin({ name: 'mcp-client', inject: ['tools', 'systemPrompt'], apply }, stdioConfig({ initialDelayMs: 2, maxDelayMs: 8, maxAttempts: 5 }))
     await vi.waitFor(() => { expect(ctx.tools.get('mcp__srv__remote')).toBeDefined() })
 
     // Block the reconnect attempt's tool discovery until after dispose starts.
@@ -441,7 +443,7 @@ describe('reconnect supervisor', () => {
 
   it('a re-sync failing because dispose closed the transport stays silent', async () => {
     const { errors } = captureLogs(ctx)
-    const fiber = ctx.plugin({ name: 'mcp-client', inject: ['tools'], apply }, stdioConfig())
+    const fiber = ctx.plugin({ name: 'mcp-client', inject: ['tools', 'systemPrompt'], apply }, stdioConfig())
     await vi.waitFor(() => { expect(ctx.tools.get('mcp__srv__remote')).toBeDefined() })
 
     const gate: PromiseWithResolvers<unknown> = Promise.withResolvers()

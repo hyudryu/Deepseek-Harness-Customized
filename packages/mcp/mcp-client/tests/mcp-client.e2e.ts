@@ -20,13 +20,14 @@ import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/
 import { z } from 'zod'
 import type { Transport } from '@modelcontextprotocol/sdk/shared/transport.js'
 import LocalAttachmentStore from '@deepseek-ai/dsh-attachment-local'
-import SystemPrompt from '@deepseek-ai/dsh-system-prompt'
+import SystemPrompt, { renderPrompt } from '@deepseek-ai/dsh-system-prompt'
 import ToolRuntime from '@deepseek-ai/dsh-tools'
 import { ToolCallId, LlmAdapter, LlmRuntime } from '@deepseek-ai/dsh-llm'
 import type { GenerateOptions, LlmResolvedModelInfo, StreamChunk } from '@deepseek-ai/dsh-llm'
 import { apply } from '@deepseek-ai/dsh-mcp-client/src/index.ts'
 import { publicToolName } from '@deepseek-ai/dsh-mcp-client/src/tools.ts'
 import type { Config } from '@deepseek-ai/dsh-mcp-client'
+import { FIXTURE_INSTRUCTIONS } from './fixture-manifest.ts'
 
 const testToolSignal = new AbortController().signal
 
@@ -129,6 +130,10 @@ describe('fixture server — controlled scenarios', () => {
     expect(names).toContain('mcp__fixture__image')
     // Raw names are not registered.
     expect(names).not.toContain('add')
+  })
+
+  it('publishes the fixture server instructions into the assembled prompt', async () => {
+    expect(renderPrompt(await ctx.systemPrompt.assemble())).toContain(FIXTURE_INSTRUCTIONS)
   })
 
   it('normalizes the dotted tool name with a deterministic hash suffix', () => {
@@ -293,7 +298,7 @@ describe('fixture server — crash recovery', () => {
   it('plugin unload during an outage stops reconnection and unregisters tools', async () => {
     const ctx = await mountRegistry()
     const fiber = ctx.plugin(
-      { name: 'mcp-client', inject: ['tools'], apply },
+      { name: 'mcp-client', inject: ['tools', 'systemPrompt'], apply },
       crashConfig('ephemeral', { initialDelayMs: 8_000, maxDelayMs: 8_000, maxAttempts: 5 }),
     )
     // Cordis awaits async apply() as startup work; wait for it.

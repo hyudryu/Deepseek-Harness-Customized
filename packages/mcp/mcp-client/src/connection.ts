@@ -104,6 +104,11 @@ export interface ConnectionHandle {
    */
   ready: Promise<ConnectionOutcome>
   /**
+   * The connected generation's advertised usage instructions, or `undefined`
+   * while no generation is connected or the server advertises none.
+   */
+  instructions(): string | undefined
+  /**
    * Stop reconnection, close the live client, wait for the in-flight attempt
    * and queued tool syncs to quiesce, then unregister every tool this server
    * still owns.
@@ -148,6 +153,8 @@ export function startConnection(ctx: Context, config: Config, policy: ResolvedRe
   let connectedAt: number | undefined
   /** The real error from the first connection attempt, for startup-await diagnostics. */
   let firstAttemptError: unknown
+  /** The connected generation's advertised usage instructions; undefined while down. */
+  let instructions: string | undefined
 
   /** A generation may act only while it is the current one on a live plugin. */
   const isCurrent = (generation: Client): boolean => !disposed && client === generation
@@ -174,6 +181,7 @@ export function startConnection(ctx: Context, config: Config, policy: ResolvedRe
     if (!isCurrent(generation)) return
     client = undefined
     clientClosed = undefined
+    instructions = undefined
     scheduleReconnect()
   }
 
@@ -209,6 +217,7 @@ export function startConnection(ctx: Context, config: Config, policy: ResolvedRe
       syncChain = syncChain.then(() => {
         for (const dispose of disposers.values()) dispose()
         disposers = new Map()
+        instructions = undefined
       })
       ctx.logger.error(`${label}: giving up after ${policy.maxAttempts} consecutive failed reconnect attempts — tools unregistered; reload the plugin or restart the Host to reconnect`)
       return
@@ -275,6 +284,9 @@ export function startConnection(ctx: Context, config: Config, policy: ResolvedRe
         generationDown(generation)
         return
       }
+      // Instructions belong to the connected generation: a re-sync failure
+      // below keeps them listed until the generation actually goes down.
+      instructions = generation.getInstructions()
       await enqueueSync(generation, startup ? startupOpts : opts)
     } catch (error) {
       if (firstAttemptError === undefined) firstAttemptError = error
@@ -324,6 +336,7 @@ export function startConnection(ctx: Context, config: Config, policy: ResolvedRe
 
   return {
     ready,
+    instructions: () => instructions,
     async dispose(): Promise<void> {
       disposed = true
       if (reconnectTimer !== undefined) {
@@ -334,6 +347,7 @@ export function startConnection(ctx: Context, config: Config, policy: ResolvedRe
       const currentClosed = clientClosed
       client = undefined
       clientClosed = undefined
+      instructions = undefined
       if (current !== undefined) {
         try { await current.close() } catch { /* transport already gone */ }
         if (currentClosed !== undefined && !await waitForClose(currentClosed)) {

@@ -22,11 +22,11 @@ Use the official [`@modelcontextprotocol/sdk`](https://github.com/modelcontextpr
 
 ### Scope
 
-MCP Client only (no server side — ACP already covers the "expose harness as an agent" role). Bridge **Tools** only — Resources and Prompts are deferred (they require harness-side consumption mechanisms that don't exist yet, and design space is large).
+MCP Client only (no server side — ACP already covers the "expose harness as an agent" role). Bridge **Tools** only — Resources and Prompts are deferred (they require harness-side consumption mechanisms that don't exist yet, and design space is large). The server's `initialize` instructions are not a capability of that kind: they bridge as one system-prompt section, owned by [the instructions Agent Note](2026-09-10-mcp-server-instructions-in-prompt.md).
 
 ### Plugin shape
 
-Namespace plugin (named exports `name`/`inject`/`Config`/`apply`, no `export default`). `inject: ['tools']`. Each MCP server is one plugin instance in `cordis.yml` — the same package loaded N times with different configs, like `dsh-tool-subagent`.
+Namespace plugin (named exports `name`/`inject`/`Config`/`apply`, no `export default`). `inject: ['tools', 'systemPrompt']`. Each MCP server is one plugin instance in `cordis.yml` — the same package loaded N times with different configs, like `dsh-tool-subagent`.
 
 ### Configuration
 

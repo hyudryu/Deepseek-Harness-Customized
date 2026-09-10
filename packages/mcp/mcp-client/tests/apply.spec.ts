@@ -4,16 +4,19 @@
  */
 import { describe, expect, it, vi, beforeEach } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
-import SystemPrompt from '@deepseek-ai/dsh-system-prompt'
+import SystemPrompt, { renderPrompt } from '@deepseek-ai/dsh-system-prompt'
 import ToolRuntime from '@deepseek-ai/dsh-tools'
 import { createScope } from '@deepseek-ai/dsh-scope'
 import type { Config } from '@deepseek-ai/dsh-mcp-client'
+import { FIXTURE_INSTRUCTIONS } from './fixture-manifest.ts'
 
 // ---- Mock MCP SDK ----
 
 // vi.mock factories are hoisted above every import/const, so the mock fns and
 // class must be created inside vi.hoisted to exist when the factories run.
-const { mockConnect, mockClose, mockListTools, mockCallTool, mockSetNotificationHandler, MockClient } = vi.hoisted(() => {
+const {
+  mockConnect, mockClose, mockListTools, mockCallTool, mockSetNotificationHandler, mockGetInstructions, MockClient,
+} = vi.hoisted(() => {
   const mockConnect = vi.fn<() => Promise<void>>()
   const mockClose = vi.fn<() => Promise<void>>()
   const mockListTools = vi.fn<(_params?: Record<string, unknown>) => Promise<unknown>>()
@@ -21,6 +24,7 @@ const { mockConnect, mockClose, mockListTools, mockCallTool, mockSetNotification
     _params?: Record<string, unknown>, _compatibilitySchema?: unknown, _options?: unknown,
   ) => Promise<unknown>>()
   const mockSetNotificationHandler = vi.fn()
+  const mockGetInstructions = vi.fn<() => string | undefined>()
   const mockRequest = vi.fn(async (
     request: { method: string; params?: Record<string, unknown> },
     _schema: unknown,
@@ -37,8 +41,9 @@ const { mockConnect, mockClose, mockListTools, mockCallTool, mockSetNotification
     callTool = mockCallTool
     request = mockRequest
     setNotificationHandler = mockSetNotificationHandler
+    getInstructions = mockGetInstructions
   }
-  return { mockConnect, mockClose, mockListTools, mockCallTool, mockSetNotificationHandler, MockClient }
+  return { mockConnect, mockClose, mockListTools, mockCallTool, mockSetNotificationHandler, mockGetInstructions, MockClient }
 })
 
 vi.mock('@modelcontextprotocol/sdk/client/index.js', () => ({
@@ -91,7 +96,7 @@ const stdioConfig: Config = {
 describe('mcp-client plugin module exports', () => {
   it('exports name, inject, and Config', () => {
     expect(name).toBe('mcp-client')
-    expect(inject).toEqual(['tools'])
+    expect(inject).toEqual(['tools', 'systemPrompt'])
     expect(ConfigSchema).toBeDefined()
   })
 
@@ -169,6 +174,8 @@ describe('apply (plugin lifecycle)', () => {
       nextCursor: undefined,
     })
     mockCallTool.mockResolvedValue({ content: [{ type: 'text', text: 'ok' }] })
+    // clearAllMocks clears calls, not return values: the default is set here.
+    mockGetInstructions.mockReturnValue(undefined)
     ctx = await mountRegistry()
   })
 
@@ -201,6 +208,33 @@ describe('apply (plugin lifecycle)', () => {
     await fiber.dispose()
   })
 
+  it('publishes the server instructions as one prompt section', async () => {
+    mockGetInstructions.mockReturnValue(FIXTURE_INSTRUCTIONS)
+    await apply(ctx, stdioConfig)
+
+    const assembly = await ctx.systemPrompt.assemble()
+    expect(assembly.sections.find(section => section.name === 'mcp:srv')?.text).toBe(FIXTURE_INSTRUCTIONS)
+    expect(renderPrompt(assembly)).toContain(FIXTURE_INSTRUCTIONS)
+  })
+
+  it('renders no instructions text when the server advertises none', async () => {
+    await apply(ctx, stdioConfig)
+
+    const assembly = await ctx.systemPrompt.assemble()
+    expect(assembly.sections.find(section => section.name === 'mcp:srv')?.text).toBe('')
+    expect(renderPrompt(assembly)).not.toContain(FIXTURE_INSTRUCTIONS)
+  })
+
+  it('drops the instructions section when its plugin disposes', async () => {
+    mockGetInstructions.mockReturnValue(FIXTURE_INSTRUCTIONS)
+    const fiber = ctx.plugin({ name: 'mcp-client-instructions', inject, apply }, stdioConfig)
+    await fiber
+    expect(renderPrompt(await ctx.systemPrompt.assemble())).toContain(FIXTURE_INSTRUCTIONS)
+
+    await fiber.dispose()
+    expect(renderPrompt(await ctx.systemPrompt.assemble())).not.toContain(FIXTURE_INSTRUCTIONS)
+  })
+
   it('rejects a duplicate serverName at load and leaves the first instance intact', async () => {
     await apply(ctx, stdioConfig)
     expect(ctx.tools.get('mcp__srv__remote')).toBeDefined()
@@ -213,7 +247,10 @@ describe('apply (plugin lifecycle)', () => {
     const first = createScope(ctx, {})
     const second = createScope(ctx, {})
 
-    await Promise.all([apply(first.ctx, stdioConfig), apply(second.ctx, stdioConfig)])
+    await Promise.all([
+      first.ctx.plugin({ name: 'mcp-client', inject, apply }, stdioConfig),
+      second.ctx.plugin({ name: 'mcp-client', inject, apply }, stdioConfig),
+    ])
 
     expect(mockConnect).toHaveBeenCalledTimes(2)
     await Promise.all([first.dispose(), second.dispose()])
@@ -361,7 +398,7 @@ describe('apply (plugin lifecycle)', () => {
   it('effect disposer unregisters the CURRENT generation and closes client', async () => {
     // Load through ctx.plugin so ONLY the plugin's fiber is disposed — the
     // registry must survive to observe the unregistration.
-    const fiber = ctx.plugin({ name: 'mcp-client', inject: ['tools'], apply }, stdioConfig)
+    const fiber = ctx.plugin({ name: 'mcp-client', inject: ['tools', 'systemPrompt'], apply }, stdioConfig)
     await fiber
 
     // Advance to a second generation first.
