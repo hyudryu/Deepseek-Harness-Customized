@@ -1,0 +1,41 @@
+{
+  "name": "dsh-project-system-prompt",
+  "version": "0.1.0",
+  "description": "Project-scoped system prompt override for DeepSeek Harness: a System prompt override item on a project's 3-dots menu opens an editor whose saved text replaces the whole system prompt for that project, with a button that restores the DeepSeek default as a baseline",
+  "type": "module",
+  "main": "index.js",
+  "exports": {
+    ".": "./index.js",
+    "./client": "./lib/client.js",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "index.js",
+    "lib/client.js",
+    "lib/client.js.map",
+    "cordis.patch.yml"
+  ],
+  "scripts": {
+    "build": "tsdown",
+    "watch": "tsdown --watch"
+  },
+  "license": "MIT",
+  "dependencies": {
+    "@deepseek-ai/dsh-system-prompt": "link:../../packages/core/system-prompt"
+  },
+  "devDependencies": {
+    "@deepseek-ai/cordis": "link:../../vendor/cordis"
+  },
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "inject": [
+        "@deepseek-ai/dsh-client-ui-slots",
+        "@deepseek-ai/dsh-client-locale"
+      ],
+      "platform": "web"
+    }
+  }
+}

@@ -1,0 +1,17 @@
+lockfileVersion: '9.0'
+
+settings:
+  autoInstallPeers: true
+  excludeLinksFromLockfile: false
+
+importers:
+
+  .:
+    dependencies:
+      '@deepseek-ai/dsh-system-prompt':
+        specifier: link:../../packages/core/system-prompt
+        version: link:../../packages/core/system-prompt
+    devDependencies:
+      '@deepseek-ai/cordis':
+        specifier: link:../../vendor/cordis
+        version: link:../../vendor/cordis
