@@ -1,5 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { mkdtempSync, rmSync } from 'node:fs'
+import { createServer } from 'node:http'
+import type { AddressInfo } from 'node:net'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { Context } from '@deepseek-ai/cordis'
@@ -51,6 +53,19 @@ async function harness(baseURL: string, config: object = {}) {
   await ctx.plugin(DeepSeekLlmApiExtensionRegistry)
   await ctx.plugin(LlmDeepSeek, { baseURL, ...config })
   return ctx
+}
+
+/**
+ * A loopback port that was bound and released, so a later connection attempt
+ * finds no listener instead of an invalid port.
+ * @returns the now-unbound port number.
+ */
+async function unusedPort(): Promise<number> {
+  const server = createServer()
+  await new Promise<void>((resolve) => { server.listen(0, '127.0.0.1', resolve) })
+  const port = (server.address() as AddressInfo).port
+  await new Promise<void>((resolve) => { server.close(() => { resolve() }) })
+  return port
 }
 
 /** Direct adapter over the plugin's real resolve step, with a static key. */
@@ -1452,15 +1467,19 @@ describe('DeepSeekAdapter against a mock server', () => {
     expect(httpErrorCode(418)).toBe('HTTP_418')
   })
 
-  it('reports a transport failure with the endpoint in the message', async () => {
-    // Port 1 is reserved/unbound, so the service normalizes the fetch failure.
-    const ctx = await harness('http://127.0.0.1:1')
+  it('reports an unlistened endpoint as a non-retryable refusal with the endpoint in the message', async () => {
+    // A bound-then-released port refuses the connection, which is the wire
+    // picture of a stopped local server or a torn-down model. (The reserved
+    // port 1 is rejected as a bad port before any connection is attempted, so
+    // it cannot exercise this classification.)
+    const baseURL = `http://127.0.0.1:${await unusedPort()}`
+    const ctx = await harness(baseURL)
     const result = await assemble(ctx, { model: 'deepseek-v4-flash', messages: [] })
     expect(result.finish).toMatchObject({
       kind: 'error',
       failure: {
-        code: 'TRANSPORT',
-        message: 'DeepSeek API request to http://127.0.0.1:1 failed',
+        code: 'CONNECTION_REFUSED',
+        message: `DeepSeek API request to ${baseURL} failed`,
       },
     })
   })
@@ -1534,7 +1553,7 @@ describe('DeepSeekAdapter against a mock server', () => {
   })
 
   it('maps connection failures to TRANSPORT without losing the cause', async () => {
-    const cause = new TypeError('connection refused')
+    const cause = new TypeError('socket hang up')
     const fetchSpy = vi.spyOn(globalThis, 'fetch').mockRejectedValue(cause)
     const adapter = adapterOf({ baseURL: 'https://example.invalid' })
     try {
@@ -1542,6 +1561,21 @@ describe('DeepSeekAdapter against a mock server', () => {
         for await (const _chunk of adapter.stream({ provider: 'deepseek-official', model: 'm', messages: [] })) { /* drain */ }
       }
       await expect(drain()).rejects.toMatchObject({ code: 'TRANSPORT', cause })
+    } finally {
+      fetchSpy.mockRestore()
+    }
+  })
+
+  it('keeps a refused connection distinguishable from a droppable one across the cause chain', async () => {
+    const errno = Object.assign(new Error('connect ECONNREFUSED 127.0.0.1:8000'), { code: 'ECONNREFUSED' })
+    const cause = new TypeError('fetch failed', { cause: errno })
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockRejectedValue(cause)
+    const adapter = adapterOf({ baseURL: 'http://127.0.0.1:8000' })
+    try {
+      const drain = async (): Promise<void> => {
+        for await (const _chunk of adapter.stream({ provider: 'deepseek-official', model: 'm', messages: [] })) { /* drain */ }
+      }
+      await expect(drain()).rejects.toMatchObject({ code: 'CONNECTION_REFUSED', cause })
     } finally {
       fetchSpy.mockRestore()
     }

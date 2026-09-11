@@ -86,30 +86,35 @@ async function unusedPort(): Promise<number> {
 }
 
 describe('bounded retry through the real DeepSeek HTTP/SSE adapter', () => {
-  it('recovers from a true refused connection after the endpoint starts during backoff', async () => {
+  it('reports a refused connection without scheduling a retry', async () => {
     const port = await unusedPort()
     context = await harness(`http://127.0.0.1:${port}`, { initialDelayMs: 100 })
     const agent = await context.agentLoop.create(SessionId('wire-refused'), {
       provider: 'deepseek-official',
       model: 'mock-model',
     })
-    let recoveryServer: Promise<MockLlmServer> | undefined
+    let lateServer: Promise<MockLlmServer> | undefined
     context.on('session/event', (session, event) => {
-      if (session !== agent.session || event.type !== 'llm/retry' || event.data.retry !== 1) return
-      recoveryServer = start(['success'], { port, apiKey: 'mock-key', successText: 'connected after retry' })
+      if (session !== agent.session || event.type !== 'llm/retry') return
+      // Any retry at all would let this endpoint answer; none may be scheduled.
+      lateServer = start(['success'], { port, apiKey: 'mock-key', successText: 'connected after retry' })
     })
 
     await sendAndWait(context, agent)
-    const server = await recoveryServer
+    await lateServer
 
-    expect(server).toBeDefined()
-    expect(server?.requests).toHaveLength(1)
+    // Nothing is listening at the endpoint (a stopped server or a torn-down
+    // local model), so repeating the request cannot change the answer: the
+    // failure is reported on the first attempt rather than after a backoff.
+    expect(lateServer).toBeUndefined()
+    expect(agent.session.snapshotEvents().some(event => event.type === 'llm/retry')).toBe(false)
     expect(agent.session.snapshotEvents().filter(event => event.type === 'step/start')
       .map(event => [event.data.turn, event.data.step]))
       .toEqual([[1, 1]])
-    expect(agent.session.snapshotEvents().filter(event => event.type === 'llm/retry').map(event => event.data.failure.code))
-      .toEqual(['TRANSPORT'])
-    expect(finalAssistantText(agent)).toBe('connected after retry')
+    expect(agent.session.snapshotEvents().at(-1)).toMatchObject({
+      type: 'turn/end',
+      data: { reason: { kind: 'error', error: { code: 'CONNECTION_REFUSED' } } },
+    })
   })
 
   it.each([

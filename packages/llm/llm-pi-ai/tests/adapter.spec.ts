@@ -469,7 +469,8 @@ describe('provider profile lifecycle', () => {
     })
     expect(ctx.llm.providerRetryPolicy('anthropic')).toMatchObject({
       mode: 'normal',
-      maxRetries: 5,
+      maxRetries: 3,
+      retryDelaysMs: [5_000, 60_000, 300_000],
     })
     await fiber.dispose()
     expect(ctx.llm.listProviders()).toEqual([])

@@ -8,7 +8,7 @@
  * @module dsh-llm-deepseek/adapter
  */
 
-import { attributionHeaders, contentHasImage, CONTEXT_WINDOW_EXCEEDED_CODE, isContextWindowExceededError, isQuotaExceededError, LlmAdapter, LlmError, offloadedImageText, offloadRequestImagesWithPolicy, ProviderRequestId, QUOTA_EXCEEDED_CODE, ReasoningEffortId } from '@deepseek-ai/dsh-llm'
+import { attributionHeaders, CONNECTION_REFUSED_CODE, contentHasImage, CONTEXT_WINDOW_EXCEEDED_CODE, isConnectionRefused, isContextWindowExceededError, isQuotaExceededError, LlmAdapter, LlmError, offloadedImageText, offloadRequestImagesWithPolicy, ProviderRequestId, QUOTA_EXCEEDED_CODE, ReasoningEffortId } from '@deepseek-ai/dsh-llm'
 import type {
   ContentBlock,
   GenerateOptions,
@@ -648,9 +648,12 @@ export class DeepSeekAdapter extends LlmAdapter {
         })
       } catch (error: unknown) {
         if (signal.aborted) throw error
+        // A refused connection means no process is listening at baseURL (a
+        // stopped local server or a torn-down model), which no repeat can fix;
+        // every other transport failure stays retryable.
         throw new LlmError(
           `DeepSeek API request to ${connection.baseURL} failed`,
-          'TRANSPORT',
+          isConnectionRefused(error) ? CONNECTION_REFUSED_CODE : 'TRANSPORT',
           { cause: error },
         )
       }

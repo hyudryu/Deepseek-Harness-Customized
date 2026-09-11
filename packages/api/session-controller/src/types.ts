@@ -47,6 +47,12 @@ export interface SessionListMetadata {
   readonly blank: boolean
   /** Latest human-authored prompt time in the folded prefix. */
   readonly lastPromptAt: number | null
+  /**
+   * Whether the most recent closed turn ended in a terminal failure, so the
+   * folded prefix's last word is an error rather than a completion. Read from
+   * the log, so it survives a reload and costs no Agent activation.
+   */
+  readonly lastTurnFailed: boolean
 }
 
 /** Every available cached wire value used as partial, possibly stale Session-list hints. */

@@ -45,6 +45,10 @@ The Session row's Rename action opens a dialog prefilled with the row's display 
 
 Session rows render the runtime's live `pendingInteraction` classification: approvals report **Waiting for approval**, plan reviews report **Plan awaiting review**, and ordinary questions report **Waiting for answer**. Every pending interaction uses an amber warning dot that takes precedence over the running indicator.
 
+### Turn-failure dot
+
+A row whose latest closed turn ended in a terminal failure shows a red error dot labelled **Failed**, read from `SessionSummary.projectionValues.sessionListMetadata.lastTurnFailed`. The fact is folded from the Session log's `turn/end` reason, so it survives a reload and needs no Agent activation; any later non-error outcome — completed, aborted, blocked, max-tokens, or interrupted — clears it, and a running turn shows the blue activity indicator instead. Precedence follows the pending, running, failed, descendant-activity, completed, idle order, and a cold row whose cached metadata predates the fact reads as not failed rather than unknown.
+
 ### Active Schedule markers
 
 Grouped and flat Session rows, plus search results, show an outline alarm when `SessionSummary.projectionValues.schedule` is a non-empty array. The marker sits after the title; an ordinary row keeps its update time after the marker, while a search result has no update time. It is not a button, has no independent pointer action or tab stop, and clicking its area still opens the row. The localized tooltip and matching screen-reader label say **Has active scheduled task**.

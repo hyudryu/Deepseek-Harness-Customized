@@ -26,6 +26,7 @@ const MESSAGE_TYPES = new Set(['user/message', 'assistant/message'])
 const sessionListMetadataSchema: z.ZodType<SessionListMetadata> = z.object({
   blank: z.boolean(),
   lastPromptAt: z.number().nullable(),
+  lastTurnFailed: z.boolean(),
 })
 
 const imageLimitsSchema = z.object({
@@ -51,9 +52,15 @@ export function applySessionListMetadata(
   const lastPromptAt = event.type === 'user/message' && event.data.source.kind === 'user'
     ? event.time
     : state.lastPromptAt
-  return blank === state.blank && lastPromptAt === state.lastPromptAt
+  // Only a closed turn carries an outcome: a running turn leaves the previous
+  // verdict visible, and every non-error end reason (completed, aborted,
+  // blocked, max-tokens, interrupted) clears it.
+  const lastTurnFailed = event.type === 'turn/end'
+    ? event.data.reason.kind === 'error'
+    : state.lastTurnFailed
+  return blank === state.blank && lastPromptAt === state.lastPromptAt && lastTurnFailed === state.lastTurnFailed
     ? state
-    : { blank, lastPromptAt }
+    : { blank, lastPromptAt, lastTurnFailed }
 }
 
 /**
@@ -80,10 +87,12 @@ export class ApiSessionList {
     ctx.sessionProjections.register<'sessionListMetadata', SessionListMetadata>({
       key: 'sessionListMetadata',
       stateSchema: sessionListMetadataSchema,
-      init: () => ({ blank: true, lastPromptAt: null }),
+      init: () => ({ blank: true, lastPromptAt: null, lastTurnFailed: false }),
       apply: applySessionListMetadata,
       wire: { viewSchema: sessionListMetadataSchema, view: state => state },
-      stateVersion: 1,
+      // 2: `lastTurnFailed` joined the folded state, so a persisted row from
+      // version 1 would seed a unit whose required field is absent.
+      stateVersion: 2,
     })
     ctx.inject(['attachments'], (attachmentCtx) => {
       ctx.sessionProjections.register<'imageLimits', null>({

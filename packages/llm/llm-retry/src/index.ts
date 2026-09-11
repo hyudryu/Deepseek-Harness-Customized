@@ -57,6 +57,10 @@ async function settleDownstream(
 }
 
 function localDelay(config: ResolvedRetryPolicy, retry: number, random: () => number): number {
+  // A scheduled policy waits exactly what it configured; only an exponential
+  // policy derives its delay, so the two sources never blend.
+  const scheduled = config.mode === 'normal' ? config.retryDelaysMs?.[retry - 1] : undefined
+  if (scheduled !== undefined) return scheduled
   const exponent = Math.min(retry - 1, 1024)
   const exponential = Math.min(config.initialDelayMs * 2 ** exponent, config.maxDelayMs)
   const jitter = 1 - config.jitterRatio + 2 * config.jitterRatio * random()
@@ -70,6 +74,7 @@ function retryPolicyKey(policy: ResolvedRetryPolicy): string {
       policy.mode,
       policy.maxRetries,
       [...policy.retryableCodes].sort(),
+      policy.retryDelaysMs,
       policy.initialDelayMs,
       policy.maxDelayMs,
       policy.jitterRatio,

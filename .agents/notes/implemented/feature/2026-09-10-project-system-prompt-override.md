@@ -24,7 +24,7 @@ Tool schemas, runtime contexts, and prompt variables still assemble normally: on
 
 **Presentation.** A **System prompt override…** item on each project row's 3-dots menu — the `sidebar.workspaces.actions` slot — opens an editor hosted in `sidebar.footer.action`. The editor reads and writes `GET`/`PUT /project-system-prompt/<workspaceId>` over the plugin's own prefix route. **Restore DeepSeek default** fills the field from the same route's `defaultText`, which is `renderPrompt(await ctx.systemPrompt.assemble())`: assembling with no scope keeps the plugin's own listener inert, so that is the prompt the deployment would otherwise send, with `{{model}}`, `{{provider}}`, and `{{cwd}}` already interpolated.
 
-**Packaging.** The plugin is a standalone project with its own committed lockfile and declares `@deepseek-ai/dsh-system-prompt` as a `link:` dependency, so [the custom-plugin installer](../../../../scripts/install-custom-plugins.mjs) resolves its runtime import under `--ignore-workspace` and proves it by importing the entry in a fresh process ([rationale](2026-09-07-standalone-custom-plugin-install.md)).
+**Packaging.** The plugin is a standalone project with its own committed lockfile and declares `@deepseek-ai/dsh-system-prompt` as a `link:` dependency, so [the custom-plugin installer](../../../../scripts/install-custom-plugins.mjs) resolves its runtime import under `--ignore-workspace` and proves it by importing the entry in a fresh process ([rationale](../bug-fix/2026-09-07-standalone-custom-plugin-install.md)).
 
 ## Alternatives considered
 

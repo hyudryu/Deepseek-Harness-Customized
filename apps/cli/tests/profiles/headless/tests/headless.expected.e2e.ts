@@ -311,7 +311,7 @@ describe('headless stream-json snapshots', () => {
         expect(retries[0]?.data).toMatchObject({
           provider: 'deepseek-official',
           mode: 'normal',
-          policyKey: '["normal",1,["RATE_LIMIT"],1,1,0]',
+          policyKey: '["normal",1,["RATE_LIMIT"],null,1,1,0]',
           retry: 1,
           maxRetries: 1,
           delayMs: 1,

@@ -351,6 +351,7 @@ describe('session.history projections block', () => {
     expect(after.projections.values.sessionListMetadata).toEqual({
       blank: true,
       lastPromptAt: session.eventAt(SessionSeq(session.seq - 1))?.time,
+      lastTurnFailed: false,
     })
   })
 
@@ -363,7 +364,7 @@ describe('session.history projections block', () => {
     await fiber.await()
     await vi.waitFor(() => {
       expect(ctx.sessionProjections.snapshot(session).values.sessionListMetadata)
-        .toEqual({ blank: true, lastPromptAt: null })
+        .toEqual({ blank: true, lastPromptAt: null, lastTurnFailed: false })
     })
     await fiber.dispose()
     expect('sessionListMetadata' in ctx.sessionProjections.snapshot(session).values).toBe(false)
@@ -385,8 +386,35 @@ describe('session.list projections column', () => {
     expect(row?.projections?.values.sessionListMetadata).toEqual({
       blank: false,
       lastPromptAt: session.eventAt(SessionSeq(session.seq - 1))?.time,
+      lastTurnFailed: false,
     })
     expect(row?.projections?.asOfSeq).toBe(session.seq - 1)
+  })
+
+  it('marks the row failed after a turn ends in error and clears it on the next outcome', async () => {
+    const { ctx, session } = await harness(true)
+    const gateway = remote(ctx)
+    await new Promise(resolve => setTimeout(resolve, 0))
+    session.append('turn/start', { turn: 1 })
+    session.append('turn/end', {
+      turn: 1,
+      reason: { kind: 'error', error: { message: 'DeepSeek API request failed', code: 'TRANSPORT' } },
+    })
+
+    const failedResponse = await gateway.list(request({}))
+    if (!failedResponse.ok) throw new Error('unreachable')
+    const failedRow = failedResponse.value.items.find(item => item.sessionId === session.id)
+    expect(failedRow?.projections?.values.sessionListMetadata).toMatchObject({ lastTurnFailed: true })
+
+    // A later successful turn owns the verdict: the dot always describes the
+    // most recent closed turn, never a sticky "this session once failed".
+    session.append('turn/start', { turn: 2 })
+    session.append('turn/end', { turn: 2, reason: { kind: 'completed' } })
+
+    const recoveredResponse = await gateway.list(request({}))
+    if (!recoveredResponse.ok) throw new Error('unreachable')
+    const recoveredRow = recoveredResponse.value.items.find(item => item.sessionId === session.id)
+    expect(recoveredRow?.projections?.values.sessionListMetadata).toMatchObject({ lastTurnFailed: false })
   })
 
   it('lists the latest preset selected by a blank Session instead of its creation preset', async () => {
@@ -599,9 +627,9 @@ describe('Session control projection frames', () => {
       (f): f is Extract<SessionControlFrame, { type: 'projection' }> =>
         f.type === 'projection' && f.key === 'sessionListMetadata',
     )).toEqual([
-      { type: 'projection', sessionId: session.id, key: 'sessionListMetadata', value: { blank: true, lastPromptAt: 100 }, seq: 0 },
-      { type: 'projection', sessionId: session.id, key: 'sessionListMetadata', value: { blank: false, lastPromptAt: 100 }, seq: 1 },
-      { type: 'projection', sessionId: session.id, key: 'sessionListMetadata', value: { blank: false, lastPromptAt: 300 }, seq: 2 },
+      { type: 'projection', sessionId: session.id, key: 'sessionListMetadata', value: { blank: true, lastPromptAt: 100, lastTurnFailed: false }, seq: 0 },
+      { type: 'projection', sessionId: session.id, key: 'sessionListMetadata', value: { blank: false, lastPromptAt: 100, lastTurnFailed: false }, seq: 1 },
+      { type: 'projection', sessionId: session.id, key: 'sessionListMetadata', value: { blank: false, lastPromptAt: 300, lastTurnFailed: false }, seq: 2 },
     ])
     // Frame seq aligns with the tail block's asOfSeq vocabulary (higher-seq-wins compatible).
     const tail = await opening(proxy, session.id)
