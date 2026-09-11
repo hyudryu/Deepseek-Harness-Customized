@@ -191,6 +191,35 @@ describe('WorkspaceBrowser', () => {
     expect(b.store.getSnapshot().groupBy).toBe('workspace')
   })
 
+  it('orders Workspace sections by their newest Session under Last updated', async () => {
+    const sessions = sessionState([summary('stale', 10), summary('fresh', 90)])
+    const workspaces = workspaceState([
+      workspace('old', ['stale']),
+      workspace('empty', []),
+      workspace('fresh', ['fresh']),
+    ])
+    const b = mount({ useSessions: hook(sessions), useWorkspaces: hook(workspaces) })
+    const sectionOrder = (): string[] => screen.getAllByRole('treeitem')
+      .map(row => row.textContent?.trim() ?? '')
+      .filter(text => text === 'old' || text === 'empty' || text === 'fresh')
+    // The persisted test default is Manual: Host order, rows stay arrangeable.
+    expect(sectionOrder()).toEqual(['old', 'empty', 'fresh'])
+    expect(screen.getByText('old').closest('[role="treeitem"]')?.getAttribute('draggable')).toBe('true')
+
+    fireEvent.click(screen.getByRole('button', { name: '视图选项' }))
+    fireEvent.click(screen.getByRole('menuitem', { name: '最近更新' }))
+    await waitFor(() => {
+      // Newest Session first, a Workspace showing no Session last, and the
+      // derived order removes the row drag handle.
+      expect(sectionOrder()).toEqual(['fresh', 'old', 'empty'])
+    })
+    expect(screen.getByText('fresh').closest('[role="treeitem"]')?.getAttribute('draggable')).toBe('false')
+
+    // A newer timestamp inside the older Workspace re-ranks the sections.
+    rerender(b, { useSessions: hook(sessionState([summary('stale', 500), summary('fresh', 90)])) })
+    expect(sectionOrder()).toEqual(['old', 'fresh', 'empty'])
+  })
+
   it('persists flat-list drag order locally and applies Last updated within that account', async () => {
     const insertSessionBefore = vi.fn(async () => {})
     const sessions = sessionState([summary('one', 3), summary('two', 2), summary('three', 1)])
