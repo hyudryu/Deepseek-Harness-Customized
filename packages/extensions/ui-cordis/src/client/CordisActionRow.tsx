@@ -6,6 +6,7 @@ import {
 import type { PropsLocale } from '@deepseek-ai/dsh-client-ui-slots'
 import type { ToolCallViewProps } from '@deepseek-ai/dsh-client-ui-tool/client'
 import { cordisActionCard } from './card-model.ts'
+import { durationLabel, settledDurationMs } from './row-duration.ts'
 import css from './CordisRunRow.module.css'
 
 /** Full action-card props composed by the keyed Tool slot. */
@@ -16,6 +17,8 @@ export function CordisActionRow({ callId, toolName, block, inspect, t }: CordisA
   const card = cordisActionCard(block)
   const remove = toolName === 'cordis_undefine'
   const summary = card.errorSummary ?? card.pluginId ?? callId
+  const durationMs = settledDurationMs(block)
+  const duration = durationMs === null ? null : durationLabel(durationMs, t)
 
   return (
     <div className={css.card} data-tool={toolName} data-state={card.state}>
@@ -30,6 +33,7 @@ export function CordisActionRow({ callId, toolName, block, inspect, t }: CordisA
         <span className={css.title}>{t(remove ? 'row.removeTitle' : 'row.stopTitle')}</span>
         <span className={css.separator} aria-hidden />
         <span className={card.errorSummary === null ? css.summary : css.error}>{summary}</span>
+        {duration !== null && <span className={css.duration}>{duration}</span>}
         {inspect !== undefined && (
           <button type="button" className={css.inspect} aria-label={t('action.inspect')} onClick={inspect}>
             <IconInspectOutline12 />

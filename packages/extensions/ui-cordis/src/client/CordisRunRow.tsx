@@ -8,6 +8,7 @@ import type { InjectFace, PropsLocale, PropsRenderSlots } from '@deepseek-ai/dsh
 import type { ToolCallViewProps } from '@deepseek-ai/dsh-client-ui-tool/client'
 import { cordisRunCard } from './card-model.ts'
 import { cordisToolViewKey } from './run-card-index.ts'
+import { durationLabel, settledDurationMs } from './row-duration.ts'
 import type { CordisRunCardFace } from './slots.ts'
 import { cordisVisibleStatus, type CordisVisibleStatus } from './status.ts'
 import type { CordisKey } from './locales.ts'
@@ -81,6 +82,8 @@ export function CordisRunRow({
   const summary = card.errorSummary
     ?? (card.pluginId === null ? callId : `${card.pluginId}${card.packageId === null ? '' : ` · ${card.packageId}`}`)
   const showBusiness = reading === 'running' && key !== null
+  const durationMs = settledDurationMs(block)
+  const duration = durationMs === null ? null : durationLabel(durationMs, t)
 
   return (
     <div
@@ -104,6 +107,7 @@ export function CordisRunRow({
         <span className={css.separator} aria-hidden />
         <span className={card.errorSummary === null ? css.summary : css.error}>{summary}</span>
         <span className={css.status}>{status}</span>
+        {duration !== null && <span className={css.duration}>{duration}</span>}
         {inspect !== undefined && (
           <button type="button" className={css.inspect} aria-label={t('action.inspect')} onClick={inspect}>
             <IconInspectOutline12 />

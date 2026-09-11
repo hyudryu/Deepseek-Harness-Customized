@@ -65,7 +65,13 @@ export const AssistantMarkdown = memo(function AssistantMarkdown({
             hidden={reasoningHidden}
             reveal={revealProcess}
           >
-            <ReasoningRow text={block.text} running={streaming && i === last} t={t} />
+            <ReasoningRow
+              text={block.text}
+              running={streaming && i === last}
+              startedAt={block.startedAt}
+              endedAt={block.endedAt}
+              t={t}
+            />
           </ProcessReasoning>,
         )
         break

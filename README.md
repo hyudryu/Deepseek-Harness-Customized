@@ -17,6 +17,15 @@ This fork adds custom updates to DeepSeek Harness plus a set of installable plug
 ### Updates to DeepSeek Harness
 
 <details>
+<summary><b>Per-row operation durations in the transcript</b> — click to expand</summary>
+
+Every Tool-call row and every thinking (`Think`) row now carries how long that operation took, drawn as `45.2s` under a minute and `2m 42s` from there on. A settled Tool row takes its span from the paired `tool/call` and `tool/result` event times; a running row shows nothing until it settles. A thinking row counts up live while the model is still streaming that block — including across a quiet stretch where no new token has arrived — and freezes at its recorded end once the step settles.
+
+The label is a measurement, so it sits in the caption tone at the row's trailing edge and never truncates the path, command, or thinking text beside it. Model steps already reported their own total on the statistics line under the composer; this adds the per-operation figure that line cannot show.
+
+</details>
+
+<details>
 <summary><b>SearXNG web search without a provider API key</b></summary>
 
 Open Settings > Plugins > Plugin configuration, enter your SearXNG instance URL in the SearXNG card, enable it, and save. Enabled SearXNG takes precedence over DeepSeek search, including when no DeepSeek search API key is configured. Disabling it restores the existing search selection. The provider ships with the standard harness; your SearXNG instance must allow JSON search responses. See the [SearXNG setup and provider reference](packages/web/web-search-searxng/README.md).
@@ -263,6 +272,24 @@ Configuration lives in the bundle's `cordis.patch.yml` (or your profile patch):
 | `models` | `[]` | Model ids to translate; empty = any model on a matched provider |
 
 Empty `providers`/`models` translate every request, which is safe because ordinary providers never emit Qwen markup and the transform is a pass-through for text that has none. The translation only touches outgoing stream chunks, never the frozen request, so the session log still records the assembled assistant message.
+
+</details>
+
+#### 8. `dsh-session-timing`
+
+<details>
+<summary><b>Session timing report for the agent</b> — click to expand</summary>
+
+Adds a `session_timings` tool that reports how long the current session's operations took: the slowest completed Tool calls and model steps, anything still open and how long it has been open, and per-kind totals. It is the same measurement the transcript draws next to each row, put where the agent can act on it, so a stalled session can be diagnosed instead of re-run to be timed.
+
+Install it with the custom-plugin installer, then add the bundle to your profile:
+
+```sh
+pnpm run install:custom-plugins
+pnpm dsh plugin --profile web add "./Custom Plugins/session-timing"
+```
+
+Every figure comes from the session log's own event timestamps, so the report and the transcript cannot disagree. The tool takes one optional `limit` (rows per list, default 8, maximum 50), is read-only, and declares itself concurrency-safe. See the [bundle README](<Custom Plugins/session-timing/README.md>).
 
 </details>
 

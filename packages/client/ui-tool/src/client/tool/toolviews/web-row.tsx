@@ -31,6 +31,7 @@ export function WebRow({ toolName, block, inspect, t }: WebRowProps) {
       summary={model.summary}
       output={model.output}
       errorSummary={model.errorSummary}
+      durationMs={model.durationMs}
       web={web}
       state={model.state}
       inspect={inspect}

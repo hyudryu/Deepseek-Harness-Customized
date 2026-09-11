@@ -1,6 +1,6 @@
 import { useState, type KeyboardEvent, type ReactNode } from 'react'
 import {
-  IconChevronDownOutline14, IconInspectOutline12, IconSkillOutline16, StateDot,
+  IconChevronDownOutline14, IconInspectOutline12, IconSkillOutline16, rowDuration, StateDot,
 } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { ToolCallViewProps } from '@deepseek-ai/dsh-client-ui-tool/client'
 import type { PropsLocale } from '@deepseek-ai/dsh-client-ui-slots'
@@ -104,6 +104,14 @@ function stateStatus(state: SkillRowState, t: SkillRowProps['t']): string | null
   }
 }
 
+/** Elapsed span as the row's trailing duration label. */
+function durationLabel(ms: number, t: SkillRowProps['t']): string {
+  const value = rowDuration(ms)
+  return value.unit === 'seconds'
+    ? t('row.durationSeconds', { seconds: value.seconds })
+    : t('row.durationMinutes', { minutes: value.minutes, seconds: value.seconds })
+}
+
 /**
  * Render one `skill` tool call as an accent summary and instructions disclosure.
  * @param props - keyed toolview payload plus the skill locale seat.
@@ -116,6 +124,12 @@ export function SkillRow({ block, inspect, t }: SkillRowProps) {
   const open = expanded && expandable
   const status = stateStatus(model.state, t)
   const summary = model.errorSummary ?? model.name
+  // Only a settled call has a paired span; a running row and a result whose
+  // call head fell outside the loaded window carry no duration.
+  const durationMs = 'kind' in block && block.callTime !== null
+    ? Math.max(0, block.time - block.callTime)
+    : null
+  const duration = durationMs === null ? null : durationLabel(durationMs, t)
   const toggleExpand = (): void => {
     setExpanded(value => !value)
   }
@@ -146,6 +160,7 @@ export function SkillRow({ block, inspect, t }: SkillRowProps) {
         <span className={model.errorSummary === null ? css.summary : `${css.summary} ${css.errorSummary}`}>
           {summary}
         </span>
+        {duration !== null ? <span className={css.duration}>{duration}</span> : null}
       </div>
       {open ? (
         <div className={css.bodyWrap}>

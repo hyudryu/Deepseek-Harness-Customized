@@ -125,6 +125,8 @@ describe('apply', () => {
           'row.stopped': 'skill 加载已中止',
           'row.instructions': '说明',
           'row.inspect': '查看',
+          'row.durationSeconds': '{seconds}秒',
+          'row.durationMinutes': '{minutes}分{seconds}秒',
           'menu.userOnly': '仅用户',
         },
         en: {
@@ -134,6 +136,8 @@ describe('apply', () => {
           'row.stopped': 'Skill load stopped',
           'row.instructions': 'Instructions',
           'row.inspect': 'Inspect',
+          'row.durationSeconds': '{seconds}s',
+          'row.durationMinutes': '{minutes}m {seconds}s',
           'menu.userOnly': 'user-only',
         },
       },

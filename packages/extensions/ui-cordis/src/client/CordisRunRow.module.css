@@ -72,6 +72,21 @@
   color: var(--dsw-alias-state-error-primary);
 }
 
+/* Trailing elapsed-time label for a settled run/stop call: the call's own
+   duration, placed after the status readout so the action and its outcome stay
+   the row's leading facts, and outside .summary's ellipsis so a long id never
+   clips it. Caption tone holds the measurement behind the label it qualifies;
+   tabular figures keep its width stable across spans. */
+.duration {
+  flex: none;
+  margin-left: 8px;
+  white-space: nowrap;
+  font-size: 13px;
+  line-height: 24px;
+  font-variant-numeric: tabular-nums;
+  color: var(--dsw-alias-label-caption);
+}
+
 .inspect {
   display: inline-flex;
   align-items: center;

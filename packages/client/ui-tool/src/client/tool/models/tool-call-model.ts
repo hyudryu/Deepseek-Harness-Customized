@@ -104,6 +104,12 @@ export interface ToolRowModel {
   output: string | null
   /** First line of the result text on an error row; null for every other state. */
   errorSummary: string | null
+  /**
+   * Wall time between the paired `tool/call` and `tool/result` event times;
+   * null while the call is still running and on a settled result whose call
+   * head fell outside the loaded window (there is nothing to difference).
+   */
+  durationMs: number | null
   state: ToolRowState
 }
 
@@ -259,6 +265,7 @@ export function toolRowModel(toolName: string, block: ToolCallBlock, cwd?: strin
     bodyRaw,
     output,
     errorSummary,
+    durationMs: done && block.callTime !== null ? Math.max(0, block.time - block.callTime) : null,
     state,
   }
 }
