@@ -47,6 +47,43 @@ export const EMPTY_RESPONSE_CODE = 'EMPTY_RESPONSE'
  */
 export const INVALID_CREDENTIAL_CODE = 'INVALID_CREDENTIAL'
 
+/**
+ * Canonical provider-neutral code for a model endpoint that refused the
+ * connection because nothing is listening at its address. Deliberately outside
+ * the default retryable set: a stopped or crashed inference server, or a local
+ * model that was torn down, answers identically on every attempt until an
+ * operator restarts it, so retrying only delays the report. Distinct from
+ * `TRANSPORT`, which stays retryable for a connection that was accepted and
+ * then dropped.
+ */
+export const CONNECTION_REFUSED_CODE = 'CONNECTION_REFUSED'
+
+/** Node errno reported by a connection attempt that found no listener. */
+const CONNECTION_REFUSED_ERRNO = 'ECONNREFUSED'
+
+/** Text forms of a refused connection, for adapters whose error cause was flattened upstream. */
+const CONNECTION_REFUSED_TEXT = /\bECONNREFUSED\b|connection refused/i
+
+/**
+ * Recognize a refused connection in a thrown value or its cause chain, or in
+ * flattened provider error text.
+ * @param value - thrown value (`unknown` in catch clauses) or provider error text.
+ * @returns true when the target address has no listener, so a repeat cannot succeed.
+ */
+export function isConnectionRefused(value: unknown): boolean {
+  if (typeof value === 'string') return CONNECTION_REFUSED_TEXT.test(value)
+  const seen = new Set<unknown>()
+  let current: unknown = value
+  while (typeof current === 'object' && current !== null && !seen.has(current)) {
+    seen.add(current)
+    const candidate = current as { code?: unknown; message?: unknown; cause?: unknown }
+    if (candidate.code === CONNECTION_REFUSED_ERRNO) return true
+    if (typeof candidate.message === 'string' && CONNECTION_REFUSED_TEXT.test(candidate.message)) return true
+    current = candidate.cause
+  }
+  return false
+}
+
 /** Structured codes and plain phrases that explicitly name a context bound being exceeded. */
 const STRUCTURED_CONTEXT_OVERFLOW = new RegExp(
   String.raw`(?:^|[^a-z0-9])context[\s_-](?:length|window)[\s_-]`

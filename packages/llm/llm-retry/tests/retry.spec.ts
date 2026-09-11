@@ -200,7 +200,7 @@ describe('provider-routed retry policy', () => {
       step: 1,
       provider: 'mock',
       mode: 'normal',
-      policyKey: '["normal",2,["RATE_LIMIT","SERVER"],500,10000,0]',
+      policyKey: '["normal",2,["RATE_LIMIT","SERVER"],null,500,10000,0]',
       retry: 1,
       maxRetries: 2,
       delayMs: 500,
@@ -342,6 +342,65 @@ describe('provider-routed retry policy', () => {
       type: 'turn/end',
       data: { reason: { kind: 'error', error: { message: 'busy three', code: 'SERVER' } } },
     })
+  })
+
+  it('waits a configured schedule verbatim and stops after its last entry', async () => {
+    vi.useFakeTimers()
+    const adapter = new ScriptedAdapter([
+      new LlmError('busy one', 'SERVER'),
+      new LlmError('busy two', 'SERVER'),
+      new LlmError('busy three', 'SERVER'),
+      new LlmError('busy four', 'SERVER'),
+    ])
+    ;({ ctx: context } = await harness(adapter, {
+      mock: { mode: 'normal', retryableCodes: ['SERVER'], retryDelaysMs: [5_000, 60_000, 300_000] },
+    }, undefined, { random: () => 0.5 }))
+    const agent = await context.agentLoop.create(SessionId('retry-scheduled'), { provider: 'mock', model: 'mock' })
+    agent.followup(createUserMessage({ content: [{ type: 'text', text: 'go' }], source: { kind: 'user' } }))
+
+    // Jitter is irrelevant to a schedule: each retry waits exactly its entry.
+    const first = waitForRetry(context, agent, 1)
+    expect((await first).data).toMatchObject({ retry: 1, maxRetries: 3, delayMs: 5_000 })
+    const second = waitForRetry(context, agent, 2)
+    await vi.advanceTimersByTimeAsync(5_000)
+    expect((await second).data.delayMs).toBe(60_000)
+    const third = waitForRetry(context, agent, 3)
+    await vi.advanceTimersByTimeAsync(60_000)
+    expect((await third).data.delayMs).toBe(300_000)
+
+    const idle = waitForIdle(context, agent)
+    await vi.advanceTimersByTimeAsync(300_000)
+    await idle
+
+    // The schedule's length is the whole budget: the fourth request fails terminally.
+    expect(adapter.requests).toHaveLength(4)
+    expect(agent.session.snapshotEvents().filter(event => event.type === 'llm/retry')).toHaveLength(3)
+    expect(agent.session.snapshotEvents().at(-1)).toMatchObject({
+      type: 'turn/end',
+      data: { reason: { kind: 'error', error: { message: 'busy four', code: 'SERVER' } } },
+    })
+  })
+
+  it('accepts a provider Retry-After up to the scheduled policy maximum', async () => {
+    vi.useFakeTimers()
+    const adapter = new ScriptedAdapter([
+      new LlmError('wait', 'RATE_LIMIT', { providerRetryAfterMs: 120_000 }),
+      textResponse('done'),
+    ])
+    ;({ ctx: context } = await harness(adapter, {
+      mock: { mode: 'normal', retryableCodes: ['RATE_LIMIT'] },
+    }))
+    const agent = await context.agentLoop.create(SessionId('retry-scheduled-after'), { provider: 'mock', model: 'mock' })
+    const scheduled = waitForRetry(context, agent, 1)
+
+    agent.followup(createUserMessage({ content: [{ type: 'text', text: 'go' }], source: { kind: 'user' } }))
+    // Two minutes exceeds the exponential default cap, but the default schedule
+    // reaches five, so the instruction is honored rather than abandoned.
+    expect((await scheduled).data.delayMs).toBe(120_000)
+    const idle = waitForIdle(context, agent)
+    await vi.advanceTimersByTimeAsync(120_000)
+    await idle
+    expect(adapter.requests).toHaveLength(2)
   })
 
   it('accepts the zero-delay lower jitter bound', async () => {

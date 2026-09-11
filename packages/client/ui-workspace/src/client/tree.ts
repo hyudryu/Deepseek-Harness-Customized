@@ -52,6 +52,8 @@ export interface SessionNode {
   runningSubagentCount: number
   /** Finished running while not selected and not yet opened (the green "done" reminder dot). */
   completed: boolean
+  /** The most recent closed turn ended in a terminal failure (the red error dot). */
+  lastTurnFailed: boolean
   /** The current list projection contains at least one active Schedule record. */
   hasActiveSchedule: boolean
   updatedAt: number
@@ -94,6 +96,8 @@ export interface SearchResultNode {
   runningSubagentCount: number
   /** Finished running while not selected and not yet opened (the green "done" reminder dot). */
   completed: boolean
+  /** The most recent closed turn ended in a terminal failure (the red error dot). */
+  lastTurnFailed: boolean
   /** The current list projection contains at least one active Schedule record. */
   hasActiveSchedule: boolean
   snippet?: string
@@ -165,6 +169,14 @@ function sessionTitle(session: SessionSummary): string {
 /** The list projection alone owns the best-effort active-Schedule indicator. */
 function hasActiveSchedule(session: SessionSummary): boolean {
   return (session.projectionValues?.schedule?.length ?? 0) > 0
+}
+
+/**
+ * Whether the Session's most recent closed turn ended in a terminal failure.
+ * A cold row whose metadata predates the fact reads as not failed rather than unknown.
+ */
+function lastTurnFailed(session: SessionSummary): boolean {
+  return session.projectionValues?.sessionListMetadata?.lastTurnFailed === true
 }
 
 /** Build one group without projecting session lineage into presentation. */
@@ -298,6 +310,7 @@ function sessionNode(
     running: s.running,
     runningSubagentCount: descendants.get(s.id)?.runningCount ?? 0,
     completed: s.completed === true,
+    lastTurnFailed: lastTurnFailed(s),
     hasActiveSchedule: hasActiveSchedule(s),
     updatedAt: s.updatedAt,
     ...(pendingInteraction === undefined ? {} : { pendingInteraction }),
@@ -463,6 +476,7 @@ export function deriveSearchResults(
           ? {}
           : { pendingInteraction }),
         completed: summary.completed === true,
+        lastTurnFailed: lastTurnFailed(summary),
         hasActiveSchedule: hasActiveSchedule(summary),
         ...match === undefined ? {} : { snippet: match.snippet },
       }
