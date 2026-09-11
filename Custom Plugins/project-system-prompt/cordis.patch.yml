@@ -1,0 +1,7 @@
+- insert:
+    - id: project-system-prompt
+      name: dsh-project-system-prompt
+      config:
+        promptFile: .dsh/system-prompt.md
+        maxBytes: 200000
+        root: ''
