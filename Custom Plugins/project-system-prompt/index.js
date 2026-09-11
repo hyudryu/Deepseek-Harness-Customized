@@ -177,13 +177,17 @@ export function apply(ctx, rawConfig = {}) {
         }
         // Clearing the field removes the override rather than leaving an empty
         // file behind, so "no override" has exactly one durable representation.
-        if (text.trim() === '') {
-          await rm(filePath, { force: true })
-        } else {
-          await writePromptFile(filePath, text)
+        const cleared = text.trim() === ''
+        try {
+          if (cleared) await rm(filePath, { force: true })
+          else await writePromptFile(filePath, text)
+        } catch (error) {
+          // A failed write must reach the editor as a message, not as a broken
+          // request: the modal reports the error and leaves the field intact.
+          return respond(res, 500, { ok: false, error: error.message })
         }
         cache.delete(filePath)
-        return respond(res, 200, { ok: true, cleared: text.trim() === '' })
+        return respond(res, 200, { ok: true, cleared })
       }
 
       return respond(res, 405, { ok: false, error: 'method not allowed' })

@@ -287,6 +287,17 @@ describe('browser routes', () => {
     await assert.rejects(readFile(join(dir, '.dsh', 'system-prompt.md'), 'utf8'), { code: 'ENOENT' })
   })
 
+  it('reports a failed write instead of breaking the request', async () => {
+    const dir = await projectDir()
+    const harness = createHarness({ workspaces: { w1: { path: dir } } })
+    // A directory where the file belongs makes every write path fail.
+    await mkdir(promptFileIn(dir), { recursive: true })
+    const res = await call(harness.route, 'PUT', '/project-system-prompt/w1', JSON.stringify({ text: 'MINE' }))
+    assert.equal(res.status, 500)
+    assert.equal(res.body.ok, false)
+    assert.equal(typeof res.body.error, 'string')
+  })
+
   it('rejects a request without a workspace id', async () => {
     const harness = createHarness()
     assert.equal((await call(harness.route, 'GET', '/project-system-prompt')).status, 400)
