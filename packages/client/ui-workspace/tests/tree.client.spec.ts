@@ -57,6 +57,40 @@ describe('deriveGroups', () => {
     expect(groups[0]!.sessions.map(session => session.id)).toEqual([sid('older'), sid('newer')])
   })
 
+  it('orders Workspace groups by their newest visible Session in recency mode', () => {
+    const sessions = list(
+      summary('stale', 10), summary('fresh', 90), summary('mid', 50), summary('loose', 70),
+    )
+    const workspaces = [
+      workspace('old', ['stale']),
+      workspace('empty', []),
+      workspace('active', ['stale-missing', 'mid', 'fresh']),
+    ]
+    const groups = deriveGroups(sessions, workspaces, noArchive, noAttention, {
+      expandedGroups: [],
+      groupOrder: 'recency',
+    })
+    // The newest visible Session ranks its Workspace; a Workspace showing no
+    // Session never outranks one that shows rows, and Ungrouped trails last.
+    expect(groups.map(group => group.key)).toEqual(['active', 'old', 'empty', UNGROUPED_KEY])
+  })
+
+  it('ranks recency groups by visible Sessions only and keeps Host order on ties', () => {
+    const sessions = list(summary('hidden', 99), summary('tie-a', 40), summary('tie-b', 40))
+    const workspaces = [
+      workspace('archived-only', ['hidden']),
+      workspace('first-tie', ['tie-a']),
+      workspace('second-tie', ['tie-b']),
+    ]
+    const groups = deriveGroups(sessions, workspaces, archived('hidden'), noAttention, {
+      expandedGroups: [],
+      groupOrder: 'recency',
+    })
+    // An archived Session does not promote its Workspace, and equal activity
+    // falls back to the stable Host order.
+    expect(groups.map(group => group.key)).toEqual(['first-tie', 'second-tie', 'archived-only'])
+  })
+
   it('projects pending-interaction state into grouped and flat rows', () => {
     const awaiting = { ...summary('awaiting', 10), running: true }
     const sessions = list(awaiting)

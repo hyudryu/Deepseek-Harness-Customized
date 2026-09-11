@@ -60,6 +60,9 @@ export interface SessionNode {
 /** Session order selected by the Workspace browser. */
 export type SessionOrderBy = 'manual' | 'updated'
 
+/** Workspace section order: Host order, or the newest visible Session activity first. */
+export type GroupOrderBy = 'host' | 'recency'
+
 /** One workspace group section: header row facts + visible top-level session rows. */
 export interface GroupNode {
   /** Group key: the workspace id or {@link UNGROUPED_KEY}. */
@@ -107,6 +110,8 @@ export interface TreeView {
   expandedGroups: readonly string[]
   /** Browser-local order for Sessions without a backing Workspace account. */
   ungroupedOrder?: readonly string[]
+  /** Workspace section order; Host order when absent. */
+  groupOrder?: GroupOrderBy
 }
 
 interface Group {
@@ -243,6 +248,31 @@ function groupByWorkspace(
   return groups
 }
 
+/**
+ * Newest visible Session activity in one group, or negative infinity when the
+ * group shows no Session — an empty Workspace never outranks an active one.
+ */
+function groupActivity(group: Group): number {
+  return group.sessions.reduce(
+    (latest, session) => Math.max(latest, session.updatedAt),
+    Number.NEGATIVE_INFINITY,
+  )
+}
+
+/**
+ * Order real Workspace groups by their newest visible Session, keeping Host
+ * order as the tie-break and the Ungrouped bucket last.
+ */
+function orderGroupsByRecency(groups: readonly Group[]): Group[] {
+  const ordered = groups
+    .flatMap((group, index) => group.workspaceId === undefined
+      ? []
+      : [{ group, index, activity: groupActivity(group) }])
+    .sort((a, b) => b.activity - a.activity || a.index - b.index)
+    .map(entry => entry.group)
+  return [...ordered, ...groups.filter(group => group.workspaceId === undefined)]
+}
+
 /** Keep navigation presentation independent from domain-owned interaction objects. */
 function visiblePendingKind(kind: string | undefined): SessionPendingInteractionStatus | undefined {
   switch (kind) {
@@ -280,13 +310,14 @@ function sessionNode(
  * Every group shows; sessions populate under expanded groups in the selected
  * local order. Blank sessions are excluded except for the selected
  * provisional New Session row; archived sessions are excluded everywhere.
- * Content search lives outside this derivation
- * (see {@link deriveSearchResults}).
+ * Recency group order ranks each real Workspace by its newest visible
+ * Session and keeps the Ungrouped bucket last. Content search lives outside
+ * this derivation (see {@link deriveSearchResults}).
  * @param list - sessions list snapshot (`current` feeds containsCurrent).
  * @param workspaces - real workspaces in stable Host order.
  * @param archivedSessionIds - registry-global archive set.
  * @param pendingInteractions - pending UI interactions by Session.
- * @param view - local expansion arrays.
+ * @param view - local expansion arrays and the Workspace section order.
  * @returns group sections in render order.
  */
 export function deriveGroups(
@@ -302,8 +333,9 @@ export function deriveGroups(
   const currentGroup = list.current === undefined
     ? undefined
     : owningGroupKey(workspaces, list.current)
+  const staged = groupByWorkspace(list, workspaces, archived, view.ungroupedOrder)
   const groups: GroupNode[] = []
-  for (const g of groupByWorkspace(list, workspaces, archived, view.ungroupedOrder)) {
+  for (const g of view.groupOrder === 'recency' ? orderGroupsByRecency(staged) : staged) {
     const expanded = expandedGroups.has(g.key)
     groups.push({
       key: g.key,

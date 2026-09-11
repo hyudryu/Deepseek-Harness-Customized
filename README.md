@@ -72,6 +72,24 @@ Declares a new `sidebar.workspaces.actions` list slot (root scope) on the worksp
 </details>
 
 <details>
+<summary><b>Workspace sections follow the latest session in Last updated order</b> — click to expand</summary>
+
+With **Group by: Workspace** and **Order by: Last updated** (the default), the Workspace sections themselves now rank by their newest session, so a project you prompted 30 seconds ago rises above one untouched for weeks instead of staying wherever manual order put it. A Workspace showing no session follows every Workspace that shows one, and the Ungrouped bucket stays last. Section rows keep their drag handle in **Manual** order only, where the arrangement is yours to make; Last updated derives it from session activity.
+
+</details>
+
+<details>
+<summary><b>Failed turns retry three times, then show a red dot on the session</b> — click to expand</summary>
+
+A model request that fails on a transient error — a lost connection, a rate limit, a 5xx, an idle timeout, or a degenerate empty completion — now waits **5 seconds**, then **60 seconds**, then **5 minutes** before giving up, instead of the previous five sub-second retries. The waits are configurable per provider: set `retryPolicy.retryDelaysMs` on a `llm-deepseek` or `llm-pi-ai` route in your profile's `cordis.yml` (or the Web Models page settings) to replace the schedule, `maxRetries` to use fewer of its entries, or `retryPolicy.backoff` to restore the exponential ramp. Retries are unchanged in kind: each one re-runs the failed step inside the same turn, and the `llm/retry` events stay in the session log.
+
+Failures a retry cannot fix are no longer retried at all. A connection the endpoint **refuses** — a stopped or crashed local server, or a torn-down model — now reports `CONNECTION_REFUSED` and fails immediately rather than burning six minutes of backoff; a model the endpoint does not serve fails as `INVALID_REQUEST`/`HTTP_404`, which was already outside the retryable set.
+
+When the retries are exhausted, the sidebar session row shows a **red dot labelled Failed**, so a session that died while you were looking elsewhere is visible at a glance. The fact is folded from the session log, so it survives a reload, and the next successful turn clears it. See the [retry executor](packages/llm/llm-retry/README.md) and [workspace browser](packages/client/ui-workspace/README.md) references.
+
+</details>
+
+<details>
 <summary><b>On-demand skill category catalogs (`skill-catalog-buckets`)</b> — click to expand</summary>
 
 Reduces the initial skill context by replacing the full skill list with compact, user-configurable category catalogs. The model calls the `skill_catalog` tool to list names and summaries one category (`aws`, `mcp`, `reviews`, `security`, plus `other`) at a time with paginated results, then loads full instructions with `skill`.

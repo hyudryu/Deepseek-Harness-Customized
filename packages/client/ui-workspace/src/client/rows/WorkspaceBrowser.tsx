@@ -355,12 +355,18 @@ function SessionTree({
   const groups = useMemo(
     () => deriveGroups(list, orderedWorkspaces, archivedSessionIds, pendingInteractions, {
       expandedGroups,
+      // Last updated ranks Workspace sections by their newest visible Session
+      // as well as the rows inside them.
+      groupOrder: orderBy === 'updated' ? 'recency' : 'host',
       ...(sessionOrderByAccount[UNGROUPED_KEY] === undefined
         ? {}
         : { ungroupedOrder: sessionOrderByAccount[UNGROUPED_KEY] }),
     }),
-    [list, orderedWorkspaces, archivedSessionIds, pendingInteractions, expandedGroups, sessionOrderByAccount],
+    [list, orderedWorkspaces, archivedSessionIds, pendingInteractions, expandedGroups, sessionOrderByAccount, orderBy],
   )
+  // Last updated derives the section order, so the durable Workspace account
+  // has nothing to arrange there and the row offers no drag handle.
+  const workspaceOrderIsManual = orderBy === 'manual'
   useEffect(() => {
     if (revealGroup === undefined || groupExpansion[revealGroup] === true) return
     setGroupExpanded(revealGroup, true)
@@ -537,7 +543,7 @@ function SessionTree({
                     startSession(group.workspaceId)
                   }
                 }}
-                drag={workspaceDragProps}
+                drag={workspaceOrderIsManual ? workspaceDragProps : undefined}
                 actions={group.workspaceId === undefined
                   ? undefined
                   : {
