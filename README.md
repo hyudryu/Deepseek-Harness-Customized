@@ -293,6 +293,30 @@ Every figure comes from the session log's own event timestamps, so the report an
 
 </details>
 
+#### 9. `dsh-project-system-prompt`
+
+<details>
+<summary><b>Project-level system prompt override</b> — click to expand</summary>
+
+Replaces the system prompt for every session in one project, so a repository can carry its own agent instructions instead of sharing the deployment's.
+
+Each project row in the sidebar gains a **System prompt override…** item on its 3-dots menu. The editor's field holds that project's saved prompt; saving non-empty text makes it the entire system prompt for sessions whose working directory is that project, and an empty field removes the override. **Restore DeepSeek default** copies the prompt the deployment would otherwise assemble — prompt variables already interpolated — into the field, so an override starts from the shipped text rather than a blank page.
+
+The override is a plain-text file at `<project>/.dsh/system-prompt.md`, so it can be committed and reviewed beside the code it applies to. The replacement is applied on the `system-prompt/assemble` waterfall, which runs on every model step: it takes effect on the next step with no session restart, and the Chat transcript's system-prompt row shows the override text. Tool schemas, runtime contexts, and prompt variables still assemble normally, so the model's tool set is unchanged.
+
+Because an override replaces the whole prompt, it also drops the deployment's own persona and per-tool guidance sections; start from **Restore DeepSeek default** to keep them. A composition that registers a `complete` prompt section still wins over an override. `/compact` does not interact with it: compaction replaces a span of the message surface, while the system prompt is re-assembled each step.
+
+Install it with the custom-plugin installer, then add the bundle to your profile:
+
+```sh
+pnpm run install:custom-plugins
+pnpm dsh plugin --profile web add "./Custom Plugins/project-system-prompt"
+```
+
+See the [bundle README](<Custom Plugins/project-system-prompt/README.md>) for the storage path, the `promptFile`/`maxBytes`/`root` config fields, and the known limitations.
+
+</details>
+
 ## Developer preview
 
 DeepSeek Harness is in _developer preview_ and iterating rapidly. **THERE WILL BE COMPATIBILITY-BREAKING CHANGES.**
