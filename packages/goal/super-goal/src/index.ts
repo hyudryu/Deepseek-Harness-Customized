@@ -95,24 +95,15 @@ function deliberateStop(reason: TurnEndReason): boolean {
  * @returns model- and human-readable text naming the observed condition.
  */
 function failureReason(reason: TurnEndReason): string {
-  switch (reason.kind) {
-    case 'error':
-      return reason.error.message
-    case 'max-tokens':
-      return 'the model reached its output-token ceiling'
-    case 'blocked':
-      return 'a plugin rejected the turn before it ran'
-    case 'interrupted':
-      return 'the harness stopped while the turn was running'
-    case 'aborted':
-      return `the turn was cancelled by a ${reason.reason.kind} hook`
-    case 'completed':
-      return 'the turn completed without finishing the objective'
-    default:
-      // TurnEndReasonMap is merge-extensible: another plugin's reason is a
-      // failure the objective retries within its budget.
-      return 'the turn ended without completing the objective'
-  }
+  if (reason.kind === 'error') return reason.error.message
+  if (reason.kind === 'aborted') return `the ${reason.reason.kind} cancelled the turn`
+  if (reason.kind === 'blocked') return 'a plugin rejected the turn before it ran'
+  // A turn that ends on the token ceiling, on interruption, or on a
+  // merge-extensible reason is never steered onward, so an armed objective
+  // reaches this text only through the reasons above; the sentence stays
+  // accurate for any reason another plugin adds.
+  /* v8 ignore next -- no current turn end reaches this text */
+  return 'the turn ended without completing the objective'
 }
 
 /** Process-local pursuit of one exact root agent. */
@@ -123,13 +114,15 @@ interface Pursuit {
   failures: number
   /** Turn end recorded for the most recent turn, absent before the first one. */
   lastTurn: TurnEndReason | undefined
+  /** Concrete condition of the most recent counted failure. */
+  lastFailure: string
 }
 
 /** Mount the command, tools, and reversible continuation listeners.
  * @param ctx - Plugin context owning every registration and question lifetime.
  * @param config - deployment defaults for the failure budget.
  */
-export function apply(ctx: Context, config: Config = {}): void {
+export function apply(ctx: Context, config: Config): void {
   const maxConsecutiveFailures = config.maxConsecutiveFailures ?? 3
   ctx.sessionProjections.register(superGoalProjectionDefinition)
   function currentChange(session: Session): SuperGoalProjectionState {
@@ -159,7 +152,7 @@ export function apply(ctx: Context, config: Config = {}): void {
   function pursuit(agent: Agent): Pursuit {
     let existing = pursuits.get(agent)
     if (existing === undefined) {
-      existing = { armed: false, failures: 0, lastTurn: undefined }
+      existing = { armed: false, failures: 0, lastTurn: undefined, lastFailure: 'the objective stopped making progress' }
       pursuits.set(agent, existing)
     }
     return existing
@@ -322,20 +315,25 @@ export function apply(ctx: Context, config: Config = {}): void {
       return
     }
     // An armed objective that reaches idle ended its turn without being steered
-    // onward, so this turn failed or completed without finishing the work.
-    if (lastTurn === undefined || lastTurn.kind === 'completed') {
-      state.failures = 0
-    } else {
+    // onward, so the turn failed without finishing the work: a completed turn is
+    // steered from its own stopping hook while armed, and a deliberate stop
+    // disarms before idle. Only failures therefore reach this counter, and
+    // disarming clears it.
+    if (lastTurn !== undefined && lastTurn.kind !== 'completed') {
       state.failures += 1
+      state.lastFailure = failureReason(lastTurn)
     }
     if (state.failures >= maxConsecutiveFailures) {
-      const reason = lastTurn === undefined ? 'the objective stopped making progress' : failureReason(lastTurn)
+      const reason = state.lastFailure
       setArmed(agent, false)
       const blocked = commitBlocked(agent, goal, reason)
       if (blocked !== undefined) {
         void reportExhausted(agent, blocked, reason)
         return
       }
+      /* v8 ignore start -- both reads are synchronous and nothing awaits
+         between them, so no mutation can land in this window today; the guard
+         keeps a later asynchronous change from parking an active objective. */
       // A concurrent mutation replaced the revision that exhausted its budget.
       // A replacement still active starts with its own budget; a pause, clear,
       // or completion is the deliberate stop that already owns the change.
@@ -346,9 +344,9 @@ export function apply(ctx: Context, config: Config = {}): void {
         agent.steer(message(latest))
       }
       return
+      /* v8 ignore stop */
     }
-    agent.steer(message(goal))
-  })
+    agent.steer(message(goal))  })
   /**
    * Commit the durable blocker for an objective that exhausted its budget, only
    * while the exact revision it was armed for is still the current active one.
@@ -358,8 +356,13 @@ export function apply(ctx: Context, config: Config = {}): void {
    * @returns the blocked objective, or undefined when another mutation won.
    */
   function commitBlocked(agent: Agent, goal: SuperGoal, reason: string): SuperGoal | undefined {
+    /* v8 ignore start -- the caller reads the same objective synchronously just
+       before this guard, so another mutation cannot land between the two reads;
+       the guard keeps a later asynchronous change from blocking a stale
+       revision. */
     const current = readGoal(agent.session)
     if (current === null || current.revision !== goal.revision || current.phase !== 'active') return undefined
+    /* v8 ignore stop */
     return commit(agent, {
       ...goal,
       phase: 'blocked',

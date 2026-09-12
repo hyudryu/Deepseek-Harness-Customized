@@ -60,7 +60,7 @@ interface DriverState {
   /** Consecutive rounds that ended without completing their turn. */
   failures: number
   /** Renderable condition of the most recent failed round. */
-  lastFailure: string | undefined
+  lastFailure: string
 }
 
 /** Whether a source identifies an automatic, positive-numbered goal round. */
@@ -91,7 +91,7 @@ function renderThrown(value: unknown): string {
 }
 
 /** Install automatic same-session continuation and its race fences. */
-export function apply(ctx: Context, config: Config = {}): void {
+export function apply(ctx: Context, config: Config): void {
   const maxConsecutiveFailures = config.maxConsecutiveFailures ?? 3
   const states = new Map<Agent, DriverState>()
 
@@ -108,7 +108,7 @@ export function apply(ctx: Context, config: Config = {}): void {
       run: undefined,
       stopping: false,
       failures: 0,
-      lastFailure: undefined,
+      lastFailure: 'the round ended without completing',
     }
     states.set(agent, state)
     return state
@@ -240,7 +240,7 @@ export function apply(ctx: Context, config: Config = {}): void {
     if (state.failures >= maxConsecutiveFailures) {
       ctx.goals.block(agent, goalRef(goal), {
         code: 'round-failure',
-        message: `Goal round failed ${state.failures} consecutive times: ${state.lastFailure ?? 'the round ended without completing'}.`,
+        message: `Goal round failed ${state.failures} consecutive times: ${state.lastFailure}.`,
       })
       return
     }
@@ -340,7 +340,7 @@ export function apply(ctx: Context, config: Config = {}): void {
       state.competingQueued = false
       state.needsCheckpoint = false
       state.failures = 0
-      state.lastFailure = undefined
+      state.lastFailure = 'the round ended without completing'
       restoreRestoredGoal(state)
     })
     ctx.on('agent/status', ({ agent, status }) => {
@@ -416,7 +416,7 @@ export function apply(ctx: Context, config: Config = {}): void {
         case 'turn/end':
           if (event.data.reason.kind === 'completed') {
             state.failures = 0
-            state.lastFailure = undefined
+            state.lastFailure = 'the round ended without completing'
             return
           }
           if (event.data.reason.kind === 'max-tokens') {

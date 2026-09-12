@@ -237,6 +237,23 @@ describe('GoalService creation and replay', () => {
     expect(ctx.bail('goal/activation', agent)).not.toBe(true)
   })
 
+  it('reports a failed activation query instead of throwing into its caller', async () => {
+    const { ctx, agent } = await harness()
+    const warn = vi.spyOn(ctx.logger, 'warn').mockImplementation(() => {})
+    ctx.goals.create(agent, { objective: 'unreadable authority' })
+    const stateOf = vi.spyOn(ctx.sessionProjections, 'stateOf').mockImplementation(() => { throw new Error('projection is unreadable') })
+
+    expect(ctx.bail('goal/activation', agent)).not.toBe(true)
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining('activation query failed'))
+
+    // A thrown non-Error is reported the same way rather than escaping.
+    stateOf.mockImplementation(() => { throw 'unreadable without an Error' })
+    expect(ctx.bail('goal/activation', agent)).not.toBe(true)
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining('unreadable without an Error'))
+
+    stateOf.mockRestore()
+  })
+
   it('lets a lifecycle owner disarm without writing a durable revision', async () => {
     const { ctx, agent, session } = await harness()
     const goal = ctx.goals.create(agent, { objective: 'survive driver reload' })
