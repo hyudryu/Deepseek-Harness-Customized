@@ -53,7 +53,7 @@ Use `assertNever(value, context?)` in the default branch of a closed discriminat
 <details>
 <summary>Implementation internals — click to expand</summary>
 
-The JSON validator uses an explicit work stack and tracks only the active ancestor chain, so deeply nested values do not consume the JavaScript call stack and repeated non-cyclic references remain valid. Snapshot writes use own data properties, including for names such as `__proto__`. The other helpers derive their result only from their arguments and retain no state between calls.
+The JSON validator uses an explicit work stack and tracks only the active ancestor chain, so deeply nested values do not consume the JavaScript call stack and repeated non-cyclic references remain valid. Snapshot writes use own data properties, including for names such as `__proto__`. Containers are accepted only when their prototype is backed by that realm's native constructor, which is recognized from the constructor's `[native code]` marker rather than from its exact source layout: V8 writes that marker on one line and JavaScriptCore (Safari, and every browser on iOS) spreads it across lines, so matching one engine's text would reject every plain object on the other. The other helpers derive their result only from their arguments and retain no state between calls.
 
 ### Source map
 

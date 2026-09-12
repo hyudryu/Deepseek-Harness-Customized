@@ -14,6 +14,19 @@ export function assertNever(value: never, context?: string): never {
   throw new Error(`unreachable variant${context ? ` in ${context}` : ''}: ${rendered}`)
 }
 
+/**
+ * Whether one constructor's source text carries this engine's native marker.
+ * Engines do not agree on that text's layout: V8 writes
+ * `function Object() { [native code] }` on one line while JavaScriptCore —
+ * Safari and every browser on iOS — spreads the body across lines. Only the
+ * marker is load-bearing here; the caller's name and prototype identity checks
+ * stay authoritative, and a forged function named `Object` still fails because
+ * its body is real source.
+ */
+function isNativeConstructorSource(source: string): boolean {
+  return /^function\s+[A-Za-z_$][\w$]*\s*\(\s*\)\s*\{\s*\[native code\]\s*\}$/u.test(source)
+}
+
 /** Whether a realm-owned intrinsic prototype is backed by its native constructor. */
 function hasIntrinsicConstructor(prototype: object, name: 'Array' | 'Object'): boolean {
   const descriptor = Object.getOwnPropertyDescriptor(prototype, 'constructor')
@@ -22,7 +35,7 @@ function hasIntrinsicConstructor(prototype: object, name: 'Array' | 'Object'): b
   try {
     return constructor.name === name
       && constructor.prototype === prototype
-      && Function.prototype.toString.call(constructor) === `function ${name}() { [native code] }`
+      && isNativeConstructorSource(Function.prototype.toString.call(constructor))
   } catch {
     return false
   }

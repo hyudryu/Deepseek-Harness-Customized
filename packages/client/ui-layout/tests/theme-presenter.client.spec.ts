@@ -24,6 +24,7 @@ function themeColorMeta(): HTMLMetaElement | null {
 beforeEach(() => {
   clearThemePresentation()
   document.documentElement.style.removeProperty('color-scheme')
+  document.documentElement.style.removeProperty('background-color')
   document.body.removeAttribute(DARK_ATTRIBUTE)
   document.body.removeAttribute('style')
   const style = document.createElement('style')
@@ -44,6 +45,7 @@ describe('ThemePresenter', () => {
     expect(document.documentElement.style.colorScheme).toBe('light')
     expect(document.body.hasAttribute(DARK_ATTRIBUTE)).toBe(false)
     expect(themeColorMeta()?.content).toBe(LIGHT_THEME_COLOR)
+    expect(document.documentElement.style.backgroundColor).toBe(LIGHT_THEME_COLOR)
   })
 
   it('dark scheme sets root color-scheme, the attribute, and metadata; switching to light updates one node', () => {
@@ -53,11 +55,15 @@ describe('ThemePresenter', () => {
     expect(document.documentElement.style.colorScheme).toBe('dark')
     expect(document.body.hasAttribute(DARK_ATTRIBUTE)).toBe(true)
     expect(meta?.content).toBe(DARK_THEME_COLOR)
+    // The canvas outside the frame follows the same palette: iOS paints its
+    // safe-area strips from the root element's background.
+    expect(document.documentElement.style.backgroundColor).toBe(DARK_THEME_COLOR)
     presenter.apply(snapshot('light'))
     expect(document.documentElement.style.colorScheme).toBe('light')
     expect(document.body.hasAttribute(DARK_ATTRIBUTE)).toBe(false)
     expect(themeColorMeta()).toBe(meta)
     expect(meta?.content).toBe(LIGHT_THEME_COLOR)
+    expect(document.documentElement.style.backgroundColor).toBe(LIGHT_THEME_COLOR)
     expect(document.head.querySelectorAll('meta[name="theme-color"]')).toHaveLength(1)
   })
 
@@ -80,17 +86,30 @@ describe('ThemePresenter', () => {
     expect(document.body.style.getPropertyValue('--dsh-content-font-size')).toBe('17px')
   })
 
-  it('dispose removes color-scheme, the attribute, the font-size axis, and every applied variable, sparing foreign inline styles', () => {
+  it('dispose retracts the attribute, the font-size axis, and every applied variable, sparing foreign inline styles', () => {
     document.body.style.setProperty('--foreign', 'kept')
     const presenter = new ThemePresenter()
     presenter.apply(snapshot('dark', { '--dsw-alias-bg': '#111' }))
     const meta = themeColorMeta()
     presenter.dispose()
     expect(document.documentElement.style.colorScheme).toBe('')
+    expect(document.documentElement.style.backgroundColor).toBe('')
     expect(document.body.hasAttribute(DARK_ATTRIBUTE)).toBe(false)
     expect(document.body.style.getPropertyValue('--dsw-alias-bg')).toBe('')
     expect(document.body.style.getPropertyValue('--dsh-content-font-size')).toBe('')
     expect(document.body.style.getPropertyValue('--foreign')).toBe('kept')
     expect(meta?.isConnected).toBe(false)
+  })
+
+  it('keeps a foreign root background across its own writes and restores it at disposal', () => {
+    document.documentElement.style.backgroundColor = 'rgb(9, 9, 9)'
+    const presenter = new ThemePresenter()
+    presenter.apply(snapshot('dark'))
+    expect(document.documentElement.style.backgroundColor).toBe(DARK_THEME_COLOR)
+    presenter.apply(snapshot('light'))
+    expect(document.documentElement.style.backgroundColor).toBe(LIGHT_THEME_COLOR)
+    presenter.dispose()
+    expect(document.documentElement.style.backgroundColor).toBe('rgb(9, 9, 9)')
+    document.documentElement.style.removeProperty('background-color')
   })
 })

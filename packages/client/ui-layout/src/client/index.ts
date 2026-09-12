@@ -119,8 +119,18 @@ export interface ConvOwnerProps {}
 /** Details owner share: empty — sessionId arrives as a framework-standard prop. */
 export interface DetailsOwnerProps {}
 
-/** Browser owner share: empty — sessionId arrives as a framework-standard prop. */
-export interface BrowserOwnerProps {}
+/** Browser owner share: the layout's own reveal transition for the browser column. */
+export interface BrowserOwnerProps {
+  /**
+   * Reveal the browser column for a browser no panel gesture opened. The layout
+   * supplies it at the render site and declines while the column would cover the
+   * conversation (phone widths), so the decision stays with the frame that
+   * renders those columns rather than widening the `ctx.layout` service face.
+   */
+  reveal: () => void
+  /** Whether the frame currently renders the phone layout, so the occupant can re-ask after leaving it. */
+  phone: boolean
+}
 
 /** Required services (cordis fiber inject — the loader passes all module exports as an object plugin). */
 export const inject = ['slots', 'theme', 'locale']

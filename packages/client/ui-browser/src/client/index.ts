@@ -48,8 +48,6 @@ export interface BrowserInjected {
   selectTab: (tabId: BrowserTabId) => Promise<void>
   /** Close one session-owned tab. */
   closeTab: (tabId: BrowserTabId) => Promise<void>
-  /** Reveal the panel for a browser that opened without a panel gesture. */
-  openPanel: () => void
   /** Forward one pointer, wheel, or keyboard event to the session's page. */
   sendInput: (event: BrowserInputEvent) => Promise<void>
   /** Close the right-side browser panel. */
@@ -141,7 +139,6 @@ export function apply(ctx: ClientContext): void {
           const result = await ctx.remote.browser.closeTab({ sessionId, tabId })
           if (!result.ok) throw new Error(result.error.message)
         },
-        openPanel: () => { ctx.layout.openBrowser() },
         sendInput: async (event) => {
           const result = await ctx.remote.browser.input({ sessionId, event })
           if (!result.ok) throw new Error(result.error.message)

@@ -55,9 +55,9 @@ function panel(overrides: Partial<BrowserPanelProps> = {}) {
   const observable = new BrowserState(() => source.stream)
   const useBrowser: BrowserPanelProps['useBrowser'] = selector => selector(useSyncExternalStore(observable.subscribe, observable.getSnapshot))
   const props = {
-    t, useBrowser, start: vi.fn(async () => {}), navigate: vi.fn(async () => {}),
+    t, useBrowser, reveal: vi.fn(), phone: false, start: vi.fn(async () => {}), navigate: vi.fn(async () => {}),
     createTab: vi.fn(async () => {}), selectTab: vi.fn(async () => {}), closeTab: vi.fn(async () => {}),
-    stop: vi.fn(async () => {}), openPanel: vi.fn(), sendInput: vi.fn(async () => {}), closePanel: vi.fn(), ...overrides,
+    stop: vi.fn(async () => {}), sendInput: vi.fn(async () => {}), closePanel: vi.fn(), ...overrides,
   }
   // This component consumes none of the renderer's global/session selector hooks.
   const view = render(<BrowserPanel {...props as BrowserPanelProps} />)
@@ -358,8 +358,8 @@ it.each([false, true])('opens and controls a Session through registered callback
     injected.closePanel()
     registrations.get('browser.toggle')!(sessionId).closePanel()
     expect(closeBrowser).toHaveBeenCalledTimes(2)
-    injected.openPanel()
-    expect(openBrowser).toHaveBeenCalledTimes(3)
+    // The reveal rides the layout's owner props, not this inject face.
+    expect(openBrowser).toHaveBeenCalledTimes(2)
     unsubscribe()
     await ctx.fiber.dispose()
     if (cleanupFails) expect(reported).toHaveBeenCalledWith(expect.objectContaining({ message: 'Browser subscriptions failed to close' }))
@@ -456,14 +456,28 @@ it('shows selected tabs and delegates creation, keyboard selection, and close wi
 
 it('reveals the panel once per browser open transition, including opens the agent started', async () => {
   const fixture = panel()
-  expect(fixture.props.openPanel).not.toHaveBeenCalled()
+  expect(fixture.props.reveal).not.toHaveBeenCalled()
   await act(async () => { fixture.push({ open: true, url: 'about:blank', title: '', actions: [] }) })
-  expect(fixture.props.openPanel).toHaveBeenCalledTimes(1)
+  expect(fixture.props.reveal).toHaveBeenCalledTimes(1)
   await act(async () => { fixture.push({ open: true, url: 'https://example.test/', title: 'Next', actions: [] }) })
-  expect(fixture.props.openPanel).toHaveBeenCalledTimes(1)
+  expect(fixture.props.reveal).toHaveBeenCalledTimes(1)
   await act(async () => { fixture.push({ open: false, url: '', title: '', actions: [] }) })
   await act(async () => { fixture.push({ open: true, url: 'about:blank', title: '', actions: [] }) })
-  expect(fixture.props.openPanel).toHaveBeenCalledTimes(2)
+  expect(fixture.props.reveal).toHaveBeenCalledTimes(2)
+})
+
+it('re-asks for the reveal after leaving the phone layout, and only then', async () => {
+  const fixture = panel({ phone: true })
+  await act(async () => { fixture.push({ open: true, url: 'about:blank', title: '', actions: [] }) })
+  // The opening transition asks even on the phone; the layout decides.
+  expect(fixture.props.reveal).toHaveBeenCalledTimes(1)
+  await act(async () => {
+    fixture.rerender(<BrowserPanel {...{ ...fixture.props, phone: false } as BrowserPanelProps} />)
+  })
+  expect(fixture.props.reveal).toHaveBeenCalledTimes(2)
+  // A settled open state does not ask again while the frame stays wide.
+  await act(async () => { fixture.push({ open: true, url: 'https://example.test/', title: 'Next', actions: [] }) })
+  expect(fixture.props.reveal).toHaveBeenCalledTimes(2)
 })
 
 it('forwards pointer, wheel, and keyboard input in page coordinates', async () => {

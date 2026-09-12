@@ -33,7 +33,15 @@ describe('createLayoutStore', () => {
   })
   it('initializes the sidebar at its default width, details closed, wide viewport assumed', () => {
     const { store } = createLayoutStore().create()
-    expect(store.getSnapshot()).toEqual({ sidebar: SIDEBAR_DEFAULT, details: 0, browser: 0, narrow: false, narrowExpanded: false })
+    expect(store.getSnapshot()).toEqual({
+      sidebar: SIDEBAR_DEFAULT,
+      details: 0,
+      browser: 0,
+      narrow: false,
+      narrowExpanded: false,
+      phone: false,
+      browserRevealed: false,
+    })
   })
 
   it('each create() is an independent instance (factory is not a singleton)', () => {
@@ -69,7 +77,15 @@ describe('createLayoutStore', () => {
     actions.setSidebar(400)
     actions.setNarrow(true)
     actions.toggleSidebar()
-    expect(store.getSnapshot()).toEqual({ sidebar: 400, details: 0, browser: 0, narrow: true, narrowExpanded: true })
+    expect(store.getSnapshot()).toEqual({
+      sidebar: 400,
+      details: 0,
+      browser: 0,
+      narrow: true,
+      narrowExpanded: true,
+      phone: false,
+      browserRevealed: false,
+    })
     actions.toggleSidebar()
     expect(store.getSnapshot().narrowExpanded).toBe(false)
     expect(store.getSnapshot().sidebar).toBe(400)
@@ -115,7 +131,46 @@ describe('createLayoutStore', () => {
       browser: 0,
       narrow: false,
       narrowExpanded: false,
+      phone: false,
+      browserRevealed: false,
     })
+  })
+
+  it('reveals an agent-opened browser only off the phone layout, keeping an open width', () => {
+    const { store, actions } = createLayoutStore().create()
+    actions.setPhone(true)
+    actions.setPhone(true)
+    expect(store.getSnapshot().phone).toBe(true)
+    actions.revealBrowser()
+    expect(store.getSnapshot().browser).toBe(0)
+    actions.setPhone(false)
+    actions.revealBrowser()
+    expect(store.getSnapshot().browser).toBe(BROWSER_DEFAULT)
+    expect(store.getSnapshot().browserRevealed).toBe(true)
+    // A reveal never rewrites the width of a column that is already open.
+    actions.setBrowser(600)
+    actions.revealBrowser()
+    expect(store.getSnapshot().browser).toBe(600)
+  })
+
+  it('closes an automatically revealed column when the frame enters the phone layout', () => {
+    const { store, actions } = createLayoutStore().create()
+    actions.revealBrowser()
+    expect(store.getSnapshot().browserRevealed).toBe(true)
+    actions.setPhone(true)
+    expect(store.getSnapshot()).toMatchObject({ phone: true, browser: 0, browserRevealed: false })
+  })
+
+  it('keeps a panel the user opened across the phone breakpoint', () => {
+    const { store, actions } = createLayoutStore().create()
+    actions.openBrowser()
+    expect(store.getSnapshot().browserRevealed).toBe(false)
+    actions.setPhone(true)
+    expect(store.getSnapshot().browser).toBe(BROWSER_DEFAULT)
+    // An explicit close clears the automatic-reveal flag too.
+    actions.revealBrowser()
+    actions.closeBrowser()
+    expect(store.getSnapshot()).toMatchObject({ browser: 0, browserRevealed: false })
   })
 
   it('clamps browser drag widths and preserves an open width until explicitly closed', () => {

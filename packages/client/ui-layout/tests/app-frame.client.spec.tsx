@@ -15,7 +15,7 @@ import { act, cleanup, fireEvent, render } from '@testing-library/react'
 import { useSyncExternalStore } from 'react'
 import { AppFrame } from '@deepseek-ai/dsh-client-ui-layout/src/client/AppFrame.tsx'
 import type { AppFrameProps } from '@deepseek-ai/dsh-client-ui-layout/src/client/AppFrame.tsx'
-import { SIDEBAR_COLLAPSED } from '@deepseek-ai/dsh-client-ui-layout/src/client/columns.ts'
+import { PHONE_MAX_WIDTH, SIDEBAR_COLLAPSED } from '@deepseek-ai/dsh-client-ui-layout/src/client/columns.ts'
 import { createLayoutStore } from '@deepseek-ai/dsh-client-ui-layout/src/client/stores.ts'
 import type { SessionListState } from '@deepseek-ai/dsh-api-session-controller/client'
 import type { WorkspaceSnapshot } from '@deepseek-ai/dsh-api-workspace-controller/client'
@@ -394,6 +394,16 @@ describe('AppFrame — narrow-viewport auto-collapse', () => {
     frameWidth = 1920
     act(() => { fireResize?.(); vi.advanceTimersByTime(20) })
     expect(tracks(frame)).toEqual([400, 0, 0])
+  })
+
+  it('mirrors the phone reading at and below the phone breakpoint', () => {
+    frameWidth = PHONE_MAX_WIDTH
+    const { frame, instance } = mountFrame()
+    expect(instance.getSnapshot().phone).toBe(true)
+    frameWidth = PHONE_MAX_WIDTH + 1
+    act(() => { fireResize?.(); vi.advanceTimersByTime(20) })
+    expect(instance.getSnapshot().phone).toBe(false)
+    expect(frame.hasAttribute('data-sidebar-collapsed')).toBe(true)
   })
 })
 

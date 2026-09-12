@@ -30,9 +30,13 @@ const intrinsicObjectKeys = Object.keys
 const intrinsicObjectPrototype = Object.prototype
 const intrinsicObjectPropertyIsEnumerable = Reflect.get(intrinsicObjectPrototype, 'propertyIsEnumerable') as IntrinsicCallable
 const intrinsicReflectOwnKeys = Reflect.ownKeys
+const intrinsicRegExpTest = Reflect.get(RegExp.prototype, 'test') as IntrinsicCallable
 const intrinsicSetAdd = Reflect.get(Set.prototype, 'add') as IntrinsicCallable
 const intrinsicSetDelete = Reflect.get(Set.prototype, 'delete') as IntrinsicCallable
 const intrinsicSetHas = Reflect.get(Set.prototype, 'has') as IntrinsicCallable
+
+/** Native-constructor source marker (see {@link isNativeConstructorSource}). */
+const nativeConstructorMarker = /^function\s+([A-Za-z_$][\w$]*)\s*\(\s*\)\s*\{\s*\[native code\]\s*\}$/u
 
 /** Build a data descriptor that cannot inherit model-defined accessor fields. */
 function dataDescriptor(value: unknown): PropertyDescriptor {
@@ -79,6 +83,20 @@ function setDelete<T>(target: Set<T>, value: T): void {
   intrinsicReflectApply(intrinsicSetDelete, target, [value])
 }
 
+/**
+ * Whether one constructor's source text carries this engine's native marker,
+ * matching the canonical helper in `@deepseek-ai/dsh-util-values`. Engines do
+ * not agree on that text's layout: V8 writes it on one line while JavaScriptCore
+ * — Safari and every browser on iOS — spreads the body across lines, so a
+ * literal comparison would reject every plain object there. Only the marker is
+ * load-bearing; the caller's name and prototype identity checks stay
+ * authoritative, and a forged function named `Object` still fails because its
+ * body is real source.
+ */
+function isNativeConstructorSource(source: unknown): boolean {
+  return intrinsicReflectApply(intrinsicRegExpTest, nativeConstructorMarker, [source]) as boolean
+}
+
 /** Whether a realm-owned intrinsic prototype is backed by its native constructor. */
 function hasIntrinsicConstructor(prototype: object, name: 'Array' | 'Object'): boolean {
   const descriptor = intrinsicObjectGetOwnPropertyDescriptor(prototype, 'constructor')
@@ -87,7 +105,7 @@ function hasIntrinsicConstructor(prototype: object, name: 'Array' | 'Object'): b
   try {
     return constructor.name === name
       && constructor.prototype === prototype
-      && intrinsicReflectApply(intrinsicFunctionToString, constructor, []) === `function ${name}() { [native code] }`
+      && isNativeConstructorSource(intrinsicReflectApply(intrinsicFunctionToString, constructor, []))
   } catch {
     return false
   }
