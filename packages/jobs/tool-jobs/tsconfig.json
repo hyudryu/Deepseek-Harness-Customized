@@ -30,6 +30,12 @@
       "path": "../../core/tools"
     },
     {
+      "path": "../../goal/goal"
+    },
+    {
+      "path": "../../goal/super-goal"
+    },
+    {
       "path": "../jobs"
     }
   ]

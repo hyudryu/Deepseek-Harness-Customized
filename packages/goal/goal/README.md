@@ -60,7 +60,7 @@ A goal moves through four durable phases — `active`, `paused`, `blocked`, `com
 | `create` | Starts an active goal with an objective and round cap |
 | `edit` | Changes the objective and/or round cap without changing the phase |
 | `pause` | Stops automatic continuation and keeps the state |
-| `resume` | Restarts continuation; also rearms an active goal after session resume or fork |
+| `resume` | Restarts continuation; also rearms an active goal after a fork |
 | `complete` | Marks the goal achieved and stops continuation |
 | `block` | Records a stable blocker code and explanation |
 | `clear` | Removes the current goal; its history stays in the session log |
@@ -69,7 +69,7 @@ Pause, completion, blocking, and clear all disarm continuation. Blocking is the 
 
 ### What survives and what does not
 
-Every accepted change is recorded durably in the session log — the only store of goal state — so goal state never depends on transient message delivery. After session resume or fork, the goal, its phase, its revisions, and its admitted-round count are all still there. Automatic continuation is the exception: an active goal is disarmed after any session-start edge, so the agent does not continue on its own until someone explicitly resumes it.
+Every accepted change is recorded durably in the session log — the only store of goal state — so goal state never depends on transient message delivery. After session resume or fork, the goal, its phase, its revisions, and its admitted-round count are all still there. Automatic continuation is the exception: a `fork` replays the objective with continuation disarmed, so the agent does not continue on its own until someone explicitly resumes it. A resumed session instead rearms its own active goal through a durable `resume` mutation, which advances the revision and therefore rejects any ref a consumer read before the restart ([decision](../../../.agents/notes/implemented/feature/2026-09-11-continuation-survives-restart-and-failure.md)).
 
 ### Observing a goal
 
@@ -96,7 +96,8 @@ This section explains how the service realizes the behavior above; the observabl
 
 - **Event-sourced state.** Every mutation appends a durable `goal/change` event (version 1) carrying the complete post-mutation snapshot; `clear` writes a revisioned tombstone. The session log is the only durable authority.
 - **Compare-and-set mutations.** `ctx.goals` accepts only the exact live `Agent` registered under its id. `get()` returns a detached `GoalView`; mutations take a `GoalRef { id, revision }` and reject stale refs. Creation resolves the deployment default internally before committing.
-- **Activation is process-local.** `armed` and `disarmed` live in a per-session cache and are never persisted. A fresh cache and every `agent/session-start` edge disarm continuation even when replay finds an active durable phase; `disarm()` removes authority without writing a revision or emitting a mutation.
+- **Activation is process-local.** `armed` and `disarmed` live in a per-session cache and are never persisted. `disarm()` removes authority without writing a revision or emitting a mutation, and a fresh cache starts disarmed even when replay finds an active durable phase. Continuing after a restore is a consumer decision: `dsh-goal-round-driver` records the durable `resume` that arms a restored non-forked goal.
+- **Standing authority is queryable.** The service answers the `goal/activation` bail event with `true` for one exact agent whose goal is armed, and with nothing otherwise. A consumer that decides whether work may open a turn on an idle agent can therefore read the authority without assuming a goal service is mounted.
 - **Strict replay.** The fold derives lifecycle mutations only from `goal/change` and rejects malformed shapes, discontinuous revisions, illegal phase transitions, non-monotonic per-goal timestamps, and non-sequential admitted rounds. Positive rounds advance only on admitted goal-sourced `user/message` events, and mutation timestamps clamp against the preceding update when wall time moves backward.
 - **Projection unit.** The package requires the projection registry and registers a strict `goal` unit. Its host state retains replay validation data and the first failure, while its client view exposes the latest valid whole goal or `null`; `GoalService` rejects access after a retained replay failure.
 

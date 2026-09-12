@@ -789,7 +789,7 @@ Source: [`packages/subagent/tool-subagent/src/model-selection-state.ts:17`](../p
 'super-goal/change': SuperGoalChange
 ```
 
-Source: [`packages/goal/super-goal/src/index.ts:17`](../packages/goal/super-goal/src/index.ts)
+Source: [`packages/goal/super-goal/src/index.ts:18`](../packages/goal/super-goal/src/index.ts)
 
 ### `team/*`
 

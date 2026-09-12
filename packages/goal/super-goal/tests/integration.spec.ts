@@ -7,8 +7,8 @@ import { mountAgentLoopTestDependencies } from '@deepseek-ai/dsh-agent-loop-test
 import SessionProjectionRegistry from '@deepseek-ai/dsh-session-projection'
 import CommandRuntime from '@deepseek-ai/dsh-commands'
 import UserQuestionService, { type AskUserQuestionAnswer, type AskUserQuestionRequest } from '@deepseek-ai/dsh-user-questions'
-import { Session, SessionId } from '@deepseek-ai/dsh-session'
-import { createUserMessage, ToolCallId } from '@deepseek-ai/dsh-llm'
+import { Session, SessionId, SessionLogOffset } from '@deepseek-ai/dsh-session'
+import { createUserMessage, LlmError, ToolCallId } from '@deepseek-ai/dsh-llm'
 import * as SuperGoalPlugin from '../src/index.ts'
 import { readSuperGoal } from '../src/index.ts'
 import { MockAdapter, textResponse, toolCallResponse } from '../../../core/agent-loop/tests/mock-adapter.ts'
@@ -387,9 +387,9 @@ describe('SuperGoal through the real loop', () => {
     expect(readSuperGoal(agent.session)).toBeNull()
   })
 
-  it('restores an unfinished objective without starting work until explicitly resumed', async () => {
-    const adapter = new MockAdapter([textResponse('Unrelated reply.'),
-      toolCallResponse('complete', 'complete_super_goal', { revision: 2, evidence: 'Resumed acceptance verified.' }),
+  it('resumes a restored objective when its session is reopened', async () => {
+    const adapter = new MockAdapter([
+      toolCallResponse('complete', 'complete_super_goal', { revision: 1, evidence: 'Resumed acceptance verified.' }),
       textResponse('Complete.')])
     const { ctx } = await harness(adapter)
     const saved = ctx.sessions.create(SessionId('saved-goal'))
@@ -399,16 +399,43 @@ describe('SuperGoal through the real loop', () => {
       sessionId: SessionId('restored-goal'), seed: [...saved.snapshotEvents()],
       agentOptions: { provider: 'mock', model: 'mock' },
     })
+    await vi.waitFor(() => {
+      expect(readSuperGoal(agent.session)).toMatchObject({ phase: 'complete', revision: 2 })
+    })
+    expect(adapter.requests).toHaveLength(2)
+  })
+
+  it('retries a failed pursuit turn and reports the blocker when the failure repeats', async () => {
+    const failed = () => { throw new LlmError('provider broke', 'SERVER') }
+    const adapter = new MockAdapter([failed, failed, failed])
+    const { ctx, agent } = await harness(adapter)
+    await command(ctx, agent, 'Keep pursuing the acceptance check')
+
+    await vi.waitFor(() => {
+      expect(readSuperGoal(agent.session)).toMatchObject({ phase: 'blocked' })
+    })
+    const blocked = readSuperGoal(agent.session)
+    expect(blocked?.reason).toContain('provider broke')
+    expect(blocked?.choices).toHaveLength(2)
+    expect(adapter.requests).toHaveLength(3)
+    expect(ctx.bail('super-goal/activation', agent.session)).not.toBe(true)
+  })
+
+  it('leaves a seeded objective to the session it was forked from until a human resumes it', async () => {
+    const adapter = new MockAdapter([textResponse('Unrelated reply.')])
+    const { ctx } = await harness(adapter)
+    const saved = ctx.sessions.create(SessionId('saved-goal'))
+    saved.append('super-goal/change', { version: 1, revision: 1,
+      goal: { revision: 1, objective: 'Complete the retained acceptance check', phase: 'active' } })
+    const { agent } = await ctx.agentLoop.createAgent(ctx, {
+      sessionId: SessionId('forked-goal'), seed: [...saved.snapshotEvents()],
+      meta: { parentSession: saved.id, isSeeded: true },
+      inheritedEventCount: SessionLogOffset(saved.seq),
+      agentOptions: { provider: 'mock', model: 'mock' },
+    })
     await agent.whenIdle()
     expect(adapter.requests).toHaveLength(0)
-    const unrelated = idle(ctx, agent)
-    agent.followup(createUserMessage({ content: [{ type: 'text', text: 'An unrelated question' }], source: { kind: 'user' } }))
-    await unrelated
-    expect(adapter.requests).toHaveLength(1)
-    const settled = idle(ctx, agent)
-    await command(ctx, agent, 'resume')
-    await settled
-    expect(readSuperGoal(agent.session)).toMatchObject({ phase: 'complete', revision: 3 })
+    expect(ctx.bail('super-goal/activation', agent.session)).not.toBe(true)
   })
 
   it('clear removes goal schemas from ordinary requests and reinstalls them for a replacement objective', async () => {

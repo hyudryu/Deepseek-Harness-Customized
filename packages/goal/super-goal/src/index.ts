@@ -1,7 +1,8 @@
 /** Persistent long-term objectives and root-agent continuation. @module @deepseek-ai/dsh-super-goal */
 import type { Context } from '@deepseek-ai/cordis'
+import z from '@deepseek-ai/schemastery'
 import type { Agent } from '@deepseek-ai/dsh-agent'
-import type { Session } from '@deepseek-ai/dsh-session'
+import type { Session, SessionEvent, TurnEndReason } from '@deepseek-ai/dsh-session'
 import type {} from '@deepseek-ai/dsh-commands'
 import type {} from '@deepseek-ai/dsh-user-questions'
 import { createUserMessage } from '@deepseek-ai/dsh-llm'
@@ -60,10 +61,76 @@ export function readSuperGoal(session: Session): SuperGoal | null {
 export const name = 'super-goal'
 export const inject = ['agents', 'tools', 'commands', 'userQuestions', 'sessionProjections']
 
+/** Configures how an armed objective absorbs turns that end without progress. */
+export interface Config {
+  /**
+   * Consecutive turns that end without completing work before the objective
+   * reports a durable blocker instead of being retried (default 3).
+   */
+  maxConsecutiveFailures?: number
+}
+
+export const Config: z<Config> = z.object({
+  maxConsecutiveFailures: z.number().min(1).default(3),
+})
+
+/** Turn-end causes that record a human or teardown decision rather than a failure. */
+const DELIBERATE_STOP_CAUSES: readonly string[] = ['user', 'parent', 'disposed', 'legacy']
+
+/**
+ * Whether one turn end ends pursuit by decision instead of by failure. A
+ * merge-extensible cause added by another plugin is treated as a failure, so an
+ * unknown cause retries within the failure budget rather than stopping silently.
+ * @param reason - the turn end reason recorded for the pursuing agent.
+ * @returns whether pursuit must stop for this turn end.
+ */
+function deliberateStop(reason: TurnEndReason): boolean {
+  if (reason.kind !== 'aborted') return false
+  return DELIBERATE_STOP_CAUSES.includes(reason.reason.kind)
+}
+
+/**
+ * Concrete account of a turn that ended without completing work.
+ * @param reason - the recorded turn end reason.
+ * @returns model- and human-readable text naming the observed condition.
+ */
+function failureReason(reason: TurnEndReason): string {
+  switch (reason.kind) {
+    case 'error':
+      return reason.error.message
+    case 'max-tokens':
+      return 'the model reached its output-token ceiling'
+    case 'blocked':
+      return 'a plugin rejected the turn before it ran'
+    case 'interrupted':
+      return 'the harness stopped while the turn was running'
+    case 'aborted':
+      return `the turn was cancelled by a ${reason.reason.kind} hook`
+    case 'completed':
+      return 'the turn completed without finishing the objective'
+    default:
+      // TurnEndReasonMap is merge-extensible: another plugin's reason is a
+      // failure the objective retries within its budget.
+      return 'the turn ended without completing the objective'
+  }
+}
+
+/** Process-local pursuit of one exact root agent. */
+interface Pursuit {
+  /** Whether this agent may continue the objective automatically. */
+  armed: boolean
+  /** Consecutive turns that ended without completing work. */
+  failures: number
+  /** Turn end recorded for the most recent turn, absent before the first one. */
+  lastTurn: TurnEndReason | undefined
+}
+
 /** Mount the command, tools, and reversible continuation listeners.
  * @param ctx - Plugin context owning every registration and question lifetime.
+ * @param config - deployment defaults for the failure budget.
  */
-export function apply(ctx: Context): void {
+export function apply(ctx: Context, config: Config = {}): void {
+  const maxConsecutiveFailures = config.maxConsecutiveFailures ?? 3
   ctx.sessionProjections.register(superGoalProjectionDefinition)
   function currentChange(session: Session): SuperGoalProjectionState {
     const state = ctx.sessionProjections.stateOf(session, 'superGoal')
@@ -74,14 +141,40 @@ export function apply(ctx: Context): void {
   function currentGoal(session: Session): SuperGoal | null {
     return currentChange(session).goal
   }
-  const armed = new Set<Agent>()
+  /**
+   * Read the durable objective without letting a replay failure break a caller
+   * that runs inside an agent lifecycle event.
+   * @param session - Session whose objective is requested.
+   * @returns the current objective, or null when it cannot be read.
+   */
+  function readGoal(session: Session): SuperGoal | null {
+    try {
+      return currentGoal(session)
+    } catch (error: unknown) {
+      ctx.logger.warn(`super-goal: cannot read the objective for session "${session.id}": ${error instanceof Error ? error.message : String(error)}`)
+      return null
+    }
+  }
+  const pursuits = new Map<Agent, Pursuit>()
+  function pursuit(agent: Agent): Pursuit {
+    let existing = pursuits.get(agent)
+    if (existing === undefined) {
+      existing = { armed: false, failures: 0, lastTurn: undefined }
+      pursuits.set(agent, existing)
+    }
+    return existing
+  }
+  function isArmed(agent: Agent): boolean {
+    return pursuits.get(agent)?.armed === true
+  }
   function setArmed(agent: Agent, value: boolean): void {
-    if (armed.has(agent) === value) return
-    if (value) armed.add(agent)
-    else armed.delete(agent)
+    const state = pursuit(agent)
+    if (state.armed === value) return
+    state.armed = value
+    if (!value) state.failures = 0
     ctx.emit('super-goal/activation-changed', agent.session, value)
   }
-  ctx.on('super-goal/activation', session => ctx.agents.roots().some(agent => agent.session === session && armed.has(agent)))
+  ctx.on('super-goal/activation', session => ctx.agents.roots().some(agent => agent.session === session && isArmed(agent)))
   const installed = new WeakMap<Agent, () => Promise<void>>()
   const definitions: ToolDefinition[] = []
   function ensureTools(agent: Agent): void {
@@ -129,7 +222,7 @@ export function apply(ctx: Context): void {
   }
   function active(agent: Agent, revision: number, activate = false): SuperGoal {
     const goal = currentGoal(agent.session)
-    if (!goal || goal.revision !== revision || goal.phase !== 'active' || (!activate && !armed.has(agent))) {
+    if (!goal || goal.revision !== revision || goal.phase !== 'active' || (!activate && !isArmed(agent))) {
       throw new Error('SuperGoal is inactive or the revision is stale; read it again or ask the user to /supergoal resume')
     }
     if (activate) setArmed(agent, true)
@@ -165,21 +258,129 @@ export function apply(ctx: Context): void {
     questionWork.set(done, agent)
     return done
   }
+  /**
+   * Report an objective that exhausted its failure budget, then resume pursuit
+   * from the human answer. The durable blocker is committed before the question
+   * opens, so a session that is never answered still records why it stopped.
+   */
+  async function reportExhausted(agent: Agent, blocked: SuperGoal, reason: string): Promise<void> {
+    try {
+      const next = await askBlocker(agent, blocked, lifetime.signal)
+      lifetime.signal.throwIfAborted()
+      root(agent)
+      active(agent, next.revision, true)
+      ensureTools(agent)
+      agent.steer(message(next))
+    } catch (error: unknown) {
+      // A cancelled, unavailable, or superseded question leaves the committed
+      // blocker in place; the plugin instance may also be tearing down, which is
+      // not a failure worth reporting.
+      if (!lifetime.signal.aborted) {
+        ctx.logger.warn(`super-goal: objective revision ${blocked.revision} stopped after ${maxConsecutiveFailures} failed turns `
+          + `(${reason}): ${error instanceof Error ? error.message : String(error)}`)
+      }
+    }
+  }
   ctx.on('agent/session-start', ({ agent }) => {
+    const state = pursuit(agent)
+    state.failures = 0
+    state.lastTurn = undefined
+    const goal = ctx.agents.roots().includes(agent) ? readGoal(agent.session) : null
+    if (goal === null) {
+      setArmed(agent, false)
+      return
+    }
+    ensureTools(agent)
+    // A reloaded objective is the human's standing instruction, so an active
+    // goal resumes itself. A seeded session (a fork or an inherited child log)
+    // carries the objective without the authority to pursue it, because the
+    // session it was forked from may still be running.
+    if (goal.phase === 'active' && !agent.session.header.isSeeded) {
+      setArmed(agent, true)
+      agent.steer(message(goal))
+      return
+    }
     setArmed(agent, false)
-    if (ctx.agents.roots().includes(agent) && currentGoal(agent.session)) ensureTools(agent)
   })
   ctx.on('agent/disposed', ({ agent }) => {
     setArmed(agent, false)
+    pursuits.delete(agent)
     pending.get(agent)?.controller.abort()
   })
   ctx.on('agent/status', ({ agent, status }) => {
-    if (status !== 'running') setArmed(agent, false)
+    if (status === 'running') return
+    const state = pursuits.get(agent)
+    if (state === undefined || !state.armed) return
+    const goal = readGoal(agent.session)
+    if (!goal || goal.phase !== 'active') {
+      setArmed(agent, false)
+      return
+    }
+    const lastTurn = state.lastTurn
+    if (lastTurn !== undefined && deliberateStop(lastTurn)) {
+      setArmed(agent, false)
+      return
+    }
+    // An armed objective that reaches idle ended its turn without being steered
+    // onward, so this turn failed or completed without finishing the work.
+    if (lastTurn === undefined || lastTurn.kind === 'completed') {
+      state.failures = 0
+    } else {
+      state.failures += 1
+    }
+    if (state.failures >= maxConsecutiveFailures) {
+      const reason = lastTurn === undefined ? 'the objective stopped making progress' : failureReason(lastTurn)
+      setArmed(agent, false)
+      const blocked = commitBlocked(agent, goal, reason)
+      if (blocked !== undefined) {
+        void reportExhausted(agent, blocked, reason)
+        return
+      }
+      // A concurrent mutation replaced the revision that exhausted its budget.
+      // A replacement still active starts with its own budget; a pause, clear,
+      // or completion is the deliberate stop that already owns the change.
+      const latest = readGoal(agent.session)
+      if (latest !== null && latest.phase === 'active') {
+        state.failures = 0
+        setArmed(agent, true)
+        agent.steer(message(latest))
+      }
+      return
+    }
+    agent.steer(message(goal))
   })
+  /**
+   * Commit the durable blocker for an objective that exhausted its budget, only
+   * while the exact revision it was armed for is still the current active one.
+   * @param agent - the exact live root agent.
+   * @param goal - the objective revision that exhausted its budget.
+   * @param reason - the concrete condition that repeated.
+   * @returns the blocked objective, or undefined when another mutation won.
+   */
+  function commitBlocked(agent: Agent, goal: SuperGoal, reason: string): SuperGoal | undefined {
+    const current = readGoal(agent.session)
+    if (current === null || current.revision !== goal.revision || current.phase !== 'active') return undefined
+    return commit(agent, {
+      ...goal,
+      phase: 'blocked',
+      reason: `SuperGoal stopped after ${maxConsecutiveFailures} consecutive turns without progress: ${reason}`,
+      choices: ['Retry the objective now', 'Pause and inspect the failure'],
+    })
+  }
   ctx.on('agent/turn-stopping', ({ agent, signal }) => {
-    if (signal.aborted || lifetime.signal.aborted || !armed.has(agent)) return
+    if (signal.aborted || lifetime.signal.aborted || !isArmed(agent)) return
     const goal = currentGoal(agent.session)
     if (goal?.phase === 'active') agent.steer(message(goal))
+  })
+  // The recorded turn end is what separates a failed turn from a decided stop
+  // when the driver converges back to idle.
+  ctx.on('session/event', (session: Session, event: SessionEvent) => {
+    if (event.type !== 'turn/end') return
+    const agent = ctx.agents.get(session.id)
+    if (agent === undefined || agent.session !== session) return
+    const state = pursuits.get(agent)
+    if (state === undefined) return
+    state.lastTurn = event.data.reason
   })
   ctx.commands.register({
     name: 'supergoal', description: 'Set or control a persistent long-term objective',
@@ -190,7 +391,7 @@ export function apply(ctx: Context): void {
       const input = invocation.rawInput.trim()
       const goal = currentGoal(agent.session)
       if (!input || input === 'show') return { kind: 'success', text: goal
-        ? `SuperGoal (${goal.phase}${armed.has(agent) ? '' : '; use /supergoal resume to continue'}): ${goal.objective}${goal.phase === 'blocked' && goal.reason ? '\nBlocker: ' + goal.reason : ''}`
+        ? `SuperGoal (${goal.phase}${isArmed(agent) ? '' : '; use /supergoal resume to continue'}): ${goal.objective}${goal.phase === 'blocked' && goal.reason ? '\nBlocker: ' + goal.reason : ''}`
         : 'No SuperGoal. Use /supergoal <objective>.' }
       if (input === 'pause' && goal?.phase === 'complete') return { kind: 'error', text: 'No unfinished SuperGoal to pause.' }
       if (input === 'pause' || input === 'clear') {
@@ -272,8 +473,13 @@ export function apply(ctx: Context): void {
     lifetime.abort()
     const requests = [...pending.values()]
     const work = [...questionWork.keys()]
-    const owned = new Set([...armed, ...questionWork.values()])
-    for (const agent of armed) setArmed(agent, false)
+    // Only an armed pursuit is this plugin's work: a session it merely observed
+    // keeps running through the unload.
+    const owned = new Set<Agent>([...questionWork.values()])
+    for (const [agent, state] of pursuits) {
+      if (state.armed) owned.add(agent)
+      setArmed(agent, false)
+    }
     for (const request of requests) request.controller.abort()
     for (const agent of owned) agent.cancel({ kind: 'parent' })
     await Promise.allSettled([

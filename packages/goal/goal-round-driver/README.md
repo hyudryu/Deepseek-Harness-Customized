@@ -29,7 +29,7 @@ Mount `dsh-goal-round-driver` when an active goal should keep making progress wi
 
 ### Compose it
 
-Mount the driver beside the goal service and the goal tools; the driver itself takes no configuration.
+Mount the driver beside the goal service and the goal tools. Its only setting is `maxConsecutiveFailures`, the number of consecutive rounds that may end on a provider failure or a token-ceiling stop before the goal records a durable blocker (default 3):
 
 ```yaml
 - id: goal
@@ -40,6 +40,8 @@ Mount the driver beside the goal service and the goal tools; the driver itself t
 
 - id: goal-round-driver
   name: '@deepseek-ai/dsh-goal-round-driver'
+  config:
+    maxConsecutiveFailures: 3
 ```
 
 `maxGoalRounds` belongs to the goal definition, while the model-facing blocked threshold belongs to `dsh-tool-goal`; duplicating either value in the driver could produce divergent policy.
@@ -50,11 +52,13 @@ With an exact live agent idle, an active armed goal, and remaining capacity, the
 
 ### When continuation stops
 
-A round starts only at whole-agent idle, and completion, pause, and blocking suppress continuation; a host-initiated pause also aborts the turn already running, while a model-initiated pause inside its own turn finishes normally. An edit only invalidates an in-flight round through the revision fence, and the driver continues the new revision. The driver also stops on its own when a turn ends on max tokens, a durability write fails, the agent is cancelled, the plugin unloads, or the round cap is exhausted — at the cap it records a blocker with the stable code `round-limit`. Cancellation never auto-restarts a round: a goal whose round was under way or already queued is paused at the next idle point, and a cancellation unrelated to a goal attempt only disarms continuation.
+A round starts only at whole-agent idle, and completion, pause, and blocking suppress continuation; a host-initiated pause also aborts the turn already running, while a model-initiated pause inside its own turn finishes normally. An edit only invalidates an in-flight round through the revision fence, and the driver continues the new revision. The driver stops on its own when a durability write fails, the agent is cancelled, the plugin unloads, or the round cap is exhausted — at the cap it records a blocker with the stable code `round-limit`. Cancellation never auto-restarts a round: a goal whose round was under way or already queued is paused at the next idle point, and a cancellation unrelated to a goal attempt only disarms continuation.
+
+A round that ends on a provider failure or on the token ceiling is retried instead: it spends `maxConsecutiveFailures`, and past that budget the driver records a blocker with the code `round-failure` and the reported condition, so an unreachable provider stops the goal visibly rather than silently. Every other failure still disarms continuation without retrying, because a round whose log write or plugin step failed must not be replayed against the state that just rejected it.
 
 ### After resume, fork, or unload
 
-Mounting the driver over an existing agent never arms a goal, and after session resume or fork an active goal stays disarmed until an explicit human-authorized resume — the driver never revives work on its own. Unloading the plugin cancels any in-flight round and ensures no later round starts.
+A session start resumes an active goal in a session that was loaded as itself: the driver records the same durable `resume` mutation a human would, so a restarted process keeps pursuing the objective. A forked or otherwise seeded session keeps its active goal disarmed until an explicit human-authorized resume, because the session it came from may still be running that goal. Mounting the driver over an agent that is already live never adopts it — continuation attaches at the session start of agents that start while the driver is loaded, matching the rule the `dsh-schedule` runtime owners follow. Unloading the plugin cancels any in-flight round and ensures no later round starts.
 
 -----
 
@@ -71,6 +75,7 @@ This section explains how the driver schedules rounds without races; the observa
 - **Reservation, then admission.** At idle the driver reserves `roundsStarted + 1` for the current `{ goalId, revision }`, queues one `<goal_round>` prompt with a goal message source, and only an entered `user/message` increments `roundsStarted`. A reservation rejected as stale does not consume the round number.
 - **Race fences.** The `agent/pre-step` listener verifies the complete claimed record against the current goal both before and after downstream listeners, so a stale, cancelled, or competing prompt is rejected before its step enters. Human work that arrives before a reservation makes automatic work yield until the agent is idle again.
 - **Durability checkpoint.** `goal/changed` creates a durability obligation: before queuing work the driver awaits `ctx.sessions.flush()` and rechecks the goal revision and competing input after the await. A flush failure arriving through `agent/error` disarms continuation before another round can start.
+- **Failure budget.** A provider failure (`LlmError`) or a `max-tokens` turn end while a round is in flight increments a consecutive-failure counter and is retried from the following idle; a completed round resets it, and the counter reaching `maxConsecutiveFailures` blocks the goal with `round-failure` instead of reserving another round.
 - **Fail-closed teardown.** Teardown closes admission, disarms every live goal, cancels active work with the `parent` cause, and awaits the driver plus agent quiescence while its event fence remains installed.
 
 ### Source map

@@ -40,14 +40,15 @@ The driver classifies one closed goal-owned turn as follows:
 |---|---|
 | durable `completed` | continue while active/armed and under cap |
 | cancellation of a reserved/admitted goal round, or its `aborted` result | pause and disarm |
-| `error` with code `RATE_LIMIT` or `QUOTA` | block with code `usage-limited` |
-| other `error` | block with code `turn-error` |
-| `max-tokens` | block with code `max-tokens` |
+| `error` that is an `LlmError` on a reserved or admitted round | spend one consecutive-failure; retry while under `maxConsecutiveFailures` (default 3), then block with code `round-failure` |
+| any other `error` | disarm without changing durable phase |
+| `max-tokens` on a reserved or admitted round | spend one consecutive-failure; retry while under `maxConsecutiveFailures` (default 3), then block with code `round-failure` |
 | failed durability checkpoint | disarm without changing durable phase |
 | `disposed` or `interrupted` | disarm |
 | plugin-added unknown result | block for inspection |
+| `agent/session-start` | re-arm and resume an active goal in a non-seeded session; leave a seeded session disarmed |
 
-No abnormal outcome requests an automatic retry. A later human prompt can ask to continue in any language; the model reads the stopped goal and uses the goal tool's resume action, which records a new revision and arms continuation.
+A provider failure (`LlmError`) or a `max-tokens` stop retries the round automatically within `maxConsecutiveFailures` (default 3), then blocks the goal with the concrete condition instead of stopping silently; every other abnormal outcome disarms or blocks without an automatic retry. The [continuation durability decision](2026-09-11-continuation-survives-restart-and-failure.md) supersedes this fact. A later human prompt can ask to continue in any language; the model reads the stopped goal and uses the goal tool's resume action, which records a new revision and arms continuation.
 
 ### Durability and cancellation contract
 
@@ -59,7 +60,7 @@ Broad cancellation clears pending inbox work and aborts the active loop phase. T
 
 ### Process lifecycle
 
-`GoalService.disarm(agent)` removes only process-local activation. It writes no session event, changes no revision, and emits no goal mutation. The driver calls it while loading over existing agents, on durability uncertainty, and before teardown; a later `resume` is the durable activation edge visible to the model.
+`GoalService.disarm(agent)` removes only process-local activation. It writes no session event, changes no revision, and emits no goal mutation. The driver calls it while loading over existing agents, on durability uncertainty, and before teardown; the next `agent/session-start` edge re-arms an active goal in a non-seeded session through a durable `resume`, which stays the activation edge visible to the model.
 
 The driver's event listeners and quiescent close are nested in one ordered Cordis effect. Cordis unloads sibling effects concurrently, so separate listener and cleanup registrations could remove the prompt fence while an async disposer was still draining. The composite effect first closes admission, disarms goals, cancels an admitted attempt, and awaits both agent and driver quiescence; only then does it unregister its listeners.
 
@@ -67,7 +68,7 @@ An inbox acceptance can win the microtask race immediately before plugin unload 
 
 ## Testing
 
-The unit suite uses the real agent loop and session service with only the model scripted. It covers exact sequential admission and cap enforcement, load/resume inertness, every outcome classification, rate limiting, request errors, max tokens, downstream prompt veto, pre-admission and in-flight cancellation, unrelated-human cancellation, failed-pause fallback, human-input ordering, queued and downstream revision races, forged goal attribution, failed mutation and turn checkpoints including a later one-shot injection, scheduler and custom-agent failures, session-start reset, exact lifecycle retirement, and queued/running plugin teardown. The new driver source has per-file 100% statement, branch, function, and line coverage.
+The unit suite uses the real agent loop and session service with only the model scripted. It covers exact sequential admission and cap enforcement, inertness while loading over live agents, resuming an active goal at a session-start edge, session-start state reset, every outcome classification, provider-failure retry and the `round-failure` blocker, request errors, max tokens, downstream prompt veto, pre-admission and in-flight cancellation, unrelated-human cancellation, failed-pause fallback, human-input ordering, queued and downstream revision races, forged goal attribution, failed mutation and turn checkpoints including a later one-shot injection, scheduler and custom-agent failures, exact lifecycle retirement, and queued/running plugin teardown. The new driver source has per-file 100% statement, branch, function, and line coverage.
 
 A keyless ACP snapshot mounts the shipped automation app with the real goal domain, goal tools, goal driver, agent loop, persistence, and replay adapter through `cordis.yml`. One human-originated turn creates and inspects a two-round goal, the first automatic turn stops normally, and ACP cancellation of a deliberately stalled second round records a durable pause. The normalized wire transcript and external JSONL assertions prove one session, round sources `1, 2`, the lifecycle mutation, and exact replay accounting without using `echo-agent` as an application surrogate.
 
@@ -78,7 +79,7 @@ The core cancellation test proves notification order and containment: observers 
 - **Add a goal loop inside `dsh-agent-loop`** — rejected because the public queue, prompt, session, cancellation, and status contracts are sufficient, and a concrete-loop branch would privilege one policy.
 - **Use `agent/turn-continuation` to make every round another step** — rejected because a goal round is an outer policy iteration and must have its own durable user prompt, turn boundary, round count, and failure settlement.
 - **Persist a pending reservation** — rejected because a crash cannot prove that queued process memory had reached admission; only the durable `user/message` consumes the round.
-- **Retry provider or persistence errors automatically** — rejected because retry policy spends resources and needs explicit authority; stopped phases plus later human resume are simpler and observable.
+- **Retry provider or persistence errors automatically** — rejected for persistence errors, because continuing without a trustworthy record of the round is worse than stopping. Provider failures are the exception: `LlmError` and `max-tokens` spend a budget bounded by `maxConsecutiveFailures` (default 3) and then block with code `round-failure`, because the armed goal already carries the authority to spend those rounds.
 - **Fork conversation history or spawn a fresh agent for every round** — rejected for this package because the goal is explicitly same-session work. Fresh-agent Ralph execution remains a separate workflow plugin built from subagent and workflow primitives.
 - **Reuse every session turn as the round counter** — rejected because human clarification and unrelated work share the session but not the automatic-work budget.
 
@@ -87,7 +88,7 @@ The core cancellation test proves notification order and containment: observers 
 - Goal continuation remains a removable plugin and the concrete loop gains only a generic observe-before-cancel notification.
 - Replay can reconstruct every admitted round from its exact goal source and prompt; rejected reservations cannot create phantom budget use.
 - Human messages and lifecycle mutations win documented races without corrupting the revision or counter.
-- Resume and fork remain inert until semantic human intent causes the model to record a resume mutation.
+- A seeded session stays inert until semantic human intent causes the model to record a resume mutation; a non-seeded session re-arms its own active goal at the session-start edge.
 - Conservative failure mapping can require manual continuation after transient failures, but it never hides an automatic retry.
 
 ## Known limitations and deferred work

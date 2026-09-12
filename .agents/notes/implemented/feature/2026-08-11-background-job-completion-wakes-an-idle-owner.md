@@ -30,6 +30,8 @@ Injection is correct there. A cancelled turn is a user pressing stop, and reopen
 
 `maxConsecutiveWakes` (default 3) caps the turns one owner may open this way; beyond it a notice degrades to injection and waits for the next turn. Claiming any user-authored message restores the budget — claiming, not arrival, because that is the point human input actually enters a step. Notices this plugin queued never refill it.
 
+An owner that holds an armed goal or SuperGoal is exempt: `standingAuthority()` reads the `goal/activation` and `super-goal/activation` bail queries, and its completion notices keep opening turns past the budget. The [continuation durability decision](2026-09-11-continuation-survives-restart-and-failure.md) supersedes this fact. That objective is already bounded by its own round cap.
+
 The bound exists because this chain is self-exciting in a way subagent settlement is not. Settlement is bounded by how many children the model spawned; a woken turn can start the background job whose completion wakes it again, with nobody watching. `dsh run` needs no separate policy: its one user message is claimed in the first turn and never repeats, so the budget is spent monotonically and the process terminates.
 
 `completionDelivery: quiet` restores the old lane for idle owners. It exists for deterministic transcripts; job completion independently retains `quiet | wakeup` because its bounded owner-turn policy differs from next-step subagent reports.
@@ -58,7 +60,7 @@ The bound exists because this chain is self-exciting in a way subagent settlemen
 
 ## Consequences
 
-- Default behavior changes: an idle owner now spends a model request per completion, capped at `maxConsecutiveWakes` per owner between user messages. Deployments that want the old behavior set `completionDelivery: quiet`.
+- Default behavior changes: an idle owner now spends a model request per completion, capped at `maxConsecutiveWakes` per owner between user messages except while that owner holds armed goal or SuperGoal authority. Deployments that want the old behavior set `completionDelivery: quiet`.
 - The `tool-jobs` prompt section needs no edit; "You are notified in-session when a task finishes" became true rather than aspirational.
 - `JobSnapshot.reported` gains teardown as a fourth setter, documented at the Service Definition and in [the subsystem reference](../../../../docs/subsystems/jobs.md).
 - `settle()` announces completion after committing the record and publishing the visible-set change. Any listener relying on running before waiters were released or before `onJobsChanged` now runs after both.
@@ -67,7 +69,7 @@ The bound exists because this chain is self-exciting in a way subagent settlemen
 
 ### Accepted risks
 
-A spent budget is restored only by user input. An unattended agent that exhausts it collects its remaining notices whenever something else opens a turn, and nothing re-arms it in the meantime.
+A spent budget is restored by user input or by an owner holding an armed goal or SuperGoal, which is exempt from the budget while that authority is armed. An unattended agent with no standing continuation authority collects its remaining notices whenever something else opens a turn, and nothing re-arms it in the meantime.
 
 A notice pending on an idle owner under `quiet` still dies with that owner's disposal, unchanged from before: the disposal cancel clears the unclaimed inbox and the log keeps the insert/cancel pair as the record. The [settlement delivery note](2026-08-06-manager-owned-subagent-settlement-delivery.md) owns the offline-mailbox discussion this would need.
 

@@ -213,7 +213,7 @@ describe('same-session goal driving', () => {
       event.type === 'request/header' ? [event.data.reason] : [])).toEqual(['initial', 'series'])
   })
 
-  it('never adopts activation from an already-live driver and waits for explicit resume', async () => {
+  it('never adopts activation from an already-live driver and waits for a session start', async () => {
     const ctx = new Context()
     contexts.push(ctx)
     await mountAgentLoopTestDependencies(ctx)
@@ -239,15 +239,16 @@ describe('same-session goal driving', () => {
     ['rate limit', new LlmError('slow down', 'RATE_LIMIT')],
     ['request error', new Error('provider broke')],
     ['max tokens', maxTokensResponse('unfinished')],
-  ] as const)('disarms automatic continuation after a %s', async (_label, response) => {
-    const test = await harness([response])
-    test.ctx.goals.create(test.agent, { objective: 'stop safely', maxGoalRounds: 8 })
+  ] as const)('retries a round that ends on a %s and blocks when it keeps failing', async (_label, response) => {
+    const test = await harness([response, response, response])
+    test.ctx.goals.create(test.agent, { objective: 'survive failures', maxGoalRounds: 8 })
 
-    const goal = await waitForGoal(test.ctx, test.agent, current =>
-      current?.phase === 'active' && current.activation === 'disarmed')
+    const goal = await waitForGoal(test.ctx, test.agent, current => current?.phase === 'blocked')
 
-    expect(goal).toMatchObject({ roundsStarted: 1, activation: 'disarmed' })
-    expect(test.adapter.requests).toHaveLength(1)
+    expect(goal).toMatchObject({ phase: 'blocked', roundsStarted: 3, activation: 'disarmed' })
+    expect(goal?.blockedReason?.code).toBe('round-failure')
+    expect(goal?.blockedReason?.message).toContain('Goal round failed 3 consecutive times')
+    expect(test.adapter.requests).toHaveLength(3)
   })
 
   it('maps a downstream step rejection to blocked without entering the round', async () => {
@@ -937,17 +938,14 @@ describe('same-session goal driving', () => {
     expect(test.adapter.requests).toHaveLength(0)
   })
 
-  it('resets process-local scheduling state at a session-start edge', async () => {
-    const test = await harness([textResponse('after explicit resume')])
-    const created = test.ctx.goals.create(test.agent, { objective: 'restart safely', maxGoalRounds: 1 })
+  it('resumes an active goal at a session-start edge instead of waiting for a human', async () => {
+    const test = await harness([textResponse('after restart')])
+    test.ctx.goals.create(test.agent, { objective: 'restart safely', maxGoalRounds: 1 })
     agentEvents(test.ctx, test.agent).emit('agent/session-start', { source: 'resume' })
-    await Promise.resolve()
 
-    expect(test.ctx.goals.get(test.agent)).toMatchObject({ activation: 'disarmed', roundsStarted: 0 })
-    expect(test.adapter.requests).toHaveLength(0)
-
-    test.ctx.goals.resume(test.agent, created)
-    await waitForGoal(test.ctx, test.agent, goal => goal?.phase === 'blocked')
+    const goal = await waitForGoal(test.ctx, test.agent, current => current?.phase === 'blocked')
+    expect(goal).toMatchObject({ roundsStarted: 1, activation: 'disarmed' })
+    expect(goal?.blockedReason?.code).toBe('round-limit')
     expect(test.adapter.requests).toHaveLength(1)
   })
 
@@ -1005,7 +1003,7 @@ describe('same-session goal driving', () => {
     expect(warn).not.toHaveBeenCalledWith(expect.stringContaining('goal-round-driver'))
   })
 
-  it('keeps terminal agent failure disarmed and defers queued human work until another wakeup', async () => {
+  it('blocks a goal whose failing round exhausted the round cap and defers queued human work', async () => {
     const test = await harness([new Error('round one broke'), textResponse('human answer')])
     let queued = false
     test.ctx.on('session/event', (session, event) => {
@@ -1019,8 +1017,7 @@ describe('same-session goal driving', () => {
     })
     test.ctx.goals.create(test.agent, { objective: 'survive a stale failure', maxGoalRounds: 1 })
 
-    await waitForGoal(test.ctx, test.agent, current =>
-      current?.phase === 'active' && current.activation === 'disarmed')
+    await waitForGoal(test.ctx, test.agent, current => current?.phase === 'blocked')
 
     expect(test.adapter.requests).toHaveLength(1)
     expect(test.agent.inbox.nextTurn).toHaveLength(1)

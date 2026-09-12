@@ -16,7 +16,7 @@ The goal domain needs durable state, but it does not need ownership of pending m
 
 `GoalMessageSource` identifies only positive admitted continuation rounds. A matching `user/message` advances `roundsStarted`; ordinary user messages and inbox splice events do not change goal state. The goal package never inserts, claims, removes, or inspects inbox messages. `@deepseek-ai/dsh-goal-round-driver` remains responsible for queuing and tracking its own continuation prompts through the public inbox lifecycle.
 
-Activation remains process-local. The service associates the synchronously appended event sequence with the requested activation while its cache observes the event; replayed or externally appended changes default to disarmed. The session log remains the only durable authority.
+Activation remains process-local. The service associates the synchronously appended event sequence with the requested activation while its cache observes the event; replayed or externally appended changes default to disarmed, and every `agent/session-start` edge returns the cache to disarmed. A non-seeded session re-arms its own active goal at that edge by appending a durable `resume` mutation, which is the activation edge the cache observes. The [continuation durability decision](../feature/2026-09-11-continuation-survives-restart-and-failure.md) supersedes this fact. The session log remains the only durable authority.
 
 The domain does not automatically project each mutation into model input. Goal tools return current state, and continuation prompts include the objective and round state when work is actually scheduled. Any future always-visible goal context is a separate context plugin that owns its inbox message rather than a persistence side effect.
 

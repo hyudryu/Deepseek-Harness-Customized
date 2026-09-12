@@ -28,7 +28,7 @@ Incremental replay advances its cursor after each valid event and remains positi
 
 At most one goal is current. Create requires no current non-complete goal and always generates a revision-one id not used earlier in the session; a completed goal may be replaced. Every other mutation carries the expected `GoalRef`, and stale ids or revisions reject. Resume accepts a paused or blocked phase, or a disarmed active goal, only when the round cap has remaining capacity. The domain validates blocker reason shape but deliberately leaves reason codes and the decision to block to policy consumers.
 
-A cache built from any seed starts disarmed, and every `agent/session-start` edge disarms it again. `GoalService.disarm(agent)` also lets a lifecycle owner remove process-local authority without a session event, revision change, or `goal/changed` notification. Resume, fork, and continuation-driver replacement therefore preserve the durable objective and history but never initiate work on their own. A later human prompt can be interpreted by the model, whose policy API may explicitly call resume and arm the goal.
+A cache built from any seed starts disarmed, and every `agent/session-start` edge disarms it again. `GoalService.disarm(agent)` also lets a lifecycle owner remove process-local authority without a session event, revision change, or `goal/changed` notification. Resume, fork, and continuation-driver replacement therefore preserve the durable objective and history; a non-seeded session re-arms its own active goal at the session-start edge through a durable `resume` mutation, while a seeded session — a fork or an inherited child log — stays disarmed until a human prompt arrives and the model's policy API calls resume. The [continuation durability decision](2026-09-11-continuation-survives-restart-and-failure.md) supersedes this fact.
 
 ### Service boundary
 
@@ -42,7 +42,7 @@ Unit coverage pins creation defaults, exact-live-agent checks, compare-and-set r
 
 - **Store goals in a separate database or session header** — rejected because the session log already supplies ordering, persistence, fork prefixes, and reconstructability; a second store introduces atomicity and lineage questions.
 - **Couple each durable mutation to queued model context** — rejected by the later [goal-owned durable event decision](../architecture/2026-07-31-goal-owned-durable-events.md): goal tools and scheduled continuation prompts expose state when needed, while domain persistence remains independent from queue outcomes.
-- **Persist activation and restart automatically** — rejected because opening or resuming a session must wait for human input; durable phase records status, not fresh authority to spend resources.
+- **Persist activation and restart automatically** — rejected because a seeded session — a fork or an inherited child log — must wait for human input; for its own active goal in a non-seeded session, the driver records a fresh durable `resume` mutation instead of persisting activation, so the authority to spend resources stays an explicit recomputed edge.
 - **Count all session turns as goal rounds** — rejected because one session can contain human clarification, inspection, and unrelated work; only goal-attributed continuation turns consume this budget.
 - **Add goal state or a generic loop abstraction to `dsh-agent-loop`** — rejected because state and continuation policy can compose through existing plugins, `Agent` verbs, and events without privileging the shipped loop implementation.
 

@@ -6,9 +6,10 @@
 import { isDeepStrictEqual } from 'node:util'
 import { FiberState } from '@deepseek-ai/cordis'
 import type { Context } from '@deepseek-ai/cordis'
+import z from '@deepseek-ai/schemastery'
 import type { Agent, PreStepDecision } from '@deepseek-ai/dsh-agent'
 import type { GoalMessageSource, GoalRef, GoalView } from '@deepseek-ai/dsh-goal'
-import { createUserMessage } from '@deepseek-ai/dsh-llm'
+import { createUserMessage, LlmError } from '@deepseek-ai/dsh-llm'
 import type { ContentBlock, MessageId, MessageSource } from '@deepseek-ai/dsh-llm'
 import type { Session, SessionEvent, UserMessage } from '@deepseek-ai/dsh-session'
 import { renderGoalRoundPrompt } from './prompt.ts'
@@ -17,6 +18,19 @@ export { renderGoalRoundPrompt } from './prompt.ts'
 
 export const name = 'goal-round-driver'
 export const inject = ['agents', 'goals', 'sessions']
+
+/** Configures how a goal absorbs rounds that end without progress. */
+export interface Config {
+  /**
+   * Consecutive failed rounds before the goal reports a durable blocker
+   * instead of being retried (default 3).
+   */
+  maxConsecutiveFailures?: number
+}
+
+export const Config: z<Config> = z.object({
+  maxConsecutiveFailures: z.number().min(1).default(3),
+})
 
 /** Identity reserved before a goal continuation enters the agent inbox. */
 interface RoundIdentity {
@@ -43,6 +57,10 @@ interface DriverState {
   requested: boolean
   run: Promise<void> | undefined
   stopping: boolean
+  /** Consecutive rounds that ended without completing their turn. */
+  failures: number
+  /** Renderable condition of the most recent failed round. */
+  lastFailure: string | undefined
 }
 
 /** Whether a source identifies an automatic, positive-numbered goal round. */
@@ -73,7 +91,8 @@ function renderThrown(value: unknown): string {
 }
 
 /** Install automatic same-session continuation and its race fences. */
-export function apply(ctx: Context): void {
+export function apply(ctx: Context, config: Config = {}): void {
+  const maxConsecutiveFailures = config.maxConsecutiveFailures ?? 3
   const states = new Map<Agent, DriverState>()
 
   /** Create state for an exact currently live agent. */
@@ -88,6 +107,8 @@ export function apply(ctx: Context): void {
       requested: false,
       run: undefined,
       stopping: false,
+      failures: 0,
+      lastFailure: undefined,
     }
     states.set(agent, state)
     return state
@@ -134,6 +155,49 @@ export function apply(ctx: Context): void {
     }
   }
 
+  /**
+   * Re-arm a restored goal so a restarted session keeps pursuing the objective
+   * its human asked for. A seeded session (a fork, or a child inheriting a
+   * parent log) carries the goal without the authority to continue it, because
+   * the session it came from may still be running.
+   * @param state - the exact agent lifecycle that just became live.
+   */
+  function restoreRestoredGoal(state: DriverState): void {
+    if (state.agent.session.header.isSeeded) return
+    let goal: GoalView | undefined
+    try {
+      goal = currentGoal(state)
+    } catch (error: unknown) {
+      ctx.logger.warn(`goal-round-driver: could not read the goal for agent "${state.agent.id}": ${renderThrown(error)}`)
+      return
+    }
+    if (goal === undefined || goal.phase !== 'active') return
+    if (goal.activation === 'armed') {
+      // Already authorized — this driver simply arrived after the arming.
+      requestDrive(state)
+      return
+    }
+    if (goal.roundsStarted >= goal.maxGoalRounds) {
+      // An exhausted budget is a durable visible stop rather than a silent one.
+      try {
+        ctx.goals.block(state.agent, goalRef(goal), {
+          code: 'round-limit',
+          message: `Goal reached its configured limit of ${goal.maxGoalRounds} rounds.`,
+        })
+      } catch (error: unknown) {
+        ctx.logger.warn(`goal-round-driver: could not report the exhausted goal for agent "${state.agent.id}": ${renderThrown(error)}`)
+      }
+      return
+    }
+    try {
+      // The durable resume records the activation edge and emits the
+      // `goal/changed` notification that schedules the next round.
+      ctx.goals.resume(state.agent, goalRef(goal))
+    } catch (error: unknown) {
+      ctx.logger.warn(`goal-round-driver: could not resume goal "${goal.id}" for agent "${state.agent.id}": ${renderThrown(error)}`)
+    }
+  }
+
   /** Process admitted work at quiescence, then reserve at most one next round. */
   async function drive(state: DriverState): Promise<void> {
     const { agent } = state
@@ -167,6 +231,16 @@ export function apply(ctx: Context): void {
       ctx.goals.block(agent, goalRef(goal), {
         code: 'round-limit',
         message: `Goal reached its configured limit of ${goal.maxGoalRounds} rounds.`,
+      })
+      return
+    }
+    // A round that ends without completing retries; past the budget the goal
+    // stops with a durable reason rather than losing automatic authority
+    // silently, which would leave an active goal that nothing continues.
+    if (state.failures >= maxConsecutiveFailures) {
+      ctx.goals.block(agent, goalRef(goal), {
+        code: 'round-failure',
+        message: `Goal round failed ${state.failures} consecutive times: ${state.lastFailure ?? 'the round ended without completing'}.`,
       })
       return
     }
@@ -243,9 +317,19 @@ export function apply(ctx: Context): void {
   // One composite effect keeps the step fence installed until this
   // plugin's own scheduling tasks settle.
   ctx.effect(function* () {
-    ctx.on('agent/error', ({ agent }) => {
+    ctx.on('agent/error', ({ agent, error }) => {
       const state = stateFor(agent)
-      disarm(state)
+      // Only a provider-reported failure spends the round budget: the round is
+      // retried and, past the budget, stops with a durable blocker instead of
+      // losing automatic authority. Any other failure — a rejected log write, a
+      // plugin failure — withdraws authority, because continuing without a
+      // trustworthy record of the round is worse than stopping.
+      if (state.attempt === undefined || !(error instanceof LlmError)) {
+        disarm(state)
+        return
+      }
+      state.failures += 1
+      state.lastFailure = renderThrown(error)
     })
 
     ctx.on('agent/created', ({ agent }) => { stateFor(agent) })
@@ -255,6 +339,9 @@ export function apply(ctx: Context): void {
       state.attempt = undefined
       state.competingQueued = false
       state.needsCheckpoint = false
+      state.failures = 0
+      state.lastFailure = undefined
+      restoreRestoredGoal(state)
     })
     ctx.on('agent/status', ({ agent, status }) => {
       const state = stateFor(agent)
@@ -327,8 +414,20 @@ export function apply(ctx: Context): void {
           }
           return
         case 'turn/end':
+          if (event.data.reason.kind === 'completed') {
+            state.failures = 0
+            state.lastFailure = undefined
+            return
+          }
           if (event.data.reason.kind === 'max-tokens') {
-            disarm(state)
+            // The round ran but produced no usable result: it spends the
+            // failure budget instead of dropping automatic authority.
+            if (state.attempt === undefined) {
+              disarm(state)
+              return
+            }
+            state.failures += 1
+            state.lastFailure = 'the model reached its output-token ceiling'
             return
           }
           if (event.data.reason.kind !== 'aborted') return
@@ -425,8 +524,9 @@ export function apply(ctx: Context): void {
       return { ...decision, startsRequestSeries: true }
     })
 
-    // Loading a lifecycle driver over existing agents never inherits hidden
-    // automatic authority from an earlier producer instance.
+    // Loading a lifecycle driver over existing agents never adopts them: a
+    // driver attaches continuation to the agents whose session starts while it
+    // is loaded, and the next session-start edge resumes a standing goal.
     for (const agent of ctx.agents.list()) {
       const state = stateFor(agent)
       disarm(state)

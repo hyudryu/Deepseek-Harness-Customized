@@ -6,7 +6,7 @@ English | [中文](2026-07-19-human-goal-command.zh.md)
 
 ## Problem
 
-The same-session goal domain and model tools provide the state machine and semantic natural-language path, but they are not a sufficient human UX. A user needs to inspect the exact current phase and round budget without asking the model, explicitly pause or clear work without spending a model turn, and rearm a restored active goal after the required post-resume human decision. Implementing those actions independently in each UI would duplicate parsing, let the surfaces drift, and risk routing an unknown or unavailable command into the model.
+The same-session goal domain and model tools provide the state machine and semantic natural-language path, but they are not a sufficient human UX. A user needs to inspect the exact current phase and round budget without asking the model, explicitly pause or clear work without spending a model turn, and rearm an active goal that is still disarmed after a fork or a driver replacement. Implementing those actions independently in each UI would duplicate parsing, let the surfaces drift, and risk routing an unknown or unavailable command into the model.
 
 The command must also respect the goal design's two kinds of state. Durable phase, objective, revisions, and rounds come from the session log; process-local activation decides whether an active goal may continue automatically. Showing only “active” after a resume would be misleading when the restored goal is intentionally disarmed and waiting for human authorization.
 
@@ -60,7 +60,7 @@ The producer suite uses the real command registry, goal service, agent registry,
 - TUI and non-Web base compositions expose one Codex-shaped `/goal` command supplied by a removable plugin; Web presets expose it only where they mount the producer.
 - Human status distinguishes durable phase from live activation and reports the exact goal-round cap.
 - Direct pause, resume, clear, creation, and edit consume no model turn while their accepted mutations remain reconstructable from the session log.
-- Restored sessions wait for a human decision; `/goal resume` is the literal command path, while an ordinary prompt in any language may authorize the model tool path.
+- A forked session waits for a human decision; `/goal resume` is the literal command path, while an ordinary prompt in any language may authorize the model tool path. A reopened non-seeded session arms its own active goal. The [continuation durability decision](2026-09-11-continuation-survives-restart-and-failure.md) supersedes this fact.
 - Headless compositions retain one-turn behavior unless they explicitly opt into goals and define their own long-running settlement contract.
 
 ## Known limitations and deferred work

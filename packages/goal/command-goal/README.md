@@ -37,7 +37,7 @@ Every sub-command runs against the current goal of the invoking agent; a bare `/
 | `/goal <objective>` | Creates and arms a goal, or replaces a completed goal with a fresh identity |
 | `/goal edit <objective>` | Edits the current objective without changing its phase or activation |
 | `/goal pause` | Pauses an active goal and disarms continuation |
-| `/goal resume` | Resumes a stopped goal, or rearms an active goal after session resume or fork, subject to its remaining round cap |
+| `/goal resume` | Resumes a stopped goal, or rearms an active goal after a fork, subject to its remaining round cap |
 | `/goal clear` | Clears the current goal while retaining its durable history |
 
 ### Input grammar
