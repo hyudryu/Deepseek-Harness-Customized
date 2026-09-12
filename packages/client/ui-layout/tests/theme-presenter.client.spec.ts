@@ -86,7 +86,7 @@ describe('ThemePresenter', () => {
     expect(document.body.style.getPropertyValue('--dsh-content-font-size')).toBe('17px')
   })
 
-  it('dispose removes color-scheme, the root background, the attribute, the font-size axis, and every applied variable, sparing foreign inline styles', () => {
+  it('dispose retracts the attribute, the font-size axis, and every applied variable, sparing foreign inline styles', () => {
     document.body.style.setProperty('--foreign', 'kept')
     const presenter = new ThemePresenter()
     presenter.apply(snapshot('dark', { '--dsw-alias-bg': '#111' }))
@@ -99,5 +99,17 @@ describe('ThemePresenter', () => {
     expect(document.body.style.getPropertyValue('--dsh-content-font-size')).toBe('')
     expect(document.body.style.getPropertyValue('--foreign')).toBe('kept')
     expect(meta?.isConnected).toBe(false)
+  })
+
+  it('keeps a foreign root background across its own writes and restores it at disposal', () => {
+    document.documentElement.style.backgroundColor = 'rgb(9, 9, 9)'
+    const presenter = new ThemePresenter()
+    presenter.apply(snapshot('dark'))
+    expect(document.documentElement.style.backgroundColor).toBe(DARK_THEME_COLOR)
+    presenter.apply(snapshot('light'))
+    expect(document.documentElement.style.backgroundColor).toBe(LIGHT_THEME_COLOR)
+    presenter.dispose()
+    expect(document.documentElement.style.backgroundColor).toBe('rgb(9, 9, 9)')
+    document.documentElement.style.removeProperty('background-color')
   })
 })

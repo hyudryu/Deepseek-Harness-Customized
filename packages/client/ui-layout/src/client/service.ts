@@ -31,8 +31,6 @@ export interface ILayout {
   closeDetails(): void
   /** Open the browser panel (no-op when already open). */
   openBrowser(): void
-  /** Reveal the browser column for a browser no panel gesture opened; declined while the column would cover the conversation. */
-  revealBrowser(): void
   /** Close the browser panel. */
   closeBrowser(): void
 }
@@ -75,11 +73,6 @@ export class LayoutController implements ILayout {
   /** Open the browser panel (no-op when already open). */
   openBrowser(): void {
     this.#require().openBrowser()
-  }
-
-  /** Reveal the browser column for a browser no panel gesture opened; declined while the column would cover the conversation. */
-  revealBrowser(): void {
-    this.#require().revealBrowser()
   }
 
   /** Close the browser panel. */

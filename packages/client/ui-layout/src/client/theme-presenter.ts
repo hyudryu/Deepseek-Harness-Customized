@@ -23,6 +23,8 @@ export class ThemePresenter {
   private appliedTokens: string[] = []
   /** The single metadata node this presenter inserts and removes. */
   private readonly themeColorMeta: HTMLMetaElement
+  /** The root element's inline background before this presenter wrote one. */
+  private foreignRootBackground: string | null = null
 
   /** Create the presenter-owned metadata node before the first snapshot arrives. */
   constructor() {
@@ -36,7 +38,10 @@ export class ThemePresenter {
    * resolved upstream), publish the content font-size axis, then replace the
    * previously applied token variables with `active.tokens`. Browser
    * theme-color metadata follows the computed body background after those
-   * writes, so the rendered palette remains the color authority.
+   * writes, so the rendered palette remains the color authority. The root
+   * element carries that same color, keeping the canvas behind the frame in
+   * palette on platforms that paint the area outside the layout viewport from
+   * the root element rather than from a positioned body.
    * @param snapshot - resolved theme snapshot from ctx.theme.
    */
   apply(snapshot: ThemeSnapshot): void {
@@ -54,16 +59,25 @@ export class ThemePresenter {
     }
     this.themeColorMeta.content = getComputedStyle(body).backgroundColor
     if (!this.themeColorMeta.isConnected) document.head.append(this.themeColorMeta)
-    // The canvas behind the frame keeps the dark base too: iOS paints the
-    // safe-area strips outside the layout viewport from the root element's
-    // background, so a transparent root leaves a light band above the shell.
+    // Captured once: a host that already declared a root background keeps it
+    // intact across re-application and gets it back at disposal.
+    this.foreignRootBackground ??= document.documentElement.style.backgroundColor
     document.documentElement.style.backgroundColor = this.themeColorMeta.content
   }
 
-  /** Retract root color-scheme and background, the palette attribute, tokens, the font-size axis, and the owned metadata node. */
+  /**
+   * Restore a foreign root background, then retract root color-scheme, the
+   * palette attribute, tokens, the font-size axis, and the owned metadata node.
+   */
   dispose(): void {
-    document.documentElement.style.removeProperty('color-scheme')
-    document.documentElement.style.removeProperty('background-color')
+    const root = document.documentElement
+    if (this.foreignRootBackground === null || this.foreignRootBackground === '') {
+      root.style.removeProperty('background-color')
+    } else {
+      root.style.backgroundColor = this.foreignRootBackground
+    }
+    this.foreignRootBackground = null
+    root.style.removeProperty('color-scheme')
     const body = document.body
     body.removeAttribute(DARK_ATTRIBUTE)
     body.style.removeProperty(CONTENT_FONT_SIZE_VARIABLE)

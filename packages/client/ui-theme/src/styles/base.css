@@ -13,3 +13,14 @@
   --ds-transition-duration-fast: 0.1s;
   --ds-transition-duration-slow: 0.3s;
 }
+
+/* iOS Safari and every browser on iOS zoom the page when a focused form control
+ * renders below 16px, and the zoomed layout viewport no longer fits the screen.
+ * The floor holds at phone widths while a larger user font-size preference still
+ * wins (`1em` reads the parent). `:root`-qualified so a component's own class
+ * selector cannot keep a compact editing size. */
+@media (max-width: 600px) {
+  :root input, :root select, :root textarea, :root [contenteditable='true'] {
+    font-size: max(16px, 1em);
+  }
+}

@@ -227,7 +227,9 @@ export function AppFrame({
           <SessionProvider>{renderSlot('details', {})}</SessionProvider>
         </DetailsColumn>
         <BrowserColumn>
-          <SessionProvider>{renderSlot('browser', {})}</SessionProvider>
+          {/* The reveal capability rides the render site: the frame owns whether
+              a column reveal is allowed, so no service-face verb is needed. */}
+          <SessionProvider>{renderSlot('browser', { reveal: actions.revealBrowser, phone: mobile })}</SessionProvider>
         </BrowserColumn>
       </>
       <div className={css.overlayLayer} data-shell-overlay>

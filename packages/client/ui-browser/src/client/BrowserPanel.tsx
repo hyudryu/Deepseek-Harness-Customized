@@ -104,7 +104,7 @@ function ActionRow({ entry, t }: { entry: BrowserActionEntry; t: BrowserPanelPro
 
 /** The browser panel occupant of the layout's 'browser' column. */
 export function BrowserPanel({
-  t, useBrowser, start, navigate, stop, createTab, selectTab, closeTab, openPanel, sendInput,
+  t, useBrowser, reveal, phone, start, navigate, stop, createTab, selectTab, closeTab, sendInput,
 }: BrowserPanelProps) {
   const { snapshot, error: streamError } = useBrowser(value => value)
   const [urlInput, setUrlInput] = useState<string | null>(null)
@@ -160,13 +160,16 @@ export function BrowserPanel({
   const lastMove = useRef(0)
 
   // The browser may open without a panel gesture (the agent's `browser` tool), so
-  // an opening snapshot reveals the column; hiding the panel while the browser
-  // stays open is never undone, because only the opening transition reveals.
-  const revealed = useRef(false)
+  // an opening snapshot asks the layout to reveal the column, and leaving the
+  // phone layout asks again because the layout declined it there. The layout owns
+  // whether a reveal is allowed; hiding the panel while the browser stays open is
+  // never undone, because only these transitions ask.
+  const asked = useRef({ open: false, phone })
   useEffect(() => {
-    if (snapshot.open && !revealed.current) openPanel()
-    revealed.current = snapshot.open
-  }, [openPanel, snapshot.open])
+    const previous = asked.current
+    if (snapshot.open && (!previous.open || (previous.phone && !phone))) reveal()
+    asked.current = { open: snapshot.open, phone }
+  }, [phone, reveal, snapshot.open])
 
   // Wheel is claimed for the page: React registers wheel passively at the root,
   // so the panel needs its own non-passive listener to stop the app scrolling.

@@ -23,7 +23,16 @@ import {
  * PHONE_MAX_WIDTH) so a cross-plugin reveal can decline where the details and
  * browser columns cover the conversation rather than sharing the row.
  */
-type LayoutState = { sidebar: number; details: number; browser: number; narrow: boolean; narrowExpanded: boolean; phone: boolean }
+type LayoutState = {
+  sidebar: number
+  details: number
+  browser: number
+  narrow: boolean
+  narrowExpanded: boolean
+  phone: boolean
+  /** The open browser column came from an automatic reveal, not a panel gesture. */
+  browserRevealed: boolean
+}
 
 /**
  * Annotation twin of the actions literal below (the export needs a declared
@@ -56,7 +65,15 @@ type LayoutActions = {
  */
 export function createLayoutStore(): EngineStoreHandle<LayoutState, LayoutActions>  {
   const handle = defineStore({
-    init: (): LayoutState => ({ sidebar: SIDEBAR_DEFAULT, details: 0, browser: 0, narrow: false, narrowExpanded: false, phone: false }),
+    init: (): LayoutState => ({
+      sidebar: SIDEBAR_DEFAULT,
+      details: 0,
+      browser: 0,
+      narrow: false,
+      narrowExpanded: false,
+      phone: false,
+      browserRevealed: false,
+    }),
     actions: {
       setSidebar: (d, px: number) => { d.sidebar = clampWidth(px, SIDEBAR_MIN, SIDEBAR_MAX) },
       setDetails: (d, px: number) => { d.details = clampWidth(px, DETAILS_MIN, DETAILS_MAX) },
@@ -84,6 +101,13 @@ export function createLayoutStore(): EngineStoreHandle<LayoutState, LayoutAction
       setPhone: (d, phone: boolean) => {
         if (d.phone === phone) return
         d.phone = phone
+        // A column an automatic reveal opened must not keep covering the
+        // conversation after the frame crosses into the phone layout; a panel
+        // the user opened stays where it is.
+        if (phone && d.browserRevealed) {
+          d.browser = 0
+          d.browserRevealed = false
+        }
       },
       // Reveal the column for a browser nobody opened from the panel (the
       // agent's `browser` tool): on the phone layout the column covers the
@@ -92,11 +116,20 @@ export function createLayoutStore(): EngineStoreHandle<LayoutState, LayoutAction
       revealBrowser: (d) => {
         if (d.phone || d.browser > 0) return
         d.browser = BROWSER_DEFAULT
+        d.browserRevealed = true
       },
       openDetails: (d) => { if (d.details === 0) d.details = DETAILS_DEFAULT },
       closeDetails: (d) => { d.details = 0 },
-      openBrowser: (d) => { if (d.browser === 0) d.browser = BROWSER_DEFAULT },
-      closeBrowser: (d) => { d.browser = 0 },
+      // Explicit panel gestures own the column from here on: the reveal flag
+      // only tracks an open this store performed on the browser's behalf.
+      openBrowser: (d) => {
+        if (d.browser === 0) d.browser = BROWSER_DEFAULT
+        d.browserRevealed = false
+      },
+      closeBrowser: (d) => {
+        d.browser = 0
+        d.browserRevealed = false
+      },
     },
   })
   return handle

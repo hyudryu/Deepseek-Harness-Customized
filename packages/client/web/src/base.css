@@ -56,13 +56,4 @@ textarea {
 @media (max-width: 600px) {
   html, body, #root { width: 100%; max-width: 100%; overflow: clip; overscroll-behavior-x: none; }
   body { position: fixed; inset: 0; -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
-  /* iOS Safari and every browser on iOS zoom the page when a focused editable
-     renders below 16px — the zoomed layout viewport is then narrower than the
-     screen, so the frame no longer fits. The floor holds at phone widths while
-     a larger user font-size preference still wins (`1em` reads the parent).
-     `:root`-qualified so the guarantee outranks a component's own class
-     selector, which would otherwise keep its compact editing size. */
-  :root input, :root textarea, :root [contenteditable='true'] {
-    font-size: max(16px, 1em);
-  }
 }
