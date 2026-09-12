@@ -112,5 +112,18 @@ declare module '@deepseek-ai/cordis' {
      * @mode emit
      */
     'goal/changed'(this: import('@deepseek-ai/dsh-scope').Scoped<Agent>, payload: { agent: Agent; change: GoalChanged }): void
+    /**
+     * Read process-local continuation authority for one exact live agent.
+     * Lifecycle owners consult this before deciding whether work may open a turn
+     * on an agent that is otherwise idle, so an armed goal is never starved of
+     * the input that keeps it running. `true` is the only answer: a disarmed
+     * goal, an absent goal, and an unmounted service all read as no answer,
+     * because a bail dispatch treats `false` as silence.
+     * Deliberately unscoped, matching the companion `super-goal/activation`
+     * query.
+     * @mode bail
+     * @param agent - agent whose continuation authority is requested.
+     */
+    'goal/activation'(agent: Agent): true | undefined
   }
 }

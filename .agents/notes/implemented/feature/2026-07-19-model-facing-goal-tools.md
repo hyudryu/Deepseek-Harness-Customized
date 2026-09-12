@@ -8,7 +8,7 @@ English | [中文](2026-07-19-model-facing-goal-tools.zh.md)
 
 The persisted goal domain deliberately exposes lifecycle verbs to plugins, not directly to a model. A model still needs a small control API for discovering the current goal, creating one from human intent, and changing its lifecycle. Prompt guidance alone cannot establish who authorized a mutation: a subagent, injected plugin message, stale model turn, or resumed session could all produce the same tool arguments.
 
-The tool API also needs to preserve the separation between durable state and live execution authority. A restored or forked session can replay an active goal but starts disarmed; a later human request such as “continue” should let the model rearm it without requiring a literal command phrase. Conversely, an admitted autonomous goal round must be able to report completion or a persistent blocker without gaining permission to edit, pause, resume, or replace the human objective.
+The tool API also needs to preserve the separation between durable state and live execution authority. A reopened session rearms its own active goal, while a fork replays the same active goal and starts disarmed; for the fork a later human request such as “continue” lets the model rearm it without requiring a literal command phrase. Conversely, an admitted autonomous goal round must be able to report completion or a persistent blocker without gaining permission to edit, pause, resume, or replace the human objective.
 
 ## Decision
 
@@ -18,7 +18,7 @@ The tool API also needs to preserve the separation between durable state and liv
 
 `get_goal()` returns the current goal or `null`. A non-null result contains the compare-and-set id and revision, objective, durable phase, admitted and maximum goal rounds, any blocker reason, plus the process-local activation observation. `create_goal(objective, max_goal_rounds?)` creates one long-running same-session objective. `update_goal(goal_id, revision, action, objective?, max_goal_rounds?, blocked_reason?)` supports `edit`, `pause`, `resume`, `complete`, and `blocked`; replacement fields are valid only for `edit`, while a non-empty `blocked_reason` is required only for `blocked` and persists under the stable `model-reported` code. The executor treats exact empty-string optional fields and a zero `max_goal_rounds` as strict-schema fillers: they count as omitted, an edit still requires at least one meaningful replacement, and all non-filler values retain the action restrictions.
 
-The prompt tells the model that it may infer goal intent from a direct human request in any wording or language, but should not convert routine single-turn work into a goal. It must read the current goal before updating and copy the exact id and revision. On a restored or forked active-but-disarmed goal, a semantic human request to continue is grounds for `resume`. Completion is reserved for an achieved objective, and difficulty or uncertainty alone is not a blocker; a block report must name the concrete condition.
+The prompt tells the model that it may infer goal intent from a direct human request in any wording or language, but should not convert routine single-turn work into a goal. It must read the current goal before updating and copy the exact id and revision. On a forked active-but-disarmed goal, a semantic human request to continue is grounds for `resume`; a reopened non-seeded session arms its own active goal without one. The [continuation durability decision](2026-09-11-continuation-survives-restart-and-failure.md) supersedes this fact. Completion is reserved for an achieved objective, and difficulty or uncertainty alone is not a blocker; a block report must name the concrete condition.
 
 All three tools use exclusive execution so a model-ordered batch observes prior mutations and their new revisions. Results are compact JSON. UI presentation is a pure function of arguments and uses generic read or mutation cards; mutation cards select meaningful action values before the goal id, so accepted fillers cannot blank their input. Activation is reported only as live observation and is never written into replay state.
 
@@ -54,7 +54,7 @@ Unit coverage pins registration and disposal, exclusive scheduling, generated pr
 
 - Models receive a stable, compact lifecycle API without direct access to the goal service.
 - State-changing calls require a live runtime-root agent and a direct human message in the current turn, as well as durable compare-and-set references.
-- Human requests can create and rearm goals through ordinary natural language, while restored sessions remain inert until such input arrives.
+- Human requests can create and rearm goals through ordinary natural language, while a forked session stays inert until such input arrives; a reopened session rearms its own active goal without one.
 - Goal rounds can finish or report a repeated blocker but cannot broaden their own mandate.
 - Deployment policy selects the blocking lower bound; the same resolved value controls enforcement and prompt guidance.
 - Strict-schema provider fillers interoperate without allowing meaningful cross-action updates.

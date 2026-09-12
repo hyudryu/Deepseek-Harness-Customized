@@ -595,6 +595,43 @@ describe('completion notice delivery', () => {
     expect(inject).toHaveBeenCalledTimes(1)
   })
 
+  it('keeps waking an idle owner that holds an armed goal after the budget is spent', async () => {
+    const { ctx } = await setup({ maxConsecutiveWakes: 1 })
+    const inject = vi.fn()
+    const followup = vi.fn()
+    const owner = fakeAgent(ctx, 'sess-1', { inject, followup, status: 'idle' })
+    ctx.on('goal/activation', candidate => candidate === owner ? true : undefined)
+
+    await settleTasks(ctx, owner, 3)
+    // The armed objective carries its own round cap, so starving a completion
+    // wake would strand work its human already authorized.
+    expect(followup).toHaveBeenCalledTimes(3)
+    expect(inject).not.toHaveBeenCalled()
+  })
+
+  it('keeps waking an idle owner that pursues a SuperGoal after the budget is spent', async () => {
+    const { ctx } = await setup({ maxConsecutiveWakes: 1 })
+    const inject = vi.fn()
+    const followup = vi.fn()
+    const owner = fakeAgent(ctx, 'sess-1', { inject, followup, status: 'idle' })
+    ctx.on('super-goal/activation', session => session === owner.session ? true : undefined)
+
+    await settleTasks(ctx, owner, 3)
+    expect(followup).toHaveBeenCalledTimes(3)
+    expect(inject).not.toHaveBeenCalled()
+  })
+
+  it('still degrades to injection when no continuation plugin answers for the owner', async () => {
+    const { ctx } = await setup({ maxConsecutiveWakes: 1 })
+    const inject = vi.fn()
+    const followup = vi.fn()
+    const owner = fakeAgent(ctx, 'sess-1', { inject, followup, status: 'idle' })
+
+    await settleTasks(ctx, owner, 2)
+    expect(followup).toHaveBeenCalledTimes(1)
+    expect(inject).toHaveBeenCalledTimes(1)
+  })
+
   it('restores the wake budget when the owner claims a user message', async () => {
     const { ctx } = await setup({ maxConsecutiveWakes: 1 })
     const inject = vi.fn()

@@ -8,7 +8,7 @@ import GoalService, { GoalId } from '@deepseek-ai/dsh-goal'
 import type { GoalView } from '@deepseek-ai/dsh-goal'
 import { createUserMessage, LlmAdapter, LlmError  } from '@deepseek-ai/dsh-llm'
 import type { GenerateOptions, StreamChunk } from '@deepseek-ai/dsh-llm'
-import { SessionId } from '@deepseek-ai/dsh-session'
+import { SessionId, SessionLogOffset } from '@deepseek-ai/dsh-session'
 import type { UserMessage } from '@deepseek-ai/dsh-session'
 import SessionProjectionRegistry from '@deepseek-ai/dsh-session-projection'
 import * as goalSession from '../src/index.ts'
@@ -86,13 +86,13 @@ afterEach(async () => {
 })
 
 /** Mount a real loop with only its model scripted. */
-async function harness(script: ScriptEntry[]): Promise<Harness> {
+async function harness(script: ScriptEntry[], config?: goalSession.Config): Promise<Harness> {
   const ctx = new Context()
   contexts.push(ctx)
   await mountAgentLoopTestDependencies(ctx)
   await ctx.plugin(SessionProjectionRegistry)
   await ctx.plugin(GoalService)
-  const driver = await ctx.plugin(goalSession)
+  const driver = await ctx.plugin(goalSession, config ?? {})
   await ctx.plugin(AgentLoop, { agents: [] })
   const adapter = new ScriptedAdapter(script)
   ctx.llm.registerAdapter(['mock'], adapter)
@@ -213,7 +213,7 @@ describe('same-session goal driving', () => {
       event.type === 'request/header' ? [event.data.reason] : [])).toEqual(['initial', 'series'])
   })
 
-  it('never adopts activation from an already-live driver and waits for explicit resume', async () => {
+  it('never adopts activation from an already-live driver and waits for a session start', async () => {
     const ctx = new Context()
     contexts.push(ctx)
     await mountAgentLoopTestDependencies(ctx)
@@ -239,15 +239,16 @@ describe('same-session goal driving', () => {
     ['rate limit', new LlmError('slow down', 'RATE_LIMIT')],
     ['request error', new Error('provider broke')],
     ['max tokens', maxTokensResponse('unfinished')],
-  ] as const)('disarms automatic continuation after a %s', async (_label, response) => {
-    const test = await harness([response])
-    test.ctx.goals.create(test.agent, { objective: 'stop safely', maxGoalRounds: 8 })
+  ] as const)('retries a round that ends on a %s and blocks when it keeps failing', async (_label, response) => {
+    const test = await harness([response, response], { maxConsecutiveFailures: 2 })
+    test.ctx.goals.create(test.agent, { objective: 'survive failures', maxGoalRounds: 8 })
 
-    const goal = await waitForGoal(test.ctx, test.agent, current =>
-      current?.phase === 'active' && current.activation === 'disarmed')
+    const goal = await waitForGoal(test.ctx, test.agent, current => current?.phase === 'blocked')
 
-    expect(goal).toMatchObject({ roundsStarted: 1, activation: 'disarmed' })
-    expect(test.adapter.requests).toHaveLength(1)
+    expect(goal).toMatchObject({ phase: 'blocked', roundsStarted: 2, activation: 'disarmed' })
+    expect(goal?.blockedReason?.code).toBe('round-failure')
+    expect(goal?.blockedReason?.message).toContain('Goal round failed 2 consecutive times')
+    expect(test.adapter.requests).toHaveLength(2)
   })
 
   it('maps a downstream step rejection to blocked without entering the round', async () => {
@@ -937,18 +938,145 @@ describe('same-session goal driving', () => {
     expect(test.adapter.requests).toHaveLength(0)
   })
 
-  it('resets process-local scheduling state at a session-start edge', async () => {
-    const test = await harness([textResponse('after explicit resume')])
-    const created = test.ctx.goals.create(test.agent, { objective: 'restart safely', maxGoalRounds: 1 })
+  it('resumes an active goal at a session-start edge instead of waiting for a human', async () => {
+    const test = await harness([textResponse('after restart')])
+    test.ctx.goals.create(test.agent, { objective: 'restart safely', maxGoalRounds: 1 })
     agentEvents(test.ctx, test.agent).emit('agent/session-start', { source: 'resume' })
-    await Promise.resolve()
 
-    expect(test.ctx.goals.get(test.agent)).toMatchObject({ activation: 'disarmed', roundsStarted: 0 })
-    expect(test.adapter.requests).toHaveLength(0)
-
-    test.ctx.goals.resume(test.agent, created)
-    await waitForGoal(test.ctx, test.agent, goal => goal?.phase === 'blocked')
+    const goal = await waitForGoal(test.ctx, test.agent, current => current?.phase === 'blocked')
+    expect(goal).toMatchObject({ roundsStarted: 1, activation: 'disarmed' })
+    expect(goal?.blockedReason?.code).toBe('round-limit')
     expect(test.adapter.requests).toHaveLength(1)
+  })
+
+  it('leaves a seeded session disarmed at its session-start edge', async () => {
+    const test = await harness([textResponse('never runs')])
+    const source = test.ctx.sessions.create(SessionId('fork-source'))
+    source.append('goal/change', { kind: 'goal/change', version: 1, operation: 'create',
+      goal: { id: GoalId('goal-forked'), revision: 1, objective: 'Inherited objective', phase: 'active', maxGoalRounds: 4 },
+      roundsStarted: 0, createdAt: 1, updatedAt: 1 })
+    const { agent } = await test.ctx.agentLoop.createAgent(test.ctx, {
+      sessionId: SessionId('goal-session-forked'),
+      seed: [...source.snapshotEvents()],
+      meta: { parentSession: source.id, isSeeded: true },
+      inheritedEventCount: SessionLogOffset(source.seq),
+      agentOptions: { provider: 'mock', model: 'mock' },
+    })
+
+    agentEvents(test.ctx, agent).emit('agent/session-start', { source: 'resume' })
+
+    expect(test.ctx.goals.get(agent)).toMatchObject({ phase: 'active', activation: 'disarmed' })
+    expect(test.adapter.requests).toHaveLength(0)
+  })
+
+  it('defaults the failure budget for a caller that mounts it without loader-resolved config', async () => {
+    const ctx = new Context()
+    contexts.push(ctx)
+    await mountAgentLoopTestDependencies(ctx)
+    await ctx.plugin(SessionProjectionRegistry)
+    await ctx.plugin(GoalService)
+    await ctx.plugin(AgentLoop, { agents: [] })
+    const adapter = new ScriptedAdapter([textResponse('direct mount round')])
+    ctx.llm.registerAdapter(['mock'], adapter)
+    goalSession.apply(ctx, {})
+    const agent = await ctx.agentLoop.create(SessionId('goal-session-direct-mount'), { provider: 'mock', model: 'mock' })
+
+    ctx.goals.create(agent, { objective: 'directly mounted', maxGoalRounds: 1 })
+
+    const goal = await waitForGoal(ctx, agent, current => current?.phase === 'blocked')
+    expect(goal?.blockedReason?.code).toBe('round-limit')
+    expect(adapter.requests).toHaveLength(1)
+  })
+
+  it('reports a restored goal it cannot read instead of resuming it', async () => {
+    const test = await harness([textResponse('never runs')])
+    const warn = vi.spyOn(test.ctx.logger, 'warn').mockImplementation(() => {})
+    test.ctx.goals.create(test.agent, { objective: 'unreadable at restore' })
+    vi.spyOn(test.ctx.goals, 'get').mockImplementation(() => { throw new Error('goal projection is not registered') })
+
+    agentEvents(test.ctx, test.agent).emit('agent/session-start', { source: 'resume' })
+
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining('could not read the goal'))
+    expect(test.adapter.requests).toHaveLength(0)
+  })
+
+  it('drives a goal that another owner armed before the session-start edge', async () => {
+    const ctx = new Context()
+    contexts.push(ctx)
+    await mountAgentLoopTestDependencies(ctx)
+    await ctx.plugin(SessionProjectionRegistry)
+    await ctx.plugin(GoalService)
+    await ctx.plugin(AgentLoop, { agents: [] })
+    const adapter = new ScriptedAdapter([textResponse('armed round')])
+    ctx.llm.registerAdapter(['mock'], adapter)
+    const agent = await ctx.agentLoop.create(SessionId('goal-session-armed-first'), { provider: 'mock', model: 'mock' })
+    const created = ctx.goals.create(agent, { objective: 'armed before the edge', maxGoalRounds: 1 })
+    ctx.on('agent/session-start', ({ agent: subject }) => {
+      if (subject === agent && ctx.goals.get(agent)?.activation === 'disarmed') ctx.goals.resume(agent, created)
+    })
+
+    await ctx.plugin(goalSession)
+    agentEvents(ctx, agent).emit('agent/session-start', { source: 'resume' })
+
+    const goal = await waitForGoal(ctx, agent, current => current?.phase === 'blocked')
+    expect(goal?.blockedReason?.code).toBe('round-limit')
+    expect(adapter.requests).toHaveLength(1)
+  })
+
+  it('reports an exhausted restored goal at the session start instead of parking it', async () => {
+    const test = await harness([textResponse('never runs')])
+    const created = test.ctx.goals.create(test.agent, { objective: 'exhausted at restore' })
+    const real = test.ctx.goals.get.bind(test.ctx.goals)
+    vi.spyOn(test.ctx.goals, 'get').mockImplementation((subject) => {
+      const view = real(subject)
+      return view === undefined ? undefined : { ...view, roundsStarted: view.maxGoalRounds }
+    })
+
+    agentEvents(test.ctx, test.agent).emit('agent/session-start', { source: 'resume' })
+
+    const goal = await waitForGoal(test.ctx, test.agent, current => current?.phase === 'blocked')
+    expect(goal?.blockedReason?.code).toBe('round-limit')
+    expect(goal?.id).toBe(created.id)
+
+    const unreported = await harness([textResponse('never runs')])
+    const warn = vi.spyOn(unreported.ctx.logger, 'warn').mockImplementation(() => {})
+    const second = unreported.ctx.goals.create(unreported.agent, { objective: 'unreportable at restore' })
+    const secondReal = unreported.ctx.goals.get.bind(unreported.ctx.goals)
+    vi.spyOn(unreported.ctx.goals, 'get').mockImplementation((subject) => {
+      const view = secondReal(subject)
+      return view === undefined ? undefined : { ...view, roundsStarted: view.maxGoalRounds }
+    })
+    vi.spyOn(unreported.ctx.goals, 'block').mockImplementation(() => { throw new Error('blocker write failed') })
+
+    agentEvents(unreported.ctx, unreported.agent).emit('agent/session-start', { source: 'resume' })
+
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining('could not report the exhausted goal'))
+    expect(second.phase).toBe('active')
+  })
+
+  it('reports a restore it cannot resume and keeps the goal disarmed', async () => {
+    const test = await harness([textResponse('never runs')])
+    const warn = vi.spyOn(test.ctx.logger, 'warn').mockImplementation(() => {})
+    test.ctx.goals.create(test.agent, { objective: 'unresumable at restore' })
+    vi.spyOn(test.ctx.goals, 'resume').mockImplementation(() => { throw new Error('resume mutation rejected') })
+
+    agentEvents(test.ctx, test.agent).emit('agent/session-start', { source: 'resume' })
+
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining('could not resume goal'))
+    expect(test.adapter.requests).toHaveLength(0)
+  })
+
+  it('leaves a token ceiling outside a goal round without touching goal authority', async () => {
+    const test = await harness([maxTokensResponse('ceiling'), textResponse('round ran')])
+    test.agent.followup(createUserMessage({ content: [{ type: 'text', text: 'human work' }], source: { kind: 'user' } }))
+    await test.agent.whenIdle()
+
+    expect(test.ctx.goals.get(test.agent)).toBeUndefined()
+    test.ctx.goals.create(test.agent, { objective: 'after the ceiling', maxGoalRounds: 1 })
+
+    const goal = await waitForGoal(test.ctx, test.agent, current => current?.phase === 'blocked')
+    expect(goal?.blockedReason?.code).toBe('round-limit')
+    expect(test.adapter.requests).toHaveLength(2)
   })
 
   it('disarms when a round turn/end cannot commit', async () => {
@@ -1005,7 +1133,7 @@ describe('same-session goal driving', () => {
     expect(warn).not.toHaveBeenCalledWith(expect.stringContaining('goal-round-driver'))
   })
 
-  it('keeps terminal agent failure disarmed and defers queued human work until another wakeup', async () => {
+  it('blocks a goal whose failing round exhausted the round cap and defers queued human work', async () => {
     const test = await harness([new Error('round one broke'), textResponse('human answer')])
     let queued = false
     test.ctx.on('session/event', (session, event) => {
@@ -1019,8 +1147,7 @@ describe('same-session goal driving', () => {
     })
     test.ctx.goals.create(test.agent, { objective: 'survive a stale failure', maxGoalRounds: 1 })
 
-    await waitForGoal(test.ctx, test.agent, current =>
-      current?.phase === 'active' && current.activation === 'disarmed')
+    await waitForGoal(test.ctx, test.agent, current => current?.phase === 'blocked')
 
     expect(test.adapter.requests).toHaveLength(1)
     expect(test.agent.inbox.nextTurn).toHaveLength(1)

@@ -7,7 +7,7 @@ kind: "package-reference"
 
 ## Summary
 
-SuperGoal keeps a session working toward one long-term objective. Start it explicitly with `/supergoal <objective>`; the agent reassesses the objective whenever a task is about to finish and continues while useful work remains. A hard blocker opens a multiple-choice question, and the Web session shows a yellow waiting-for-answer indicator. The objective and human decisions survive reloads, while execution resumes only on an explicit command.
+SuperGoal keeps a session working toward one long-term objective. Start it explicitly with `/supergoal <objective>`; the agent reassesses the objective whenever a task is about to finish and continues while useful work remains. A hard blocker opens a multiple-choice question, and the Web session shows a yellow waiting-for-answer indicator. The objective and human decisions survive reloads, and reopening a session resumes the objective it was already pursuing; a forked session stays disarmed until someone resumes it.
 
 ## Table of Contents
 
@@ -49,7 +49,7 @@ Custom compositions mount the plugin beside the agent registry, commands, tools,
   name: '@deepseek-ai/dsh-super-goal'
 ```
 
-There are no configuration fields or automatic task-count limits. The composition must supply a question answerer to receive blocker input.
+There is one configuration field, `maxConsecutiveFailures` (default 3): the consecutive turns that may end without completing work before the objective reports a durable blocker instead of being retried. The composition must supply a question answerer to receive blocker input.
 
 -----
 
@@ -60,7 +60,9 @@ There are no configuration fields or automatic task-count limits. The compositio
 
 The plugin records versioned state in the Session log and reads current state through the incremental session projection. A retained validation failure rejects reads and mutations. Each mutation advances a revision, including clearing. Tool calls and question answers must match the current revision, so a late answer cannot reactivate a replaced objective.
 
-The public task-stopping event supplies the continuation point. Continuation instructions enter ordinary logged model history. Tool registrations belong to the agent scope and are installed when a SuperGoal is present; ordinary sessions retain their existing tool schemas. Process-local activation ends on manual interruption or plugin disposal and is not restored merely by reading a saved session.
+The public task-stopping event supplies the continuation point. Continuation instructions enter ordinary logged model history. Tool registrations belong to the agent scope and are installed when a SuperGoal is present; ordinary sessions retain their existing tool schemas. Process-local activation is dropped by a deliberate stop — a human cancellation, teardown, or disposal — and by a pause, clear, or completion. A session start instead re-arms an active objective in a session that was loaded as itself and steers its continuation message, so a restarted process keeps pursuing it; a seeded session (a fork, or a log inherited from a parent) re-arms nothing, because the session it came from may still be running that objective.
+
+A turn that ends without completing work — a provider failure, a token-ceiling stop, a rejected step, or an interrupted turn — spends the consecutive-failure budget and is retried. Past the budget the objective is committed to `blocked` with the concrete condition and two choices, and the existing blocker question asks for a decision, so an objective that cannot make progress records why instead of going quiet.
 
 The invariant companion compares the banner projection with the durable objective before model steps. Parsing and mutation validation belong to [`src/index.ts`](src/index.ts) and [`src/projection.ts`](src/projection.ts).
 
@@ -97,8 +99,8 @@ Continuation appends to the existing conversation. Activating SuperGoal adds sco
 SuperGoal relies on the configured model and running harness:
 
 - Completion evidence is required text; the plugin does not independently certify the model's interpretation of that evidence.
-- It does not run while the harness process is closed. Reloaded objectives require explicit resumption.
-- Provider failures, manual cancellation, or unavailable question providers can interrupt execution. The durable objective remains available for inspection and resumption.
+- It does not run while the harness process is closed. A session reopened as itself resumes its objective; a fork needs an explicit resumption.
+- Provider failures are retried up to `maxConsecutiveFailures` consecutive turns, after which the objective is blocked with the recorded condition. Manual cancellation and disposal stop execution at once. The durable objective remains available for inspection and resumption.
 - Token, cost, permission, and provider limits remain owned by their existing policies.
 
 ### Dev Note

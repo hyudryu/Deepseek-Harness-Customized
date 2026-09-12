@@ -3,7 +3,8 @@
  * `ctx.jobs`. Loading the plugin attaches the controller required by
  * producers. It also delivers unreported completions to the owning agent:
  * injected into a busy owner's next step, or opening a turn on an idle one
- * under the default `wakeup` delivery, bounded per owner.
+ * under the default `wakeup` delivery, bounded per owner except while that
+ * owner holds standing autonomous authority.
  * @module @deepseek-ai/dsh-tool-jobs
  */
 
@@ -16,6 +17,11 @@ import type { GenericCallView, ToolDefinition, ToolExecution } from '@deepseek-a
 import { JobId } from '@deepseek-ai/dsh-jobs'
 import type { JobSnapshot } from '@deepseek-ai/dsh-jobs'
 import type { Agent } from '@deepseek-ai/dsh-agent'
+// Type-only: the continuation owners declare the activation queries answered
+// through `ctx.bail`. The registry holds neither plugin, so an unanswered query
+// means no continuation plugin is mounted, not that the owner is disarmed.
+import type {} from '@deepseek-ai/dsh-goal'
+import type {} from '@deepseek-ai/dsh-super-goal'
 
 export const name = 'tool-jobs'
 export const inject = ['tools', 'jobs', 'systemPrompt']
@@ -39,7 +45,9 @@ export interface Config {
    * Turns one owner may have opened by completion wakes before the next
    * notice degrades to injection, reset by any user-authored input (default 3).
    * Bounds the self-exciting chain where a woken turn starts the job whose
-   * completion wakes it again.
+   * completion wakes it again. An owner that holds an armed goal or SuperGoal
+   * is exempt, because that objective is already bounded by its own round cap
+   * and a starved wake would strand work its human authorized.
    */
   maxConsecutiveWakes?: number
 }
@@ -201,6 +209,20 @@ function presentTaskCall(title: string, kind: 'read' | 'execute', rawInput?: str
   return { card: 'generic', title, kind, ...rawInput !== undefined ? { rawInput } : {} }
 }
 
+/**
+ * Whether one owner holds standing autonomous authority to keep working. An
+ * armed goal or SuperGoal is a human instruction to pursue an objective, so its
+ * completion notices must arrive even after the wake budget is spent; that
+ * objective carries its own round cap, which is the bound that applies instead.
+ * @param ctx - Context carrying the continuation plugins' query listeners.
+ * @param owner - the agent that owns the settled job.
+ * @returns whether this owner's completion wakes are exempt from the budget.
+ */
+function standingAuthority(ctx: Context, owner: Agent): boolean {
+  return ctx.bail('goal/activation', owner) === true
+    || ctx.bail('super-goal/activation', owner.session) === true
+}
+
 export function apply(ctx: Context, config: Config): void {
   const waitDefault = config.waitTimeoutMs ?? 30_000
   const waitCap = config.maxWaitTimeoutMs ?? 600_000
@@ -290,7 +312,8 @@ export function apply(ctx: Context, config: Config): void {
       },
     })
     const spent = spentWakes.get(owner) ?? 0
-    if (delivery === 'wakeup' && owner.status === 'idle' && spent < wakeBudget) {
+    const wakeable = owner.status === 'idle' && (spent < wakeBudget || standingAuthority(ctx, owner))
+    if (delivery === 'wakeup' && wakeable) {
       spentWakes.set(owner, spent + 1)
       owner.followup(message)
       return

@@ -8,7 +8,7 @@ Types shared by the event-sourced goal service and its policy consumers. The [go
 
 [SuperGoal](../../packages/goal/super-goal/README.md) retains a separate long-term objective in `super-goal/change` events. [`SuperGoal`](../../packages/goal/super-goal/src/types.ts) contains a monotonic `revision`, the `objective`, and an `active`, `paused`, `blocked`, or `complete` phase. Completion requires `evidence`; a blocker requires `reason` and two or three distinct `choices`. A human response is retained as `answer`. The version-1 change envelope carries its matching revision and a nullable `goal`; null clears the objective without resetting the revision.
 
-The `superGoal` Session projection supplies the highlighted banner above the transcript. Its checkpoint retains the latest revision, current goal, and first validation failure. The plugin compares model mutations and delayed human answers with the current revision. Execution activation is process-local; a durable active phase alone does not restart work after loading a session.
+The `superGoal` Session projection supplies the highlighted banner above the transcript. Its checkpoint retains the latest revision, current goal, and first validation failure. The plugin compares model mutations and delayed human answers with the current revision. Execution activation is process-local; a session that starts while the plugin is loaded re-arms an `active` objective that it owns itself, while a seeded session (a fork or an inherited child log) stays disarmed until a human resumes it ([decision](../../.agents/notes/implemented/feature/2026-09-11-continuation-survives-restart-and-failure.md)).
 
 ## Identity and lifecycle
 
@@ -24,7 +24,7 @@ interface GoalRef {
 }
 ```
 
-The durable phase answers what happened to the objective. Process-local activation separately answers whether a continuation consumer may start another round.
+The durable phase answers what happened to the objective. Process-local activation separately answers whether a continuation consumer may start another round. The service publishes that answer for one exact live agent through the `goal/activation` bail event, which returns `true` only while the goal is armed; a consumer deciding whether work may open a turn on an idle agent reads it without assuming a goal service is mounted. A seeded session replays the durable goal with activation disarmed.
 
 ```ts type-equiv
 /** Durable continuation phase. Activation is process-local and separate. */
@@ -258,6 +258,32 @@ Source: [`packages/goal/goal/src/index.ts`](../../packages/goal/goal/src/index.t
 <a id="goal-events"></a>
 
 ### `goal/*` events
+
+<a id="goalactivation--bail"></a>
+
+#### `goal/activation` — bail
+
+Read process-local continuation authority for one exact live agent. Lifecycle owners consult this before deciding whether work may open a turn on an agent that is otherwise idle, so an armed goal is never starved of the input that keeps it running. `true` is the only answer: a disarmed goal, an absent goal, and an unmounted service all read as no answer, because a bail dispatch treats `false` as silence. Deliberately unscoped, matching the companion `super-goal/activation` query.
+
+```ts cordis-catalog
+/**
+ * Read process-local continuation authority for one exact live agent.
+ * Lifecycle owners consult this before deciding whether work may open a turn
+ * on an agent that is otherwise idle, so an armed goal is never starved of
+ * the input that keeps it running. `true` is the only answer: a disarmed
+ * goal, an absent goal, and an unmounted service all read as no answer,
+ * because a bail dispatch treats `false` as silence.
+ * Deliberately unscoped, matching the companion `super-goal/activation`
+ * query.
+ * @mode bail
+ * @param agent - agent whose continuation authority is requested.
+ */
+'goal/activation'(agent: Agent): true | undefined
+```
+
+Types: [Agent](core.md)
+
+Source: [`packages/goal/goal/src/domain.ts`](../../packages/goal/goal/src/domain.ts)
 
 <a id="goalchanged--emit"></a>
 

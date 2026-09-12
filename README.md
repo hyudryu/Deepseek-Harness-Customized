@@ -42,9 +42,16 @@ Opening a saved v2 session preserves valid skill-catalog presentation digests wh
 <details>
 <summary><b>SuperGoal: pursue a long-term objective</b></summary>
 
-Start `/supergoal <objective>` to keep the session working toward a long-term result. A highlighted banner at the top of the session shows the objective with its current status underneath. SuperGoal checks the objective whenever a task is about to finish and continues while work remains. Completion requires recorded evidence; a hard blocker opens a multiple-choice question and gives the session a yellow waiting-for-answer indicator. Your answer is recorded before work resumes.
+Start `/supergoal <objective>` to keep the session working toward a long-term result. A highlighted banner at the top of the session shows the objective with its current status underneath. SuperGoal checks the objective whenever a task is about to finish and continues while work remains. Completion requires recorded evidence; a hard blocker opens a multiple-choice question and gives the session a yellow waiting-for-answer indicator. Your answer is recorded before work resumes. A turn that fails on the provider side is retried a few times and then reports the concrete blocker instead of going quiet.
 
-SuperGoal is included in the standard harness. Use `/supergoal` to inspect it, `/supergoal pause` to stop unfinished work, `/supergoal resume` to continue, or `/supergoal clear` to remove it and its tools. Pause preserves unanswered blockers and queued user work. Completed objectives stay complete. The objective survives session reloads; resuming execution requires `/supergoal resume`. See the [SuperGoal reference](packages/goal/super-goal/README.md) for behavior and limitations.
+SuperGoal is included in the standard harness. Use `/supergoal` to inspect it, `/supergoal pause` to stop unfinished work, `/supergoal resume` to continue, or `/supergoal clear` to remove it and its tools. Pause preserves unanswered blockers and queued user work. Completed objectives stay complete. The objective survives session reloads, and reopening a session resumes the objective it was already pursuing; a forked session waits for `/supergoal resume`. See the [SuperGoal reference](packages/goal/super-goal/README.md) for behavior and limitations.
+
+</details>
+
+<details>
+<summary><b>Autonomous goals keep running to the end</b></summary>
+
+An armed `/goal` or `/supergoal` no longer stops quietly. Reopening a session resumes the objective it was already pursuing instead of waiting for a human resume, a turn that fails on the provider side is retried a few times before the objective records a durable blocker naming the condition, and a settled background job always wakes an owner that is still pursuing an objective — the completion-notice wake budget no longer applies to it. A forked session still waits for an explicit resume, and failures that are not provider failures, such as a rejected log write or a plugin failure, still stop the objective rather than retrying it. See the [continuation durability decision](.agents/notes/implemented/feature/2026-09-11-continuation-survives-restart-and-failure.md).
 
 </details>
 

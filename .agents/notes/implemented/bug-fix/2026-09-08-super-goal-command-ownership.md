@@ -12,7 +12,7 @@ Resume questions inherit command cancellation. Pause preserves the blocked phase
 
 Host reads use the incremental SuperGoal projection and propagate its retained validation failure. Repeated assessments do not fold the entire growing transcript.
 
-The banner subscribes to process-local activation independently of generic agent execution. Loading a durable active objective grants no execution authority.
+The banner subscribes to process-local activation independently of generic agent execution. Opening a durable active objective arms it in a non-seeded session, while a seeded session — a fork or an inherited child log — keeps it disarmed. The [continuation durability decision](../feature/2026-09-11-continuation-survives-restart-and-failure.md) supersedes this fact.
 
 ## Alternatives considered
 

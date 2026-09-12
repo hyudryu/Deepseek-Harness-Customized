@@ -2,21 +2,23 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
 import type { Agent } from '@deepseek-ai/dsh-agent'
+import { agentEvents } from '@deepseek-ai/dsh-agent'
 import AgentLoop from '@deepseek-ai/dsh-agent-loop'
 import { mountAgentLoopTestDependencies } from '@deepseek-ai/dsh-agent-loop-testkit'
 import SessionProjectionRegistry from '@deepseek-ai/dsh-session-projection'
 import CommandRuntime from '@deepseek-ai/dsh-commands'
 import UserQuestionService, { type AskUserQuestionAnswer, type AskUserQuestionRequest } from '@deepseek-ai/dsh-user-questions'
-import { Session, SessionId } from '@deepseek-ai/dsh-session'
-import { createUserMessage, ToolCallId } from '@deepseek-ai/dsh-llm'
+import { Session, SessionId, SessionLogOffset } from '@deepseek-ai/dsh-session'
+import { createUserMessage, LlmError, ToolCallId } from '@deepseek-ai/dsh-llm'
 import * as SuperGoalPlugin from '../src/index.ts'
 import { readSuperGoal } from '../src/index.ts'
+import type { PreStepDecision } from '@deepseek-ai/dsh-agent'
 import { MockAdapter, textResponse, toolCallResponse } from '../../../core/agent-loop/tests/mock-adapter.ts'
 
 const cleanups: (() => Promise<unknown>)[] = []
 afterEach(async () => { for (const cleanup of cleanups.splice(0).reverse()) await cleanup() })
 
-async function harness(adapter: MockAdapter) {
+async function harness(adapter: MockAdapter, config?: SuperGoalPlugin.Config) {
   const ctx = new Context()
   cleanups.push(() => ctx.fiber.dispose())
   await mountAgentLoopTestDependencies(ctx)
@@ -24,7 +26,7 @@ async function harness(adapter: MockAdapter) {
   await ctx.plugin(AgentLoop, { agents: [] })
   await ctx.plugin(CommandRuntime)
   await ctx.plugin(UserQuestionService)
-  const goalPlugin = await ctx.plugin(SuperGoalPlugin)
+  const goalPlugin = await ctx.plugin(SuperGoalPlugin, config ?? {})
   ctx.llm.registerAdapter(['mock'], adapter)
   const agent = await ctx.agentLoop.create(SessionId('super-goal-test'), { provider: 'mock', model: 'mock' })
   return { ctx, agent, goalPlugin }
@@ -387,9 +389,9 @@ describe('SuperGoal through the real loop', () => {
     expect(readSuperGoal(agent.session)).toBeNull()
   })
 
-  it('restores an unfinished objective without starting work until explicitly resumed', async () => {
-    const adapter = new MockAdapter([textResponse('Unrelated reply.'),
-      toolCallResponse('complete', 'complete_super_goal', { revision: 2, evidence: 'Resumed acceptance verified.' }),
+  it('resumes a restored objective when its session is reopened', async () => {
+    const adapter = new MockAdapter([
+      toolCallResponse('complete', 'complete_super_goal', { revision: 1, evidence: 'Resumed acceptance verified.' }),
       textResponse('Complete.')])
     const { ctx } = await harness(adapter)
     const saved = ctx.sessions.create(SessionId('saved-goal'))
@@ -399,16 +401,195 @@ describe('SuperGoal through the real loop', () => {
       sessionId: SessionId('restored-goal'), seed: [...saved.snapshotEvents()],
       agentOptions: { provider: 'mock', model: 'mock' },
     })
+    await vi.waitFor(() => {
+      expect(readSuperGoal(agent.session)).toMatchObject({ phase: 'complete', revision: 2 })
+    })
+    expect(adapter.requests).toHaveLength(2)
+  })
+
+  it('counts a rejected step and a hook cancellation as failures that report a blocker', async () => {
+    const rejected = new MockAdapter([textResponse('never reached')])
+    const first = await harness(rejected, { maxConsecutiveFailures: 1 })
+    first.ctx.on('agent/pre-step', ({ messages }, next) => messages.some(message => message.source.kind === 'plugin'
+      && (message.source as { plugin?: string }).plugin === 'super-goal')
+      ? Promise.resolve<PreStepDecision>({ kind: 'reject' })
+      : next())
+    await command(first.ctx, first.agent, 'Rejected objective')
+
+    await vi.waitFor(() => {
+      expect(readSuperGoal(first.agent.session)).toMatchObject({ phase: 'blocked' })
+    })
+    expect(readSuperGoal(first.agent.session)?.reason).toContain('a plugin rejected the turn before it ran')
+
+    const cancelled = new MockAdapter([textResponse('Interrupted by a hook.')])
+    const second = await harness(cancelled, { maxConsecutiveFailures: 1 })
+    second.ctx.on('agent/turn-stopping', ({ agent: subject }) => {
+      if (subject === second.agent) second.agent.cancel({ kind: 'hook', reason: 'policy stopped the turn' })
+    })
+    await command(second.ctx, second.agent, 'Hook-cancelled objective')
+
+    await vi.waitFor(() => {
+      expect(readSuperGoal(second.agent.session)).toMatchObject({ phase: 'blocked' })
+    })
+    expect(readSuperGoal(second.agent.session)?.reason).toContain('the hook cancelled the turn')
+  })
+
+  it('leaves the objective unresolved when the blocking question cannot be asked', async () => {
+    const failed = () => { throw new LlmError('provider broke', 'SERVER') }
+    const adapter = new MockAdapter([failed])
+    const { ctx, agent } = await harness(adapter, { maxConsecutiveFailures: 1 })
+    ctx.on('user-questions/request', () => { throw new Error('no answerer is configured') })
+    const warn = vi.spyOn(ctx.logger, 'warn').mockImplementation(() => {})
+    await command(ctx, agent, 'Unanswerable objective')
+
+    await vi.waitFor(() => {
+      expect(readSuperGoal(agent.session)).toMatchObject({ phase: 'blocked' })
+    })
+    await vi.waitFor(() => {
+      expect(warn).toHaveBeenCalledWith(expect.stringContaining('stopped after 1 failed turns'))
+    })
+  })
+
+  it('reports a read failure instead of resuming an objective it cannot read', async () => {
+    const adapter = new MockAdapter([textResponse('Unrelated reply.')])
+    const { ctx, agent } = await harness(adapter)
+    const warn = vi.spyOn(ctx.logger, 'warn').mockImplementation(() => {})
+    agent.session.append('super-goal/change', { version: 1, revision: 1,
+      goal: { revision: 1, objective: 'Unreadable objective', phase: 'active' } })
+    const stateOf = vi.spyOn(ctx.sessionProjections, 'stateOf').mockImplementation(() => { throw new Error('projection read failed') })
+
+    agentEvents(ctx, agent).emit('agent/session-start', { source: 'resume' })
+
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining('projection read failed'))
+    expect(ctx.bail('super-goal/activation', agent.session)).not.toBe(true)
+    stateOf.mockRestore()
+  })
+
+  it('defaults the failure budget for a caller that mounts it without loader-resolved config', async () => {
+    const failed = () => { throw new LlmError('provider broke', 'SERVER') }
+    const adapter = new MockAdapter([failed, failed, failed])
+    const ctx = new Context()
+    cleanups.push(() => ctx.fiber.dispose())
+    await mountAgentLoopTestDependencies(ctx)
+    await ctx.plugin(SessionProjectionRegistry)
+    await ctx.plugin(AgentLoop, { agents: [] })
+    await ctx.plugin(CommandRuntime)
+    await ctx.plugin(UserQuestionService)
+    ctx.llm.registerAdapter(['mock'], adapter)
+    SuperGoalPlugin.apply(ctx, {})
+    const agent = await ctx.agentLoop.create(SessionId('super-goal-direct-mount'), { provider: 'mock', model: 'mock' })
+    await command(ctx, agent, 'Default budget objective')
+
+    await vi.waitFor(() => {
+      expect(readSuperGoal(agent.session)).toMatchObject({ phase: 'blocked' })
+    })
+    expect(readSuperGoal(agent.session)?.reason).toContain('stopped after 3 consecutive turns')
+    expect(adapter.requests).toHaveLength(3)
+  })
+
+  it('resumes pursuit from the answer to an exhausted budget', async () => {
+    const failed = () => { throw new LlmError('provider broke', 'SERVER') }
+    const adapter = new MockAdapter([failed, textResponse('Resumed after the answer.')])
+    const { ctx, agent } = await harness(adapter, { maxConsecutiveFailures: 1 })
+    // The first question is answered; a later one rejects so the objective keeps
+    // the state that answer produced instead of cycling through the budget.
+    let asked = 0
+    ctx.on('user-questions/request', () => {
+      asked += 1
+      return asked === 1
+        ? Promise.resolve({ answers: [{ id: 'super-goal-blocker', selected: [], custom: 'Retry now' }] })
+        : Promise.reject(new Error('answerer closed'))
+    })
+    await command(ctx, agent, 'Recoverable objective')
+
+    await vi.waitFor(() => {
+      const changes = agent.session.snapshotEvents().filter(event => event.type === 'super-goal/change')
+      expect(changes.some(event => event.type === 'super-goal/change'
+        && event.data.goal?.phase === 'active'
+        && event.data.goal.answer === 'Retry now')).toBe(true)
+    })
+    expect(asked).toBeGreaterThanOrEqual(1)
+  })
+
+  it('reports a non-error read failure instead of resuming an objective it cannot read', async () => {
+    const adapter = new MockAdapter([textResponse('Unrelated reply.')])
+    const { ctx, agent } = await harness(adapter)
+    const warn = vi.spyOn(ctx.logger, 'warn').mockImplementation(() => {})
+    agent.session.append('super-goal/change', { version: 1, revision: 1,
+      goal: { revision: 1, objective: 'Unreadable objective', phase: 'active' } })
+    const stateOf = vi.spyOn(ctx.sessionProjections, 'stateOf').mockImplementation(() => { throw 'not an error object' })
+
+    agentEvents(ctx, agent).emit('agent/session-start', { source: 'resume' })
+
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining('not an error object'))
+
+    // A projection the registry does not hold is another unreadable case.
+    stateOf.mockImplementation(() => undefined)
+    agentEvents(ctx, agent).emit('agent/session-start', { source: 'resume' })
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining('projection is not registered'))
+
+    stateOf.mockRestore()
+  })
+
+  it('ignores a turn end for a session without an exact owning pursuit', async () => {
+    const adapter = new MockAdapter([textResponse('Unrelated reply.')])
+    const { ctx, agent } = await harness(adapter)
+    const orphan = ctx.sessions.create(SessionId('super-goal-orphan'))
+    orphan.append('turn/end', { turn: 1, reason: { kind: 'completed' } })
+    const existing = await ctx.agentLoop.create(SessionId('super-goal-existing'), { provider: 'mock', model: 'mock' })
+    existing.followup(createUserMessage({ source: { kind: 'user' }, content: [{ type: 'text', text: 'ordinary work' }] }))
+    await existing.whenIdle()
+
+    expect(readSuperGoal(existing.session)).toBeNull()
+    expect(readSuperGoal(agent.session)).toBeNull()
+  })
+
+  it('reports a non-error question failure and leaves the blocker committed', async () => {
+    const failed = () => { throw new LlmError('provider broke', 'SERVER') }
+    const adapter = new MockAdapter([failed])
+    const { ctx, agent } = await harness(adapter, { maxConsecutiveFailures: 1 })
+    // oxlint-disable-next-line typescript/prefer-promise-reject-errors -- the non-Error rejection is the failure this path must report
+    ctx.on('user-questions/request', () => Promise.reject('answerer unavailable'))
+    const warn = vi.spyOn(ctx.logger, 'warn').mockImplementation(() => {})
+    await command(ctx, agent, 'Unanswerable objective')
+
+    await vi.waitFor(() => {
+      expect(warn).toHaveBeenCalledWith(expect.stringContaining('answerer unavailable'))
+    })
+    expect(readSuperGoal(agent.session)).toMatchObject({ phase: 'blocked' })
+  })
+
+  it('retries a failed pursuit turn and reports the blocker when the failure repeats', async () => {
+    const failed = () => { throw new LlmError('provider broke', 'SERVER') }
+    const adapter = new MockAdapter([failed, failed, failed])
+    const { ctx, agent } = await harness(adapter)
+    await command(ctx, agent, 'Keep pursuing the acceptance check')
+
+    await vi.waitFor(() => {
+      expect(readSuperGoal(agent.session)).toMatchObject({ phase: 'blocked' })
+    })
+    const blocked = readSuperGoal(agent.session)
+    expect(blocked?.reason).toContain('provider broke')
+    expect(blocked?.choices).toHaveLength(2)
+    expect(adapter.requests).toHaveLength(3)
+    expect(ctx.bail('super-goal/activation', agent.session)).not.toBe(true)
+  })
+
+  it('leaves a seeded objective to the session it was forked from until a human resumes it', async () => {
+    const adapter = new MockAdapter([textResponse('Unrelated reply.')])
+    const { ctx } = await harness(adapter)
+    const saved = ctx.sessions.create(SessionId('saved-goal'))
+    saved.append('super-goal/change', { version: 1, revision: 1,
+      goal: { revision: 1, objective: 'Complete the retained acceptance check', phase: 'active' } })
+    const { agent } = await ctx.agentLoop.createAgent(ctx, {
+      sessionId: SessionId('forked-goal'), seed: [...saved.snapshotEvents()],
+      meta: { parentSession: saved.id, isSeeded: true },
+      inheritedEventCount: SessionLogOffset(saved.seq),
+      agentOptions: { provider: 'mock', model: 'mock' },
+    })
     await agent.whenIdle()
     expect(adapter.requests).toHaveLength(0)
-    const unrelated = idle(ctx, agent)
-    agent.followup(createUserMessage({ content: [{ type: 'text', text: 'An unrelated question' }], source: { kind: 'user' } }))
-    await unrelated
-    expect(adapter.requests).toHaveLength(1)
-    const settled = idle(ctx, agent)
-    await command(ctx, agent, 'resume')
-    await settled
-    expect(readSuperGoal(agent.session)).toMatchObject({ phase: 'complete', revision: 3 })
+    expect(ctx.bail('super-goal/activation', agent.session)).not.toBe(true)
   })
 
   it('clear removes goal schemas from ordinary requests and reinstalls them for a replacement objective', async () => {
@@ -517,7 +698,7 @@ describe('SuperGoal through the real loop', () => {
   })
 
   it('mounting the plugin around existing agents restores only the session that owns a goal', async () => {
-    const { ctx, agent, goalPlugin } = await harness(new MockAdapter([]))
+    const { ctx, agent, goalPlugin } = await harness(new MockAdapter([textResponse('Ordinary answer.')]))
     await goalPlugin.dispose()
     agent.session.append('super-goal/change', { version: 1, revision: 1,
       goal: { revision: 1, objective: 'Retained objective', phase: 'paused' } })
@@ -527,6 +708,11 @@ describe('SuperGoal through the real loop', () => {
     expect(ctx.tools.get('get_super_goal', ordinary)).toBeUndefined()
     expect((await command(ctx, ordinary, 'show'))?.result.text).toContain('No SuperGoal')
     expect((await command(ctx, agent, 'A different goal'))?.result.kind).toBe('error')
+    // A turn on an agent the remounted instance never observed has no pursuit to
+    // record, and must not be given one by its turn end.
+    ordinary.followup(createUserMessage({ source: { kind: 'user' }, content: [{ type: 'text', text: 'ordinary work' }] }))
+    await ordinary.whenIdle()
+    expect(ctx.bail('super-goal/activation', ordinary.session)).not.toBe(true)
     const owned = await ctx.agentLoop.createAgent(ctx, { sessionId: SessionId('disposable-goal-agent'),
       agentOptions: { provider: 'mock', model: 'mock' } })
     await owned.dispose()

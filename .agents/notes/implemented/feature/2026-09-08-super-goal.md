@@ -12,7 +12,7 @@ A long-term objective can remain unfinished after the agent completes an individ
 
 Completion requires concrete evidence. Blocking requires a reason and two or three actionable choices presented through the existing user-question service. Its Web adapter supplies the yellow pending-question indicator. Answers are recorded before continuation, and a revision comparison prevents a stale answer from reviving an objective changed while the question was open.
 
-Durable state resides in versioned Session events. Execution activation remains process-local: opening or forking a transcript grants no new execution authority. Manual stop and plugin disposal end execution and preserve the objective. Scoped tools appear only in sessions containing a SuperGoal.
+Durable state resides in versioned Session events. Execution activation remains process-local, and a seeded session starts disarmed, so forking a transcript grants no new execution authority; a non-seeded session that reopens its own active objective arms itself and steers the first assessment, so a restart needs no `/supergoal resume`. The [continuation durability decision](2026-09-11-continuation-survives-restart-and-failure.md) supersedes this fact. Manual stop and plugin disposal end execution and preserve the objective. Scoped tools appear only in sessions containing a SuperGoal.
 
 Activation steers the current turn, or starts one when idle, so completion cannot leave an activation queued for another turn. Clearing disposes scoped tools after committing the tombstone and permits registration for a replacement objective. Completion is terminal: pause cannot convert a completed objective into resumable work.
 
@@ -22,7 +22,7 @@ Activation steers the current turn, or starts one when idle, so completion canno
 
 **Add another notification type.** The existing multiple-choice question adapter already marks the session as waiting for an answer. Reusing it keeps answer delivery and notification dismissal under one owner.
 
-**Automatically restart persisted work on load.** Reading a session is not an instruction to execute it. Explicit resumption avoids unexpected work when a user opens historical sessions.
+**Automatically restart persisted work on load.** Reading a session is not an instruction to execute it. This alternative is retained only for a seeded session — a fork or an inherited child log — which carries the objective without the authority to pursue it.
 
 **Queue activation for a separate turn.** A running turn can already assess and complete the objective. A queued activation would then spend another model request and replace the final response.
 

@@ -255,6 +255,20 @@ export class GoalService extends TypertRemoteService {
     ctx.on('agent/session-start', ({ agent }) => {
       this.runtimeState(agent.session).activation = 'disarmed'
     })
+    ctx.on('goal/activation', (agent: Agent): true | undefined => {
+      // Read-only query answered without throwing: only an armed goal answers,
+      // so a caller that decides whether to open an idle turn keeps its own
+      // default for every other outcome.
+      try {
+        if (this.ctx.agents.get(agent.id) !== agent) return undefined
+        return this.view(this.state(agent.session), this.runtimeState(agent.session))?.activation === 'armed'
+          ? true
+          : undefined
+      } catch (error: unknown) {
+        this.ctx.logger.warn(`goals: activation query failed for agent "${agent.id}": ${error instanceof Error ? error.message : String(error)}`)
+        return undefined
+      }
+    })
     ctx.sessionProjections.register(goalProjectionDefinition)
     ctx.on('session/event', (session, event) => {
       if (event.type !== 'goal/change') return

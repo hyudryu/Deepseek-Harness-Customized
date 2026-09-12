@@ -3296,6 +3296,14 @@ export const EVENT_API: readonly EventApiEntry[] = [
     parameters: [{ name: 'target', description: 'the resolved target about to be written.' }, { name: 'actor', description: 'the opaque tool-execution context the decider keys off.' }],
   },
   {
+    name: 'goal/activation',
+    mode: 'bail',
+    signature: '\'goal/activation\'(agent: Agent): true | undefined',
+    summary: 'Read process-local continuation authority for one exact live agent.',
+    description: 'Read process-local continuation authority for one exact live agent. Lifecycle owners consult this before deciding whether work may open a turn on an agent that is otherwise idle, so an armed goal is never starved of the input that keeps it running. `true` is the only answer: a disarmed goal, an absent goal, and an unmounted service all read as no answer, because a bail dispatch treats `false` as silence. Deliberately unscoped, matching the companion `super-goal/activation` query.',
+    parameters: [{ name: 'agent', description: 'agent whose continuation authority is requested.' }],
+  },
+  {
     name: 'goal/changed',
     mode: 'emit',
     signature: '\'goal/changed\'(this: import(\'@deepseek-ai/dsh-scope\').Scoped<Agent>, payload: { agent: Agent; change: GoalChanged }): void',
@@ -4888,10 +4896,6 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export interface ReadResultView {\n    card: \'read\';\n    title?: string;\n    path: string;\n    offset: number;\n    lines: ReadFileLine[];\n    totalLines: number;\n    lang?: string;\n    content?: ContentBlock[];\n}',
   },
   {
-    name: 'ReasoningBlock',
-    declaration: 'export interface ReasoningBlock {\n    type: \'reasoning\';\n    text: string;\n}',
-  },
-  {
     name: 'ReasoningEffortId',
     declaration: 'export type ReasoningEffortId = Branded<\'ReasoningEffortId\'>;',
   },
@@ -4949,7 +4953,7 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'ResolvedNormalRetryPolicy',
-    declaration: 'export interface ResolvedNormalRetryPolicy extends ResolvedRetryBackoff {\n    readonly mode: \'normal\';\n    readonly maxRetries: number;\n    readonly retryableCodes: readonly string[];\n}',
+    declaration: 'export interface ResolvedNormalRetryPolicy extends ResolvedRetryBackoff {\n    readonly mode: \'normal\';\n    readonly maxRetries: number;\n    readonly retryableCodes: readonly string[];\n    readonly retryDelaysMs: readonly number[] | undefined;\n}',
   },
   {
     name: 'ResolvedRetryBackoff',

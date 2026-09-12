@@ -214,6 +214,46 @@ describe('GoalService creation and replay', () => {
     expect(() => foldGoal(session.snapshotEvents())).not.toThrow()
   })
 
+  it('answers the activation query for the exact live agent that holds the goal', async () => {
+    const { ctx, agent } = await harness()
+    const goal = ctx.goals.create(agent, { objective: 'report standing authority' })
+    const impostor = stubAgent('goal-activation-impostor').agent
+
+    expect(ctx.bail('goal/activation', agent)).toBe(true)
+    expect(ctx.goals.disarm(agent)).toMatchObject({ activation: 'disarmed' })
+    // Only `true` answers: a bail dispatch treats `false` as silence, so a
+    // disarmed goal and a foreign lifecycle both leave the caller's default.
+    expect(ctx.bail('goal/activation', agent)).not.toBe(true)
+    expect(ctx.bail('goal/activation', impostor)).not.toBe(true)
+    // Reading never mutates: the goal keeps its phase, revision, and log.
+    expect(ctx.goals.get(agent)).toMatchObject({ id: goal.id, revision: 1, phase: 'active' })
+  })
+
+  it('answers the activation query without a goal and after clearing one', async () => {
+    const { ctx, agent } = await harness()
+    expect(ctx.bail('goal/activation', agent)).not.toBe(true)
+    const goal = ctx.goals.create(agent, { objective: 'temporary authority' })
+    ctx.goals.clear(agent, goal)
+    expect(ctx.bail('goal/activation', agent)).not.toBe(true)
+  })
+
+  it('reports a failed activation query instead of throwing into its caller', async () => {
+    const { ctx, agent } = await harness()
+    const warn = vi.spyOn(ctx.logger, 'warn').mockImplementation(() => {})
+    ctx.goals.create(agent, { objective: 'unreadable authority' })
+    const stateOf = vi.spyOn(ctx.sessionProjections, 'stateOf').mockImplementation(() => { throw new Error('projection is unreadable') })
+
+    expect(ctx.bail('goal/activation', agent)).not.toBe(true)
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining('activation query failed'))
+
+    // A thrown non-Error is reported the same way rather than escaping.
+    stateOf.mockImplementation(() => { throw 'unreadable without an Error' })
+    expect(ctx.bail('goal/activation', agent)).not.toBe(true)
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining('unreadable without an Error'))
+
+    stateOf.mockRestore()
+  })
+
   it('lets a lifecycle owner disarm without writing a durable revision', async () => {
     const { ctx, agent, session } = await harness()
     const goal = ctx.goals.create(agent, { objective: 'survive driver reload' })
