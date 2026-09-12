@@ -3,10 +3,11 @@
  * document — `html { color-scheme }` for native UA chrome (scrollbars, form
  * controls), `body[data-ds-dark-theme]` for the token palette, the active
  * theme's alias-token overrides as inline CSS variables on body, the content
- * font-size axis (`--dsh-content-font-size`), and one presenter-owned
- * `meta[name="theme-color"]` for surrounding browser UI. Pure DOM writes, no
- * React involvement; the presenter only ever retracts what it wrote itself,
- * so foreign attributes, metadata, and inline styles survive.
+ * font-size axis (`--dsh-content-font-size`), the base background on the root
+ * element, and one presenter-owned `meta[name="theme-color"]` for surrounding
+ * browser UI. Pure DOM writes, no React involvement; the presenter only ever
+ * retracts what it wrote itself, so foreign attributes, metadata, and inline
+ * styles survive.
  */
 import type { ThemeSnapshot } from '@deepseek-ai/dsh-client-ui-theme/client'
 
@@ -53,11 +54,16 @@ export class ThemePresenter {
     }
     this.themeColorMeta.content = getComputedStyle(body).backgroundColor
     if (!this.themeColorMeta.isConnected) document.head.append(this.themeColorMeta)
+    // The canvas behind the frame keeps the dark base too: iOS paints the
+    // safe-area strips outside the layout viewport from the root element's
+    // background, so a transparent root leaves a light band above the shell.
+    document.documentElement.style.backgroundColor = this.themeColorMeta.content
   }
 
-  /** Retract root color-scheme, the palette attribute, token variables, the font-size axis, and the owned metadata node. */
+  /** Retract root color-scheme and background, the palette attribute, tokens, the font-size axis, and the owned metadata node. */
   dispose(): void {
     document.documentElement.style.removeProperty('color-scheme')
+    document.documentElement.style.removeProperty('background-color')
     const body = document.body
     body.removeAttribute(DARK_ATTRIBUTE)
     body.style.removeProperty(CONTENT_FONT_SIZE_VARIABLE)

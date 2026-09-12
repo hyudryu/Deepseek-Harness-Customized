@@ -15,7 +15,7 @@ import type { ReactNode } from 'react'
 import type {
   PropsLocale, PropsRenderSlots, PropsRuntime, PropsStore,
 } from '@deepseek-ai/dsh-client-ui-slots'
-import { computeColumns, SIDEBAR_AUTO_COLLAPSE, SIDEBAR_DEFAULT } from './columns.ts'
+import { computeColumns, PHONE_MAX_WIDTH, SIDEBAR_AUTO_COLLAPSE, SIDEBAR_DEFAULT } from './columns.ts'
 import { DocumentTitle } from './DocumentTitle.tsx'
 import type { createLayoutStore } from './stores.ts'
 import css from './AppFrame.module.css'
@@ -149,8 +149,12 @@ export function AppFrame({
   // (or the default when the wide preference is closed) and the center
   // absorbs the squeeze.
   const narrow = viewport < SIDEBAR_AUTO_COLLAPSE
-  const mobile = viewport <= 600
+  const mobile = viewport <= PHONE_MAX_WIDTH
   useEffect(() => { actions.setNarrow(narrow) }, [actions, narrow])
+  // The phone layout makes the details and browser columns cover the
+  // conversation, so cross-plugin reveals (ui-browser) read this mirror to
+  // decline where a reveal would hide what the user just opened.
+  useEffect(() => { actions.setPhone(mobile) }, [actions, mobile])
   const sidebarCollapsed = narrow ? !panels.narrowExpanded : panels.sidebar === 0
   const sidebarPreference = sidebarCollapsed
     ? 0

@@ -32,6 +32,11 @@ export const SIDEBAR_COLLAPSED = 56
  * LG breakpoint); a manual toggle below it re-expands over the squeezed center
  * (stores.ts narrowExpanded). */
 export const SIDEBAR_AUTO_COLLAPSE = 1024
+/** Viewport width at or below which the shell renders the phone layout: the
+ * sidebar becomes an overlay drawer and the details and browser columns cover
+ * the conversation instead of sharing the row (AppFrame's `mobile` reading;
+ * AppFrame.module.css carries the matching `@media (max-width: 600px)` block). */
+export const PHONE_MAX_WIDTH = 600
 /** Details drag clamp floor. */
 export const DETAILS_MIN = 300
 /** Details drag clamp ceiling. */

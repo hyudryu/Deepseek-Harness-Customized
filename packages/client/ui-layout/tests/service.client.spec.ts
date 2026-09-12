@@ -10,6 +10,8 @@ function fakePanels(): PanelActions {
     toggleSidebar: vi.fn(),
     closeSidebar: vi.fn(),
     setNarrow: vi.fn(),
+    setPhone: vi.fn(),
+    revealBrowser: vi.fn(),
     openDetails: vi.fn(),
     closeDetails: vi.fn(),
     openBrowser: vi.fn(),
@@ -28,6 +30,7 @@ describe('LayoutController', () => {
     service.openDetails()
     service.closeDetails()
     service.openBrowser()
+    service.revealBrowser()
     service.closeBrowser()
 
     expect(panels.toggleSidebar).toHaveBeenCalledTimes(1)
@@ -35,6 +38,7 @@ describe('LayoutController', () => {
     expect(panels.openDetails).toHaveBeenCalledTimes(1)
     expect(panels.closeDetails).toHaveBeenCalledTimes(1)
     expect(panels.openBrowser).toHaveBeenCalledTimes(1)
+    expect(panels.revealBrowser).toHaveBeenCalledTimes(1)
     expect(panels.closeBrowser).toHaveBeenCalledTimes(1)
     expect(panels.setSidebar).not.toHaveBeenCalled()
     expect(panels.setDetails).not.toHaveBeenCalled()

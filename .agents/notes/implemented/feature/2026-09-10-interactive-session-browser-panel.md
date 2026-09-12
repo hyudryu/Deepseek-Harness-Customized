@@ -8,7 +8,7 @@ A visible Chrome window was the only way to reach a page that needs a human: the
 
 ## Decision
 
-The panel is the session's browser. Pointer, wheel, and keyboard input over the streamed frame is forwarded to the active page through one `browser/input` Remote method, and an opening snapshot expands the panel whether the agent or the user started the browser.
+The panel is the session's browser. Pointer, wheel, and keyboard input over the streamed frame is forwarded to the active page through one `browser/input` Remote method, and an opening snapshot expands the panel whether the agent or the user started the browser — except at phone widths, where the panel covers the conversation instead of sitting beside it and the [phone-layout fix](../bug-fix/2026-09-12-ios-webkit-json-helpers-and-phone-layout.md) has the layout decline that reveal.
 
 `BrowserInputEvent` is one flat record discriminated by `kind` (`move`, `down`, `up`, `wheel`, `key`, `text`) carrying page CSS-pixel coordinates and only the fields its kind uses, so the generated zod schema validates the wire payload and the provider validates per kind before Playwright sees it. Coordinates are page pixels, not panel pixels: the panel inverts the same contained-frame mapping it uses to place the agent cursor, ignores points in the letterbox, and sends `down`/`up` separately so drags work and `clickCount` doubles as double-click. Plain characters travel as `text` (inserted at the selection) while named keys, `Space`, and anything with Control/Alt/Meta travel as a key combination; keys the panel cannot express are left to the desktop. Movement is throttled to one event per 50ms, and input publishes one coalesced frame refresh per 120ms burst instead of one screenshot per event.
 
@@ -24,7 +24,7 @@ The agent-facing skill now states that the browser runs hidden, that the user in
 
 **Make the panel an iframe of the page instead of a frame stream.** An iframe would give native input for free, but cross-origin pages cannot be framed, framing changes what the page sees (and can be refused by `X-Frame-Options`), and it would not cover the agent's own screenshots.
 
-**Reveal the panel only from the toggle.** Expanding on an opening snapshot can undo a deliberate collapse when a browser reopens; that trade is accepted because a hidden browser with no visible entry point is the failure this change exists to fix, and hiding the panel during an open browser still sticks.
+**Reveal the panel only from the toggle.** Expanding on an opening snapshot can undo a deliberate collapse when a browser reopens; that trade is accepted because a hidden browser with no visible entry point is the failure this change exists to fix, and hiding the panel during an open browser still sticks. The reveal is now declined where it would cover the conversation — at phone widths the layout owns that answer, and the toggle remains the entry point there.
 
 ## Consequences
 

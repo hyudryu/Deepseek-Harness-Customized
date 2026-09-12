@@ -306,10 +306,11 @@ it.each([false, true])('opens and controls a Session through registered callback
     }
   })
   const openBrowser = vi.fn()
+  const revealBrowser = vi.fn()
   const closeBrowser = vi.fn()
   const registrations = new Map<string, (sessionId: SessionId) => BrowserInjected>()
   ctx.provide('remote', { browser: { open, close, watch, createTab, selectTab, closeTab, input }, $stream: remoteStream })
-  ctx.provide('layout', { openBrowser, closeBrowser })
+  ctx.provide('layout', { openBrowser, revealBrowser, closeBrowser })
   ctx.provide('locale', { register: () => () => {} })
   ctx.provide('slots', {
     inject: (_name: string, callback: () => void) => { callback() },
@@ -359,7 +360,10 @@ it.each([false, true])('opens and controls a Session through registered callback
     registrations.get('browser.toggle')!(sessionId).closePanel()
     expect(closeBrowser).toHaveBeenCalledTimes(2)
     injected.openPanel()
-    expect(openBrowser).toHaveBeenCalledTimes(3)
+    // The reveal is the layout's call: it declines where the column would cover
+    // the conversation (phone widths), so ui-browser asks for a reveal instead.
+    expect(revealBrowser).toHaveBeenCalledTimes(1)
+    expect(openBrowser).toHaveBeenCalledTimes(2)
     unsubscribe()
     await ctx.fiber.dispose()
     if (cleanupFails) expect(reported).toHaveBeenCalledWith(expect.objectContaining({ message: 'Browser subscriptions failed to close' }))

@@ -64,6 +64,25 @@ describe('snapshotJsonValue', () => {
     expect(Object.getPrototypeOf(arraySnapshot)).toBe(Array.prototype)
   })
 
+  it('accepts intrinsic containers where the engine spreads native source across lines', () => {
+    // JavaScriptCore (Safari, and every browser on iOS) formats a native
+    // function's source as `function Object() {\n    [native code]\n}`; the
+    // native marker is matched for its content, never its exact layout.
+    const nativeToString: (this: unknown) => string = Reflect.get(Function.prototype, 'toString')
+    Function.prototype.toString = function (this: unknown): string {
+      const source = nativeToString.call(this)
+      const name = /^function (Object|Array)\(\) \{ \[native code\] \}$/u.exec(source)?.[1]
+      return name === undefined ? source : `function ${name}() {\n    [native code]\n}`
+    }
+    try {
+      expect(isJsonValue({ nested: [1, { ok: true }] })).toBe(true)
+      expect(snapshotJsonValue({ nested: [1] })).toEqual({ nested: [1] })
+      expect(snapshotJsonValue(objectWithForgedIntrinsicPrototype())).toBeUndefined()
+    } finally {
+      Function.prototype.toString = nativeToString
+    }
+  })
+
   it('reads each object value and array slot once while materializing', () => {
     class Exotic {
       readonly accepted = false
