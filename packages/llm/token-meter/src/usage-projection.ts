@@ -171,13 +171,19 @@ export const tokenUsageProjectionDefinition = {
  * and a replacement shrinks it by its logged shadow price. A replacement
  * without a claim preserves the previous total. A usage sample is stamped
  * BEFORE the same event joins the surface, so an `assistant/message` anchors
- * against the surface its own request saw. A sample whose prompt-side total is
- * zero never replaces an existing non-zero reading: a provider that rejects a
- * request without a body reports placeholder counters, not a measurement.
+ * against the surface its own request saw. A zero prompt-side sample is never
+ * taken from an attempt, and never replaces an existing non-zero reading: a
+ * provider that rejects a request without a body reports placeholder counters,
+ * not a measurement.
+ *
+ * `stateVersion` 5 discards rows folded by version 4, whose watermark can
+ * already carry the zero pressure that rejection now prevents; hydration of a
+ * matching row skips its log prefix, so a stale row would otherwise keep
+ * serving the wrong reading for the whole session.
  */
 export const contextPressureProjectionDefinition = {
   key: 'contextPressure',
-  stateVersion: 4,
+  stateVersion: 5,
   stateSchema: contextPressureStateSchema,
   init: () => ({ surfaceTokens: 0 }),
   apply: (state, event) => {
@@ -201,13 +207,19 @@ export const contextPressureProjectionDefinition = {
       // usage chunk, but its counters are a zero-filled placeholder rather than
       // a measurement of the prompt. Adopting it would zero the occupancy
       // numerator while capacity stayed, so the meter would read "0%" for a
-      // context that is in fact full. A zero cannot be a real prompt-side
-      // sample once one was already taken: every routed request carries at
-      // least a system prompt and tool schemas, which are never free. The
-      // sample and its surface anchor stay untouched.
+      // context that is in fact full.
+      //
+      // An attempt never supplies a zero reading, whether or not one was taken
+      // before: a session that overflows on its first request — a huge pasted
+      // message, an oversized configured prompt — has no earlier sample to
+      // protect, and every retry of the unchanged request fails the same way,
+      // so accepting that zero would pin the meter at "0%" for exactly the case
+      // it exists to report. A settled `assistant/message` may still report zero
+      // when nothing was sampled before it, which keeps the last-wins contract
+      // for a real settlement.
       const rejectZeroSample = pressureTokens === 0
-        && next.pressureTokens !== undefined
-        && next.pressureTokens > 0
+        && (event.type === 'assistant/attempt'
+          || (next.pressureTokens !== undefined && next.pressureTokens > 0))
       if (!rejectZeroSample
         && (pressureTokens !== next.pressureTokens || next.sampledSurfaceTokens !== next.surfaceTokens)) {
         next = { ...next, pressureTokens, sampledSurfaceTokens: next.surfaceTokens }

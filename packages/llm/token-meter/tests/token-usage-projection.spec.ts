@@ -439,7 +439,7 @@ describe('contextPressure session projection', () => {
     const checkpoint = JSON.parse(JSON.stringify(
       ctx.sessionProjections.checkpoint(session),
     )) as ReturnType<typeof ctx.sessionProjections.checkpoint>
-    expect(checkpoint.contextPressure?.ver).toBe(4)
+    expect(checkpoint.contextPressure?.ver).toBe(5)
 
     await meterFiber.dispose()
     expect(ctx.sessionProjections.snapshot(session).values).not.toHaveProperty('contextPressure')
@@ -521,16 +521,33 @@ describe('contextPressure session projection', () => {
     expect(pressure(ctx, session).pressureTokens).toBe(317_137)
   })
 
-  it('still reports a genuine zero for a fresh session whose first prompt is empty', async () => {
-    // The guard must reject a zero that replaces a known reading, not a
-    // legitimately empty prompt: nothing was sampled before it.
+  it('rejects a failed first attempt so an over-window session is not pinned at zero', async () => {
+    // A session that overflows on its very first request has no earlier reading
+    // to protect, and every retry of the unchanged request fails identically.
+    // Accepting that zero would hold the meter at "0%" for exactly the overflow
+    // it exists to report, so the attempt supplies no numerator at all and the
+    // capacity is published alone.
+    const { ctx, session } = await harness()
+    startStep(session, 1, 1)
+    recordContext(session, 'large', 300_000)
+    usageChunk(session, { inputTokens: 0, outputTokens: 0, totalTokens: 0 }, 1, 1)
+    expect(pressure(ctx, session)).toEqual({ contextWindow: 300_000 })
+  })
+
+  it('accepts a settled zero from a completed message when nothing was sampled', async () => {
+    // The last-wins contract still holds for a real settlement: an attempt is
+    // never a sample source for zero, but a durable `assistant/message` is.
     const { ctx, session } = await harness()
     startStep(session, 1, 1)
     recordContext(session, 'large', 128_000)
-    usageChunk(session, { inputTokens: 0, outputTokens: 0, totalTokens: 0 }, 1, 1)
-    expect(pressure(ctx, session)).toEqual({
-      pressureTokens: 0, projectedTokens: 0, contextWindow: 128_000,
-    })
+    finalUsage(session, { inputTokens: 0, outputTokens: 0, totalTokens: 0 }, 1, 1)
+    expect(pressure(ctx, session).pressureTokens).toBe(0)
+
+    // Once zero is the established reading, a later settled zero is still the
+    // newer sample rather than a value worth protecting.
+    startStep(session, 2, 1)
+    finalUsage(session, { inputTokens: 0, outputTokens: 0, totalTokens: 0 }, 2, 1)
+    expect(pressure(ctx, session).pressureTokens).toBe(0)
   })
 
   it('clamps a projection that heuristic error drove below zero', async () => {
