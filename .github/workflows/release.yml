@@ -7,11 +7,18 @@
 # release-publish.yml from a dsh-v* tag.
 name: Release (dsh)
 
-on:
-  pull_request:
-  push:
-    branches: [master]
-  workflow_dispatch:
+# CI DISABLED — this workflow no longer triggers.
+#
+# The original trigger block is preserved below as comments so it can be
+# restored verbatim: uncomment it and delete the `on: {}` line.
+
+# on:
+#   pull_request:
+#   push:
+#     branches: [master]
+#   workflow_dispatch:
+on: {}
+
 
 permissions:
   contents: read

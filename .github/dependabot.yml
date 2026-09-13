@@ -1,41 +1,53 @@
+# DEPENDABOT DISABLED — no update runs are scheduled.
+#
+# GitHub has no in-file "off" switch for Dependabot, so the update entries are
+# commented out below and the document declares no updates. Restore by
+# uncommenting the original block (its indentation is preserved) in place of
+# the empty `updates: []` line.
+#
+# Original configuration:
+#
+# version: 2
+#
+# updates:
+#   - package-ecosystem: "npm"
+#     directory: "/"
+#     exclude-paths:
+#       # Vendored Cordis sources follow vendor/README.md instead of registry updates.
+#       - "vendor/**"
+#     schedule:
+#       interval: "cron"
+#       cronjob: "0 4 * * *"
+#       timezone: "Asia/Shanghai"
+#     cooldown:
+#       default-days: 30
+#     labels:
+#       - "kind/dependency"
+#       - "area/infra"
+#
+#   - package-ecosystem: "uv"
+#     directory: "/python/sdk"
+#     schedule:
+#       interval: "cron"
+#       cronjob: "0 4 * * *"
+#       timezone: "Asia/Shanghai"
+#     cooldown:
+#       default-days: 30
+#     labels:
+#       - "kind/dependency"
+#       - "area/infra"
+#
+#   - package-ecosystem: "github-actions"
+#     directory: "/"
+#     schedule:
+#       interval: "cron"
+#       cronjob: "0 4 * * *"
+#       timezone: "Asia/Shanghai"
+#     cooldown:
+#       default-days: 30
+#     labels:
+#       - "kind/dependency"
+#       - "area/infra"
+
 version: 2
-
-updates:
-  - package-ecosystem: "npm"
-    directory: "/"
-    exclude-paths:
-      # Vendored Cordis sources follow vendor/README.md instead of registry updates.
-      - "vendor/**"
-    schedule:
-      interval: "cron"
-      cronjob: "0 4 * * *"
-      timezone: "Asia/Shanghai"
-    cooldown:
-      default-days: 30
-    labels:
-      - "kind/dependency"
-      - "area/infra"
-
-  - package-ecosystem: "uv"
-    directory: "/python/sdk"
-    schedule:
-      interval: "cron"
-      cronjob: "0 4 * * *"
-      timezone: "Asia/Shanghai"
-    cooldown:
-      default-days: 30
-    labels:
-      - "kind/dependency"
-      - "area/infra"
-
-  - package-ecosystem: "github-actions"
-    directory: "/"
-    schedule:
-      interval: "cron"
-      cronjob: "0 4 * * *"
-      timezone: "Asia/Shanghai"
-    cooldown:
-      default-days: 30
-    labels:
-      - "kind/dependency"
-      - "area/infra"
+updates: []

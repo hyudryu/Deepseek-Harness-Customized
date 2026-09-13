@@ -7,9 +7,16 @@
 # from the same tarballs the main-repository release workflow publishes.
 name: Sandbox
 
-on:
-  push:
-    branches: [master]
+# CI DISABLED — this workflow no longer triggers.
+#
+# The original trigger block is preserved below as comments so it can be
+# restored verbatim: uncomment it and delete the `on: {}` line.
+
+# on:
+#   push:
+#     branches: [master]
+on: {}
+
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}

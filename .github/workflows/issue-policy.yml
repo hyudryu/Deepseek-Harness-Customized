@@ -1,10 +1,17 @@
 name: Issue policy
 
-on:
-  pull_request:
-    types: [opened, edited, synchronize, reopened, labeled, unlabeled, ready_for_review, review_requested]
-  pull_request_review:
-    types: [submitted]
+# CI DISABLED — this workflow no longer triggers.
+#
+# The original trigger block is preserved below as comments so it can be
+# restored verbatim: uncomment it and delete the `on: {}` line.
+
+# on:
+#   pull_request:
+#     types: [opened, edited, synchronize, reopened, labeled, unlabeled, ready_for_review, review_requested]
+#   pull_request_review:
+#     types: [submitted]
+on: {}
+
 
 permissions:
   contents: read

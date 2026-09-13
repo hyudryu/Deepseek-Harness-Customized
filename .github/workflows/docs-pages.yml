@@ -10,8 +10,15 @@
 # again on master.
 name: Deploy documentation
 
-on:
-  workflow_dispatch:
+# CI DISABLED — this workflow no longer triggers.
+#
+# The original trigger block is preserved below as comments so it can be
+# restored verbatim: uncomment it and delete the `on: {}` line.
+
+# on:
+#   workflow_dispatch:
+on: {}
+
 
 concurrency:
   group: github-pages

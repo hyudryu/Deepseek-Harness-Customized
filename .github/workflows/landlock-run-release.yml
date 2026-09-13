@@ -3,14 +3,21 @@
 # tarballs; each native binary is built on its matching architecture.
 name: Landlock Run Release
 
-on:
-  workflow_dispatch:
-    inputs:
-      publish:
-        description: Publish packed tarballs to npm. Must run from a landlock-run-v* tag.
-        required: true
-        type: boolean
-        default: false
+# CI DISABLED — this workflow no longer triggers.
+#
+# The original trigger block is preserved below as comments so it can be
+# restored verbatim: uncomment it and delete the `on: {}` line.
+
+# on:
+#   workflow_dispatch:
+#     inputs:
+#       publish:
+#         description: Publish packed tarballs to npm. Must run from a landlock-run-v* tag.
+#         required: true
+#         type: boolean
+#         default: false
+on: {}
+
 
 permissions:
   contents: read

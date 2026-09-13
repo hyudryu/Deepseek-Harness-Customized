@@ -303,8 +303,10 @@ describe('CI workflow', () => {
     if (!isRecord(workflow.on) || !isRecord(prWorkflow.on)) {
       throw new TypeError('both CI workflows must define on')
     }
-    expect(Object.keys(workflow.on).sort()).toEqual(['push', 'workflow_dispatch'])
-    expect(Object.keys(prWorkflow.on)).toEqual(['pull_request'])
+    if (triggersActive(workflow) && triggersActive(prWorkflow)) {
+      expect(Object.keys(workflow.on).sort()).toEqual(['push', 'workflow_dispatch'])
+      expect(Object.keys(prWorkflow.on)).toEqual(['pull_request'])
+    }
 
     // Neither drill may carry a job-level group: it would not exempt the job
     // from run-scoped cancellation.
@@ -414,7 +416,9 @@ describe('DeepSeek e2e workflow', () => {
 describe('E2B e2e workflow', () => {
   it('is manual-only and fails loud before running the focused live suite', () => {
     const workflow = loadWorkflow('.github/workflows/e2b-e2e.yml')
-    expect(workflow.on).toEqual({ workflow_dispatch: null })
+    if (triggersActive(workflow)) {
+      expect(workflow.on).toEqual({ workflow_dispatch: null })
+    }
     if (!isRecord(workflow.jobs) || !isRecord(workflow.jobs.e2b) || !Array.isArray(workflow.jobs.e2b.steps)) {
       throw new TypeError('E2B e2e workflow must define the e2b job steps')
     }
@@ -447,8 +451,7 @@ describe('Python release workflows', () => {
     const validate = workflowJob(workflow, 'validate')
     const publishRuntime = workflowJob(workflow, 'publish-runtime')
     const publishSdk = workflowJob(workflow, 'publish-sdk')
-    if (!isRecord(dispatch.inputs)
-      || !isRecord(dispatch.inputs.publish)
+    if ((triggersActive(workflow) && (!isRecord(dispatch.inputs) || !isRecord(dispatch.inputs.publish)))
       || !Array.isArray(pythonCompat.steps)
       || !Array.isArray(validate.steps)
       || !Array.isArray(publishRuntime.steps)
@@ -456,9 +459,13 @@ describe('Python release workflows', () => {
       throw new TypeError('Python release workflow must define publish input and release steps')
     }
 
-    expect(dispatch.inputs.publish).toMatchObject({ type: 'boolean', default: false })
-    if (!isRecord(workflow.on)) throw new TypeError('python-release workflow must define on')
-    expect(Object.keys(workflow.on)).toEqual(['workflow_dispatch'])
+    if (isRecord(dispatch.inputs)) {
+      expect(dispatch.inputs.publish).toMatchObject({ type: 'boolean', default: false })
+    }
+    if (triggersActive(workflow)) {
+      if (!isRecord(workflow.on)) throw new TypeError('python-release workflow must define on')
+      expect(Object.keys(workflow.on)).toEqual(['workflow_dispatch'])
+    }
     expect(build).toMatchObject({
       uses: './.github/workflows/build-exe-for-python-sdk.yml',
       with: {
@@ -521,11 +528,14 @@ describe('Python release workflows', () => {
 
   it('exposes the native wheel builder to the release caller with normalized versions', () => {
     const workflow = loadWorkflow('.github/workflows/build-exe-for-python-sdk.yml')
-    expect(Object.keys(workflow.on as Record<string, unknown>).sort()).toEqual(['workflow_call', 'workflow_dispatch'])
+    if (triggersActive(workflow)) {
+      expect(Object.keys(workflow.on as Record<string, unknown>).sort()).toEqual(['workflow_call', 'workflow_dispatch'])
+    }
     const call = workflowEvent(workflow, 'workflow_call')
     const plan = workflowJob(workflow, 'plan')
     const build = workflowJob(workflow, 'build')
-    if (!isRecord(call.inputs) || !isRecord(call.secrets) || !Array.isArray(plan.steps) || !Array.isArray(build.steps)) {
+    if ((triggersActive(workflow) && (!isRecord(call.inputs) || !isRecord(call.secrets)))
+      || !Array.isArray(plan.steps) || !Array.isArray(build.steps)) {
       throw new TypeError('Python wheel builder must define workflow_call inputs and plan steps')
     }
 
@@ -548,14 +558,16 @@ describe('Python release workflows', () => {
       || !isRecord(installedRealApiPosix) || !isRecord(installedRealApiWindows)) {
       throw new TypeError('Python wheel builder must define native POSIX and Windows installed-wheel steps')
     }
-    expect(call.inputs).toHaveProperty('targets')
-    expect(call.inputs).toMatchObject({
-      ci: { type: 'boolean', default: false },
-      release: { type: 'boolean', default: false },
-    })
-    expect(call.secrets).toMatchObject({
-      DEEPSEEK_API_KEY_EXTERNAL: { required: false },
-    })
+    if (triggersActive(workflow)) {
+      expect(call.inputs).toHaveProperty('targets')
+      expect(call.inputs).toMatchObject({
+        ci: { type: 'boolean', default: false },
+        release: { type: 'boolean', default: false },
+      })
+      expect(call.secrets).toMatchObject({
+        DEEPSEEK_API_KEY_EXTERNAL: { required: false },
+      })
+    }
     expect(workflow.concurrency).toMatchObject({
       group: 'build-single-exe-${{ github.workflow }}-${{ github.ref }}',
     })
@@ -681,18 +693,22 @@ describe('Issue lifecycle workflow', () => {
     // pull_request_review event and reports success instead of a gray skip. The
     // write-capable steps are gated at step level so approved/commented reviews
     // never mint a Project/Issue App token nor touch the board.
-    expect(lifecycle.on).toHaveProperty('pull_request')
-    expect(lifecycle.on).toHaveProperty('pull_request_review')
+    if (triggersActive(lifecycle)) {
+      expect(lifecycle.on).toHaveProperty('pull_request')
+      expect(lifecycle.on).toHaveProperty('pull_request_review')
+    }
     expect(lifecycleJob.if).toBeUndefined()
     // Keep the subscription-type gates: issue-lifecycle does not re-subscribe
     // ready_for_review (issue-policy owns that) and only reacts to submitted
     // review events.
-    const lifecyclePullRequest = workflowEvent(lifecycle, 'pull_request')
-    const lifecycleReview = workflowEvent(lifecycle, 'pull_request_review')
-    expect(lifecyclePullRequest.types).toContain('opened')
-    expect(lifecyclePullRequest.types).not.toContain('ready_for_review')
-    expect(lifecyclePullRequest.types).toContain('review_requested')
-    expect(lifecycleReview.types).toEqual(['submitted'])
+    if (triggersActive(lifecycle)) {
+      const lifecyclePullRequest = workflowEvent(lifecycle, 'pull_request')
+      const lifecycleReview = workflowEvent(lifecycle, 'pull_request_review')
+      expect(lifecyclePullRequest.types).toContain('opened')
+      expect(lifecyclePullRequest.types).not.toContain('ready_for_review')
+      expect(lifecyclePullRequest.types).toContain('review_requested')
+      expect(lifecycleReview.types).toEqual(['submitted'])
+    }
     const gated = "${{ github.event_name != 'pull_request_review' || github.event.review.state == 'changes_requested' }}"
     const steps = lifecycleJob.steps.filter(isRecord)
     const tokenStep = steps.find(s => s.name === 'Create project token')
@@ -701,8 +717,10 @@ describe('Issue lifecycle workflow', () => {
     expect(handleStep).toMatchObject({ if: gated })
 
     // issue-policy owns PR validation; it is read-only and a real gate.
-    const policyPullRequest = workflowEvent(policy, 'pull_request')
-    expect(policyPullRequest.types).toContain('ready_for_review')
+    if (triggersActive(policy)) {
+      const policyPullRequest = workflowEvent(policy, 'pull_request')
+      expect(policyPullRequest.types).toContain('ready_for_review')
+    }
   })
 
   it('uses a read-only Project token only for human pull request policy metadata', () => {
@@ -751,8 +769,11 @@ describe('npm release workflows', () => {
     // npm-publish environment plus the shared dist-tag group.
     for (const file of ['release-publish.yml', 'release-vendor-publish.yml']) {
       const workflow = loadWorkflow(`.github/workflows/${file}`)
-      if (!isRecord(workflow.on) || !isRecord(workflow.jobs)) throw new TypeError(`${file} must define on and jobs`)
-      expect(Object.keys(workflow.on)).toEqual(['workflow_dispatch'])
+      if (!isRecord(workflow.jobs)) throw new TypeError(`${file} must define jobs`)
+      if (triggersActive(workflow)) {
+        if (!isRecord(workflow.on)) throw new TypeError(`${file} must define on`)
+        expect(Object.keys(workflow.on)).toEqual(['workflow_dispatch'])
+      }
       const publish = workflow.jobs.publish
       if (!isRecord(publish)) throw new TypeError(`${file} must define a publish job`)
       expect(publish.environment).toBe('npm-publish')
@@ -769,7 +790,9 @@ describe('npm release workflows', () => {
     const commands = dependencies.steps.flatMap(step =>
       isRecord(step) && typeof step.run === 'string' ? [step.run] : [])
 
-    expect(Object.keys(workflow.on).sort()).toEqual(['pull_request', 'push', 'workflow_dispatch'])
+    if (triggersActive(workflow)) {
+      expect(Object.keys(workflow.on).sort()).toEqual(['pull_request', 'push', 'workflow_dispatch'])
+    }
     expect(commands).toContain('pnpm run verify-package-dependencies')
     expect(commands).toContain('pnpm run verify-npm-install-layout')
   })
@@ -786,7 +809,10 @@ describe('Documentation site publication', () => {
 
     // The site presents a released snapshot: a merge must never publish it, and
     // publication must never appear as a PR check.
-    expect(Object.keys(workflow.on)).toEqual(['workflow_dispatch'])
+    if (triggersActive(workflow)) {
+      if (!isRecord(workflow.on)) throw new TypeError('Documentation deployment must define on')
+      expect(Object.keys(workflow.on)).toEqual(['workflow_dispatch'])
+    }
 
     // RELEASE_PUBLISH makes release:verify reject every ref that is not a dsh-v*
     // tag naming this tree's version, so the site and the npm sequence share one
@@ -839,8 +865,27 @@ function loadWorkflow(path: string): Record<string, unknown> {
   return workflow
 }
 
+/**
+ * Whether one workflow's trigger configuration is active in this checkout.
+ *
+ * CI is disabled in this fork. Each workflow declares an empty `on:` and keeps
+ * its original trigger block as comments (see `.github/workflows/*.yml`), so
+ * there is no subscription to assert: assertions about events, `inputs`,
+ * `secrets`, and `types` describe configuration that is intentionally inactive.
+ * Every job, step, environment, and permission assertion in this spec still
+ * runs, because that content is untouched by disabling the triggers. Restoring
+ * one workflow's trigger block re-enables its trigger assertions with no change
+ * here.
+ */
+function triggersActive(workflow: Record<string, unknown>): boolean {
+  return !(isRecord(workflow.on) && Object.keys(workflow.on).length === 0)
+}
+
 function workflowEvent(workflow: Record<string, unknown>, event: string): Record<string, unknown> {
   if (!isRecord(workflow.on) || !isRecord(workflow.on[event])) {
+    // A disabled workflow reads as an event-less trigger: callers then guard on
+    // `triggersActive` rather than tripping over the absent subscription.
+    if (!triggersActive(workflow)) return {}
     throw new TypeError(`workflow must define the ${event} event`)
   }
   return workflow.on[event]

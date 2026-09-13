@@ -1,7 +1,14 @@
 name: CI
 
-on:
-  pull_request:
+# CI DISABLED — this workflow no longer triggers.
+#
+# The original trigger block is preserved below as comments so it can be
+# restored verbatim: uncomment it and delete the `on: {}` line.
+
+# on:
+#   pull_request:
+on: {}
+
 permissions:
   contents: read
 
