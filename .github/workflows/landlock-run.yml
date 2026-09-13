@@ -4,25 +4,32 @@
 # Landlock Run Release workflow.
 name: Landlock Run
 
-on:
-  pull_request:
-    paths:
-      - '.github/workflows/landlock-run.yml'
-      - '.github/workflows/landlock-run-release.yml'
-      - 'native/landlock-run/**'
-      - 'package.json'
-      - 'pnpm-lock.yaml'
-      - 'pnpm-workspace.yaml'
-  push:
-    branches: [master]
-    paths:
-      - '.github/workflows/landlock-run.yml'
-      - '.github/workflows/landlock-run-release.yml'
-      - 'native/landlock-run/**'
-      - 'package.json'
-      - 'pnpm-lock.yaml'
-      - 'pnpm-workspace.yaml'
-  workflow_dispatch:
+# CI DISABLED — this workflow no longer triggers.
+#
+# The original trigger block is preserved below as comments so it can be
+# restored verbatim: uncomment it and delete the `on: {}` line.
+
+# on:
+#   pull_request:
+#     paths:
+#       - '.github/workflows/landlock-run.yml'
+#       - '.github/workflows/landlock-run-release.yml'
+#       - 'native/landlock-run/**'
+#       - 'package.json'
+#       - 'pnpm-lock.yaml'
+#       - 'pnpm-workspace.yaml'
+#   push:
+#     branches: [master]
+#     paths:
+#       - '.github/workflows/landlock-run.yml'
+#       - '.github/workflows/landlock-run-release.yml'
+#       - 'native/landlock-run/**'
+#       - 'package.json'
+#       - 'pnpm-lock.yaml'
+#       - 'pnpm-workspace.yaml'
+#   workflow_dispatch:
+on: {}
+
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}

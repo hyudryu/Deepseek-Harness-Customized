@@ -4,14 +4,21 @@ name: Release (Python)
 # without registry credentials. Publication is accepted only from a manual run
 # on the matching python-v* tag when the private publisher-repository identity
 # and public-PyPI switch are configured.
-on:
-  workflow_dispatch:
-    inputs:
-      publish:
-        description: Publish the validated wheels to public PyPI. Must run from a python-v* tag.
-        required: true
-        type: boolean
-        default: false
+# CI DISABLED — this workflow no longer triggers.
+#
+# The original trigger block is preserved below as comments so it can be
+# restored verbatim: uncomment it and delete the `on: {}` line.
+
+# on:
+#   workflow_dispatch:
+#     inputs:
+#       publish:
+#         description: Publish the validated wheels to public PyPI. Must run from a python-v* tag.
+#         required: true
+#         type: boolean
+#         default: false
+on: {}
+
 
 permissions:
   contents: read

@@ -8,38 +8,45 @@ name: Build single-exe
 # release workflow. There is no `pull_request` trigger: a label trigger would
 # list gray skipped checks on every unrelated PR label event. Checkout uses the
 # triggering ref, so dispatch needs no separate ref input.
-on:
-  workflow_call:
-    inputs:
-      targets:
-        description: Comma-separated pkg targets to build; empty builds all five.
-        type: string
-        required: false
-        default: ''
-      release:
-        description: Run as the native builder for the Python release workflow.
-        type: boolean
-        required: false
-        default: false
-      ci:
-        description: Run as the required all-target Python runtime pull-request check.
-        type: boolean
-        required: false
-        default: false
-    secrets:
-      DEEPSEEK_API_KEY_EXTERNAL:
-        description: Real DeepSeek API key for trusted installed-wheel pull-request tests.
-        required: false
-  workflow_dispatch:
-    inputs:
-      targets:
-        description: >-
-          Comma-separated pkg targets to build. Any subset of:
-          node24-linux-x64, node24-linux-arm64, node24-macos-arm64,
-          node24-macos-x64, node24-win-x64. Empty builds all five.
-        type: string
-        required: false
-        default: ''
+# CI DISABLED — this workflow no longer triggers.
+#
+# The original trigger block is preserved below as comments so it can be
+# restored verbatim: uncomment it and delete the `on: {}` line.
+
+# on:
+#   workflow_call:
+#     inputs:
+#       targets:
+#         description: Comma-separated pkg targets to build; empty builds all five.
+#         type: string
+#         required: false
+#         default: ''
+#       release:
+#         description: Run as the native builder for the Python release workflow.
+#         type: boolean
+#         required: false
+#         default: false
+#       ci:
+#         description: Run as the required all-target Python runtime pull-request check.
+#         type: boolean
+#         required: false
+#         default: false
+#     secrets:
+#       DEEPSEEK_API_KEY_EXTERNAL:
+#         description: Real DeepSeek API key for trusted installed-wheel pull-request tests.
+#         required: false
+#   workflow_dispatch:
+#     inputs:
+#       targets:
+#         description: >-
+#           Comma-separated pkg targets to build. Any subset of:
+#           node24-linux-x64, node24-linux-arm64, node24-macos-arm64,
+#           node24-macos-x64, node24-win-x64. Empty builds all five.
+#         type: string
+#         required: false
+#         default: ''
+on: {}
+
 
 concurrency:
   # Keep the called workflow distinct from its caller's concurrency group;

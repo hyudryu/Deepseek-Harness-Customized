@@ -5,9 +5,16 @@ name: Build PR preview
 # upload carries build products only: the workflow never grants the deployment
 # platform access to this repository's sources.
 
-on:
-  pull_request:
-    types: [opened, synchronize, reopened]
+# CI DISABLED — this workflow no longer triggers.
+#
+# The original trigger block is preserved below as comments so it can be
+# restored verbatim: uncomment it and delete the `on: {}` line.
+
+# on:
+#   pull_request:
+#     types: [opened, synchronize, reopened]
+on: {}
+
 
 # Within one pull request the newest build wins. Across pull requests there is
 # nothing to serialize: each uploads to its own branch alias, so two deployments

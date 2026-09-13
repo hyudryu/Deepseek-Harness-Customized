@@ -1,18 +1,25 @@
 name: CI master
 
-on:
-  push:
-    branches: [master]
-  workflow_dispatch:
-    inputs:
-      suite:
-        description: Manual CI suite to run
-        required: true
-        default: larger-runner-benchmark
-        type: choice
-        options:
-          - larger-runner-benchmark
-          - consolidated-runner-benchmark
+# CI DISABLED — this workflow no longer triggers.
+#
+# The original trigger block is preserved below as comments so it can be
+# restored verbatim: uncomment it and delete the `on: {}` line.
+
+# on:
+#   push:
+#     branches: [master]
+#   workflow_dispatch:
+#     inputs:
+#       suite:
+#         description: Manual CI suite to run
+#         required: true
+#         default: larger-runner-benchmark
+#         type: choice
+#         options:
+#           - larger-runner-benchmark
+#           - consolidated-runner-benchmark
+on: {}
+
 
 # A master push may carry only the two self-hosted standby drills and the Wine
 # apt cache seeder; those drills outlast the interval between master merges, so

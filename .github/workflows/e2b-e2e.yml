@@ -2,8 +2,15 @@ name: E2E (E2B sandbox)
 
 # This suite provisions external E2B sandboxes and is intentionally opt-in.
 # It has no push, pull_request, schedule, or workflow_call trigger.
-on:
-  workflow_dispatch:
+# CI DISABLED — this workflow no longer triggers.
+#
+# The original trigger block is preserved below as comments so it can be
+# restored verbatim: uncomment it and delete the `on: {}` line.
+
+# on:
+#   workflow_dispatch:
+on: {}
+
 
 permissions:
   contents: read
