@@ -1,9 +1,10 @@
-import { readFileSync } from 'node:fs'
-import { mkdir, readFile, rename, writeFile } from 'node:fs/promises'
+import { randomBytes } from 'node:crypto'
+import { readFileSync, statSync } from 'node:fs'
+import { mkdir, readFile, rename, rm, stat, writeFile } from 'node:fs/promises'
 import { dirname, isAbsolute, resolve } from 'node:path'
 
 export const name = 'project-secrets'
-export const inject = ['tools', 'skills', 'webServer', 'workspaceRegistry']
+export const inject = ['tools', 'skills', 'webServer', 'workspaceRegistry', 'connection']
 
 const SKILL_CONTENT = readFileSync(new URL('./skills/project-secrets.md', import.meta.url), 'utf8')
 
@@ -16,6 +17,18 @@ const MAX_CONTEXT_KEYS = 40
 /** Bound on one advertised key name, so a stray long line cannot flood the prompt. */
 const MAX_CONTEXT_KEY_CHARS = 60
 
+/**
+ * Worst-case growth of one UTF-8 byte inside a JSON string body. A control
+ * character becomes a six-byte `\uXXXX` escape, and quotes and backslashes each
+ * double, so a body carrying a value of exactly `maxBytes` can legitimately be
+ * several times larger than the value itself. Bounding the request at
+ * `maxBytes` would reject a save the secrets limit accepts.
+ */
+const JSON_ESCAPE_WORST_CASE = 6
+
+/** Bytes of the `{"text":""}` envelope around the encoded secrets value. */
+const REQUEST_ENVELOPE_BYTES = 64
+
 /** Numeric config validation: positive integer or an actionable throw. */
 function positiveInt(value, fallback, name) {
   if (value === undefined) return fallback
@@ -23,13 +36,25 @@ function positiveInt(value, fallback, name) {
   return value
 }
 
-/** Absolute secrets-file path for a workspace project directory. */
+/**
+ * Absolute secrets-file path for a workspace project directory.
+ *
+ * A configured `root` relocates storage, so the workspace must nest *beneath*
+ * it. Passing an absolute workspace path as `resolve`'s second operand would
+ * discard `root` entirely, which is what real sessions supply, so the volume
+ * and any leading separators are stripped before the path is nested.
+ */
 function resolveSecretsPath(workspacePath, secretsFile, root) {
-  const base = root === '' ? workspacePath : resolve(root, workspacePath)
+  const base = root === '' ? workspacePath : resolve(root, stripToRelative(workspacePath))
   if (typeof secretsFile !== 'string' || secretsFile.trim() === '') {
     throw new Error('secretsFile must be a non-empty string')
   }
   return isAbsolute(secretsFile) ? secretsFile : resolve(base, secretsFile)
+}
+
+/** Drop a drive letter and leading separators so a path can nest under a root. */
+function stripToRelative(workspacePath) {
+  return workspacePath.replace(/^[A-Za-z]:/, '').replace(/^[/\\]+/, '')
 }
 
 /** Bound the secrets text to the configured maximum byte length. */
@@ -41,48 +66,75 @@ function normalizeSecretsText(text, maxBytes) {
   return text
 }
 
-/** Atomic write: temp file in the same directory, then rename over the target. */
-async function writeSecretsFile(filePath, text) {
-  await mkdir(dirname(filePath), { recursive: true })
-  const tmp = `${filePath}.${process.pid}.tmp`
-  await writeFile(tmp, text, 'utf8')
-  await rename(tmp, filePath)
+/** Largest request body whose decoded secrets value could still be within `maxBytes`. */
+function requestByteLimit(maxBytes) {
+  return maxBytes * JSON_ESCAPE_WORST_CASE + REQUEST_ENVELOPE_BYTES
 }
 
-/** Read the secrets file; missing file yields an empty string. */
-async function readSecretsFile(filePath, maxBytes) {
-  let content
+/**
+ * Atomic write: a uniquely named temp file in the same directory, then rename
+ * over the target.
+ *
+ * The temp name carries random bytes rather than only the pid because two
+ * writes in one process — a tool call racing a browser save — would otherwise
+ * share a path, truncate each other, and leave the second rename failing with
+ * `ENOENT`. The mode is set explicitly to owner-only: the process umask would
+ * otherwise create the replacement world-readable, and `rename` preserves
+ * whatever mode the temp file had, which would widen an existing `0600` file.
+ */
+async function writeSecretsFile(filePath, text) {
+  await mkdir(dirname(filePath), { recursive: true })
+  const tmp = `${filePath}.${randomBytes(6).toString('hex')}.tmp`
   try {
-    content = await readFile(filePath, 'utf8')
+    await writeFile(tmp, text, { encoding: 'utf8', mode: 0o600 })
+    await rename(tmp, filePath)
+  } catch (error) {
+    await rm(tmp, { force: true }).catch(() => undefined)
+    throw error
+  }
+}
+
+/**
+ * Read the secrets file; a missing file yields an empty string.
+ *
+ * The size is checked against the file's own metadata before it is read: this
+ * runs on every prompt assembly as well as on explicit reads, so decoding an
+ * oversized file first would defeat the bound it exists to enforce.
+ */
+async function readSecretsFile(filePath, maxBytes) {
+  let size
+  try {
+    size = (await stat(filePath)).size
   } catch (error) {
     if (error?.code === 'ENOENT') return ''
     throw error
   }
-  if (Buffer.byteLength(content, 'utf8') > maxBytes) {
-    throw new Error(`project secrets exceed ${maxBytes} bytes`)
-  }
-  return content
+  if (size > maxBytes) throw new Error(`project secrets exceed ${maxBytes} bytes`)
+  return await readFile(filePath, 'utf8')
 }
 
 /** The same read on the prompt-assembly path, which is synchronous. */
 function readSecretsFileSync(filePath, maxBytes) {
-  let content
+  let size
   try {
-    content = readFileSync(filePath, 'utf8')
+    size = statSync(filePath).size
   } catch (error) {
     if (error?.code === 'ENOENT') return ''
     throw error
   }
-  if (Buffer.byteLength(content, 'utf8') > maxBytes) {
-    throw new Error(`project secrets exceed ${maxBytes} bytes`)
-  }
-  return content
+  if (size > maxBytes) throw new Error(`project secrets exceed ${maxBytes} bytes`)
+  return readFileSync(filePath, 'utf8')
 }
 
 /**
  * Key names a block defines: the label before the first `=` or `:` on each
  * non-empty line. Only labels are collected, so nothing derived here can carry
  * a secret value.
+ *
+ * A line with no separator is skipped rather than treated as a label. A
+ * multiline value — an OpenSSH key body, a wrapped token — has no `=` on its
+ * continuation lines, so treating the whole line as a key name would copy the
+ * secret itself into the model-visible context and the durable session log.
  */
 export function secretsKeys(text) {
   const keys = []
@@ -90,7 +142,8 @@ export function secretsKeys(text) {
     const trimmed = line.trim()
     if (trimmed === '') continue
     const separator = trimmed.search(/[=:]/)
-    const label = (separator === -1 ? trimmed : trimmed.slice(0, separator)).trim()
+    if (separator === -1) continue
+    const label = trimmed.slice(0, separator).trim()
     if (label === '' || keys.includes(label)) continue
     keys.push(label.length > MAX_CONTEXT_KEY_CHARS ? `${label.slice(0, MAX_CONTEXT_KEY_CHARS)}…` : label)
     if (keys.length === MAX_CONTEXT_KEYS) break
@@ -173,7 +226,14 @@ export function apply(ctx, rawConfig = {}) {
         return { ok: true, action: 'read', secrets }
       }
       if (args.action === 'write') {
-        const text = normalizeSecretsText(args.secrets ?? '', normalized.maxBytes)
+        // The schema requires only `action`, so a model can legitimately send
+        // `{"action":"write"}`. Coercing that absent payload to an empty string
+        // would silently erase the whole block, so absence is refused and
+        // clearing stays an explicit `secrets: ""`.
+        if (typeof args.secrets !== 'string') {
+          throw new Error('project_secrets write requires a string "secrets" value; pass an empty string to clear the block')
+        }
+        const text = normalizeSecretsText(args.secrets, normalized.maxBytes)
         await writeSecretsFile(filePath, text)
         return { ok: true, action: 'write', path: filePath }
       }
@@ -217,6 +277,16 @@ export function apply(ctx, rawConfig = {}) {
     kind: 'prefix',
     path: '/project-secrets',
     async handler(req, res) {
+      // Named routes are dispatched ahead of the authenticated fallback, so
+      // this handler authenticates for itself. Without it any peer that can
+      // reach the desktop Web server could read or replace a workspace's
+      // credentials. Both verbs are rejected before the workspace is resolved
+      // or the secrets file is touched.
+      const rejection = ctx.connection.requestRejection(req)
+      if (rejection !== undefined) {
+        return respond(res, rejection, { ok: false, error: 'unauthorized' })
+      }
+
       const url = new URL(req.url ?? '/', 'http://x')
       const parts = url.pathname.split('/').filter(Boolean)
       if (parts.length < 2) return respond(res, 400, { ok: false, error: 'workspace id required' })
@@ -240,11 +310,15 @@ export function apply(ctx, rawConfig = {}) {
         } catch (error) {
           return respond(res, 404, { ok: false, error: error.message })
         }
+        // The body is JSON, so its byte length is not the value's: escapes can
+        // inflate one input byte to six. The decoded value is bounded by
+        // `normalizeSecretsText` below, which is the limit that matters.
+        const bodyLimit = requestByteLimit(normalized.maxBytes)
         let body = ''
         for await (const chunk of req) {
           body += chunk
-          if (Buffer.byteLength(body, 'utf8') > normalized.maxBytes + 4) {
-            return respond(res, 400, { ok: false, error: 'request body too large' })
+          if (Buffer.byteLength(body, 'utf8') > bodyLimit) {
+            return respond(res, 413, { ok: false, error: 'request body too large' })
           }
         }
         let parsed
@@ -274,5 +348,5 @@ function respond(res, status, value) {
 
 export const __test = {
   resolveSecretsPath, normalizeSecretsText, readSecretsFile, writeSecretsFile,
-  readSecretsFileSync, secretsKeys, renderSecretsContext,
+  readSecretsFileSync, secretsKeys, renderSecretsContext, requestByteLimit,
 }
