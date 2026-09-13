@@ -14,7 +14,7 @@ A loopback-only Web application cannot accept a phone connection. Binding the en
 
 [The client plugin](../../../../packages/client/ui-mobile-access/README.md) contributes a phone icon beside Settings on the loopback desktop origin. Its switch reflects acknowledged host state. QR encoding stays in the browser and encodes the existing authenticated launch URL rather than publishing it through an external service. The phone opens the same application and durable data.
 
-Access starts off with each process. Activation and deactivation are serialized. Disabling or unloading the plugin revokes interface trust and waits for the additional listener's HTTP and upgraded sockets to close. Desktop requests retain their independent listener.
+Access is a durable setting: the requested state is stored in the `mobile-access` user-settings namespace and the listener is restored from it at load. Activation and deactivation are serialized. Disabling or unloading the plugin revokes interface trust and waits for the additional listener's HTTP and upgraded sockets to close. Desktop requests retain their independent listener.
 
 The mobile frame gives conversation content the full width and opens sidebar navigation as an overlay from an upper-left menu. Session selection closes that overlay through the layout's idempotent close action. Touch does not activate hover previews or replace row content on hover, so the first tap reaches the Session action. Desktop mouse hover remains available, and browser zoom stays enabled.
 
@@ -24,7 +24,7 @@ The mobile frame gives conversation content the full width and opens sidebar nav
 
 **Run a separate mobile application or reverse proxy.** A second application creates another session and configuration lifetime. A proxy adds a second HTTP and upgrade path whose authority rewriting must remain consistent with authentication. Sharing the existing dispatchers keeps the same route owners and authenticated application.
 
-**Persist enabled access.** Automatic re-exposure after every restart makes launching the desktop app a network-access decision. Process-local off defaults require an explicit desktop action.
+**Persist enabled access.** Rejected here: automatic re-exposure after every restart makes launching the desktop app a network-access decision, and process-local off defaults require an explicit desktop action. [The durable-intent note](2026-09-13-durable-mobile-access-intent.md) later reversed this at the user's request and owns the shipped behavior.
 
 **Keep the desktop rail and hover interactions on phones.** A permanent rail consumes scarce conversation width. Hover-triggered content changes can cause touch browsers to reveal hover state before dispatching a click, requiring another tap. The mobile overlay and stable touch rows preserve one-tap navigation without removing desktop affordances.
 

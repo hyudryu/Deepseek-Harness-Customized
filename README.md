@@ -238,7 +238,8 @@ Capabilities include:
 - a secrets file scoped to the project's working directory, defaulting to `.dsh/project-secrets` (configurable via `secretsFile`, `maxBytes`, and `root`);
 - a **Project Secrets** item on each project's 3-dots menu that opens a modal to paste/edit the block, backed by HTTP `GET`/`PUT` on `/project-secrets/<workspaceId>`;
 - a `project_secrets` tool (`action: read`/`write`) for the agent, with byte-limit validation and atomic writes (temp file plus rename);
-- a progressively loaded `project-secrets` skill that tells the agent to read first, never echo secrets into the conversation, commits, or logs, write authoritatively, and respect the project boundary;
+- a model-visible runtime-context snapshot of the block's **key names only** — never a value — contributed once the block has content, so the agent knows the project keeps e.g. `Node 4` and reads the block instead of answering that it does not know;
+- a progressively loaded `project-secrets` skill that tells the agent to read the block before reporting that it does not know a project-specific value, never echo secrets into the conversation, commits, or logs, write authoritatively, and respect the project boundary;
 - safely handles a missing file as empty.
 
 </details>

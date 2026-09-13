@@ -17,7 +17,7 @@ it('opens off, generates an authenticated QR after enabling, and removes it on d
   const b = mount()
   const toggle = await screen.findByRole<HTMLInputElement>('switch')
   expect(toggle.checked).toBe(false)
-  expect(screen.getByRole('dialog').textContent).toMatchInlineSnapshot('"Mobile accessAllow mobile accessMobile access is off. Turning it on creates a private Tailscale link.Mobile access turns off when Harness restarts."')
+  expect(screen.getByRole('dialog').textContent).toMatchInlineSnapshot('"Mobile accessAllow mobile accessMobile access is off. Turning it on creates a private Tailscale link.Mobile access stays on until you turn it off here."')
   fireEvent.click(toggle)
   expect((await screen.findByRole('img')).getAttribute('alt')).toBe('Scan to open Harness on your phone')
   expect(b.qr).toHaveBeenCalledWith('http://100.64.0.1:3081/?token=test')
