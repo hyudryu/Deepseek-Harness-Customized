@@ -23,6 +23,8 @@ The composition rows, which fold the surface, dropped by 93%. The ring — the p
 
 Only the delta is estimated. The anchor stays provider-exact, which keeps the estimator's systematic CJK and JSON-schema underpricing out of the occupancy figure while still letting the number react the moment content lands or a span is shadowed. `contextOccupancy` reads `projectedTokens` and falls back to the bare sample, so a projection restored from a pre-field checkpoint degrades to the old behavior instead of vanishing.
 
+The sample slot is last-wins except for one rejected value: a sample reporting zero prompt-side tokens never replaces an existing non-zero reading, because a provider that rejects a request without a body reports a zero-filled usage object rather than a prompt measurement. Before that guard the sample slot could be zeroed while capacity stayed, which displayed "0%" for a context that was in fact full — see [the over-window occupancy decision](2026-09-13-over-window-occupancy-and-compaction-recovery.md).
+
 This reverses the "the ring, header, and bar length stay provider-exact" half of the [context meter decision](../feature/2026-08-05-composer-context-meter-breakdown.md). What that decision was protecting — not fabricating precision by scaling heuristic rows to a provider total — is preserved: the rows are still unscaled, and the header still does not equal their sum. What changed is the recognition that "provider-exact but describing a request two compactions ago" is not the more truthful figure.
 
 ## Alternatives considered
