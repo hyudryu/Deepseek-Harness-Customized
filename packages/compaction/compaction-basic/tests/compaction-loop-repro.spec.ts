@@ -140,6 +140,65 @@ class OverflowRecoveryAdapter extends LlmAdapter {
   }
 }
 
+/**
+ * Rejects any request whose replayed prefix exceeds the advertised window, the
+ * way a real provider answers an over-window request with `400 status code (no
+ * body)`. The plain {@link OverflowRecoveryAdapter} always accepts a
+ * summarization request, so it never observes that the auxiliary call is
+ * itself built from the oversized conversation.
+ */
+class CapacityEnforcingAdapter extends OverflowRecoveryAdapter {
+  /** Replayed prompt size of every summarization request that was accepted. */
+  readonly acceptedSummarySizes: number[] = []
+
+  override resolveModel(provider: string, model: string): Promise<LlmResolvedModelInfo> {
+    return Promise.resolve({
+      provider,
+      id: model,
+      name: model,
+      context: { contextWindow: SUMMARY_WINDOW },
+    })
+  }
+
+  override async * stream(options: GenerateOptions): AsyncIterable<StreamChunk> {
+    const trailing = options.messages.at(-1)?.content
+      .map(block => (block.type === 'text' ? block.text : ''))
+      .join('') ?? ''
+    const isSummary = trailing.includes('acting as a compaction engine')
+    if (isSummary) {
+      const size = replayedTokens(options)
+      if (size > SUMMARY_WINDOW) {
+        throw new LlmError('400 status code (no body)', CONTEXT_WINDOW_EXCEEDED_CODE)
+      }
+      // The summary request fits, but a summary must still be smaller than the
+      // span it replaces, so emit a genuinely short checkpoint.
+      this.acceptedSummarySizes.push(size)
+      this.summaryRequests.push(options)
+      yield { type: 'block-start', index: 0, blockType: 'text' }
+      yield { type: 'block-end', index: 0, block: { type: 'text', text: 'BUDGETED CHECKPOINT' } }
+      yield { type: 'finish', reason: { kind: 'stop' } }
+      return
+    }
+    yield* super.stream(options)
+  }
+}
+
+/**
+ * Advertised window for the budget regression, in prompt tokens. The summarizer
+ * prices at the token meter's shared four-characters-per-token density, so the
+ * adapter must reject on the same unit or it would admit requests the provider
+ * would answer with a 400.
+ */
+const SUMMARY_WINDOW = 4_000
+
+/** Prompt tokens of one request at the token meter's fixed-density estimate. */
+function replayedTokens(options: GenerateOptions): number {
+  const system = options.system ?? ''
+  const tools = JSON.stringify(options.tools ?? [])
+  const messages = JSON.stringify(options.messages)
+  return Math.ceil((system.length + tools.length + messages.length) / 4)
+}
+
 async function mountInvariants(ctx: Context): Promise<void> {
   await ctx.plugin(InvariantRegistry)
   await ctx.plugin(SessionInvariant)
@@ -428,6 +487,61 @@ describe('context-overflow recovery across the real loop and compaction-basic', 
         type: 'turn/end',
         data: { reason: { kind: 'completed' } },
       })
+    } finally {
+      await ctx.fiber.dispose()
+    }
+  })
+
+  it('recovers an overflow when the provider rejects an over-window summarization request', async () => {
+    // The regression: the summarizer replayed the whole oversized prefix, so
+    // the auxiliary call was itself over the window and answered 400 on every
+    // attempt. Recovery then failed forever and the session could never
+    // compact. The summarizer must budget its own request to fit.
+    const ctx = new Context()
+    const adapter = new CapacityEnforcingAdapter('thrown')
+    await mountAgentLoopTestDependencies(ctx)
+    await mountInvariants(ctx)
+    await ctx.plugin(SessionProjectionRegistry)
+    await ctx.plugin(AgentLoop, { agents: [] })
+    await ctx.plugin(TokenMeter)
+    ctx.llm.registerAdapter(['mock'], adapter)
+    ctx.on('agent/request', async (_payload, next) => ({
+      ...await next(), provider: 'mock', model: 'mock',
+    }))
+    await ctx.plugin(BasicCompactionEngine, {
+      thresholdRatio: 1,
+      retainTokens: 100,
+      maxTokens: 64,
+      compactionRetries: 0,
+      maxOverflowRetries: 1,
+    })
+
+    try {
+      const { agent } = await ctx.agentLoop.createAgent(ctx, {
+        sessionId: SessionId('capacity-enforced-overflow'),
+        seed: overflowHistorySeed(),
+        agentOptions: {
+          provider: 'unconfigured-agent-fallback',
+          model: 'unconfigured-agent-fallback',
+        },
+      })
+
+      agent.followup(createUserMessage({ content: [{ type: 'text', text: 'continue from history' }], source: { kind: 'user' } }))
+      await agent.whenIdle()
+
+      // The summarization call was accepted, so its replayed prompt fit.
+      expect(adapter.acceptedSummarySizes).toHaveLength(1)
+      expect(adapter.acceptedSummarySizes[0]).toBeLessThanOrEqual(SUMMARY_WINDOW)
+
+      const events = agent.session.snapshotEvents()
+      expect(events.filter(event => event.type === 'turn/start').slice(-1).map(event => event.data.turn))
+        .toEqual([3])
+      expect(events.at(-1)).toMatchObject({
+        type: 'turn/end',
+        data: { reason: { kind: 'completed' } },
+      })
+      const retry = JSON.stringify(adapter.conversationRequests.at(-1)!.messages)
+      expect(retry).toContain('BUDGETED CHECKPOINT')
     } finally {
       await ctx.fiber.dispose()
     }

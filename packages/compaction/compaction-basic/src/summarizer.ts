@@ -10,6 +10,8 @@ import type {
   ContentBlock, FinishReason, GenerateOptions, Message, TokenUsage, ToolSchema,
 } from '@deepseek-ai/dsh-llm'
 import type { Agent } from '@deepseek-ai/dsh-agent'
+// Type-only: the `ctx.tokenMeter` Context merge for the declared pricing face.
+import type { TokenMeter } from '@deepseek-ai/dsh-token-meter'
 
 interface SummaryConfig {
   readonly summarizationProvider: string
@@ -20,6 +22,15 @@ interface SummaryConfig {
 /** Tags wrapping the structured summary inside the landed checkpoint node. */
 const SUMMARY_OPEN_TAG = '<compacted-summary>'
 const SUMMARY_CLOSE_TAG = '</compacted-summary>'
+
+/**
+ * Fraction of the routed model's window the summarization request may occupy.
+ *
+ * The auxiliary call has to fit where the conversation did not, so it is
+ * budgeted strictly below capacity: the reserve covers the estimator's known
+ * under-pricing of CJK text and JSON schemas plus provider-side framing.
+ */
+const SUMMARY_WINDOW_RATIO = 0.75
 
 /**
  * The summarization directive, delivered as the FINAL user message after the
@@ -108,9 +119,102 @@ export type SummaryResult = {
 )
 
 /**
+ * The trailing directive that marks the auxiliary call and requests the
+ * checkpoint. One instance is built per call so the priced envelope and the
+ * sent request are the same message.
+ */
+function instructionMessage(): Message {
+  return createUserMessage({
+    content: [{ type: 'text', text: COMPACTION_INSTRUCTION }],
+    source: { kind: 'plugin', plugin: 'dsh-compaction-basic' },
+  })
+}
+
+/** Heuristic tokens of the replayed non-message envelope under the shared estimator. */
+function estimateHeaderTokens(
+  input: SummarizationInput,
+  withTools: boolean,
+  meter: Pick<TokenMeter, 'estimateMessage'>,
+): number {
+  const system = input.system === undefined
+    ? 0
+    : meter.estimateMessage(createUserMessage({
+      content: [{ type: 'text', text: input.system }],
+      source: { kind: 'user' },
+    }))
+  if (!withTools || input.tools === undefined || input.tools.length === 0) return system
+  // Tool schemas are priced as one structural JSON payload, matching
+  // `estimateToolsTokens`' fixed-density treatment of the same bytes.
+  return system + Math.ceil(JSON.stringify(input.tools).length / 4)
+}
+
+/**
+ * Keep the newest region messages that fit one token budget, oldest dropped
+ * first. The newest messages describe the work in progress, so they carry the
+ * facts a resumed conversation most needs; the summarizer's own directive
+ * already records that earlier material was condensed away.
+ * @param messages - replayed region messages in surface order.
+ * @param budget - heuristic tokens available to the region.
+ * @param meter - pricing face of the token meter.
+ * @returns the retained suffix of the region, possibly empty.
+ */
+function fitSummaryRegion(
+  messages: readonly Message[],
+  budget: number,
+  meter: Pick<TokenMeter, 'estimateMessage'>,
+): readonly Message[] {
+  if (budget <= 0) return []
+  let used = 0
+  let keepFrom = messages.length
+  for (let index = messages.length - 1; index >= 0; index -= 1) {
+    // oxlint-disable-next-line typescript/no-non-null-assertion -- index is inside the array bounds
+    used += meter.estimateMessage(messages[index]!)
+    if (used > budget) break
+    keepFrom = index
+  }
+  return messages.slice(keepFrom)
+}
+
+/**
+ * Resolve the heuristic prompt budget for one summarization request from the
+ * routed model's advertised capacity.
+ *
+ * A model that advertises no capacity cannot be budgeted, so the caller is
+ * left unbounded and the provider decides — the same behavior as before
+ * budgeting existed, and the only option that cannot invent a limit.
+ * @param ctx - context providing the LLM service and token meter.
+ * @param config - resolved backend configuration supplying the output reserve.
+ * @param target - exact provider/model route the auxiliary call will use.
+ * @param signal - optional cancellation forwarded to adapter-owned lookup.
+ * @returns heuristic prompt-token budget, or `Number.POSITIVE_INFINITY`.
+ */
+async function summarizationBudget(
+  ctx: Context,
+  config: SummaryConfig,
+  target: { provider: string; model: string },
+  signal?: AbortSignal,
+): Promise<number> {
+  const info = await ctx.llm.resolveModelInfo(target.provider, target.model, signal)
+  const contextWindow = info.context?.contextWindow
+  if (contextWindow === undefined || !Number.isInteger(contextWindow) || contextWindow <= 0) {
+    return Number.POSITIVE_INFINITY
+  }
+  // Reserve the response the checkpoint itself needs: the budget governs the
+  // prompt, so the output allowance is subtracted before scaling.
+  const promptCapacity = Math.max(0, contextWindow - config.maxTokens)
+  return Math.floor(promptCapacity * SUMMARY_WINDOW_RATIO)
+}
+
+/**
  * Run the default cache-reusing `ctx.llm.stream()` summarization call: replay
  * the conversation prefix, then append the compaction instruction as the final
  * user message so the provider's warm prefix cache is reused.
+ *
+ * The request is budgeted to the routed model's advertised window, dropping
+ * the oldest region messages and then the tool schemas when the replayed
+ * prefix would not fit. Without that budget the auxiliary call is built from
+ * the very context that overflowed, so an over-window session could never
+ * compact: every attempt would be answered with the same provider rejection.
  * @param ctx - context providing the LLM service.
  * @param config - resolved backend configuration.
  * @param input - replayed conversation prefix (system, tools, and leading messages) to condense.
@@ -143,19 +247,27 @@ export async function summarizeWithLlm(
   }
 
   const assembler = new BlockAssembler()
+  const budget = await summarizationBudget(ctx, config, target, signal)
+  const meter = ctx.tokenMeter
+  const tools = input.tools
+  // The compaction instruction forbids tool use, so the conversation's tool
+  // schemas are replayed for cache alignment only. They are the first thing to
+  // drop when the request must fit: pure overhead for a call that cannot call a
+  // tool.
+  const replayTools = tools !== undefined && tools.length > 0
+    && estimateHeaderTokens(input, true, meter) <= budget
+  const fixedTokens = estimateHeaderTokens(input, replayTools, meter)
+    + meter.estimateMessage(instructionMessage())
   const messages: Message[] = [
-    ...input.messages,
-    createUserMessage({
-      content: [{ type: 'text', text: COMPACTION_INSTRUCTION }],
-      source: { kind: 'plugin', plugin: 'dsh-compaction-basic' },
-    }),
+    ...fitSummaryRegion(input.messages, budget - fixedTokens, meter),
+    instructionMessage(),
   ]
   const options: GenerateOptions = {
     provider: target.provider,
     model: target.model,
     messages,
     ...input.system === undefined ? {} : { system: input.system },
-    ...input.tools === undefined ? {} : { tools: [...input.tools] },
+    ...replayTools ? { tools: [...tools] } : {},
     maxTokens: config.maxTokens,
     sessionId: agent.session.id,
     purpose: 'compaction',

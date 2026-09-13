@@ -115,7 +115,7 @@ Pressure policy resolves capacity from the adapter that owns the durable route. 
 
 ### Summarization mechanics
 
-A direct `ctx.llm.stream()` call uses the configured provider/model pair and cap, falling back to the latest logged request target and then the `AgentOptions` pair, without running the loop-only `agent/request` extension point. The call replays the conversation's own system prompt, tools, and shadowed-region messages verbatim — including image references, which the selected adapter must resolve or explicitly reject — and appends the compaction instruction as the final user message, so it reuses the provider's warm prefix cache instead of invalidating it. The call sets `GenerateOptions.purpose` to `compaction`; only returned text enters the checkpoint, excluding reasoning and tool calls. Image output fails with `UNSUPPORTED_CONTENT` rather than disappearing. The replacement user message frames the summary with `<compacted-summary>` tags; the raw summary remains on the `compaction/summary` event.
+A direct `ctx.llm.stream()` call uses the configured provider/model pair and cap, falling back to the latest logged request target and then the `AgentOptions` pair, without running the loop-only `agent/request` extension point. The call replays the conversation's own system prompt, tools, and shadowed-region messages verbatim — including image references, which the selected adapter must resolve or explicitly reject — and appends the compaction instruction as the final user message, so it reuses the provider's warm prefix cache instead of invalidating it. The replayed input is budgeted against the routed model's advertised context window so the auxiliary call fits where the conversation did not: the oldest shadowed-region messages are dropped first, and the conversation's tool schemas are dropped before any message, because the compaction instruction forbids tool use and the schemas are replayed for prefix-cache alignment only. A route that advertises no capacity leaves the request unbudgeted. The call sets `GenerateOptions.purpose` to `compaction`; only returned text enters the checkpoint, excluding reasoning and tool calls. Image output fails with `UNSUPPORTED_CONTENT` rather than disappearing. The replacement user message frames the summary with `<compacted-summary>` tags; the raw summary remains on the `compaction/summary` event.
 
 ### The region transaction
 
@@ -181,7 +181,7 @@ Replacing rather than append-only. Each checkpoint invalidates reuse from the fi
 
 #### What the model sees
 
-The summarization model receives the conversation replayed verbatim — the same system prompt, tool schemas, and messages the last routed request sent for the shadowed region — followed by one final user message: the compaction instruction below. The conversation model never sees this private request or its reasoning; only returned text is stored.
+The summarization model receives the conversation replayed verbatim — the same system prompt, tool schemas, and messages the last routed request sent for the shadowed region — followed by one final user message: the compaction instruction below. The conversation model never sees this private request or its reasoning; only returned text is stored. When the replayed prefix would exceed the routed model's window, the oldest shadowed-region messages and then the tool schemas are omitted so the auxiliary call fits; the summarization model then condenses the newest portion of the selected region.
 
 ##### Compaction instruction (final user message)
 
@@ -228,7 +228,7 @@ This is a separate model call: the replayed conversation prefix plus the fixed i
 
 #### KV Cache effect
 
-The replayed system prompt, tools, and shadowed-region messages match the conversation's last routed request byte-for-byte, so the provider's warm prefix cache is reused up to the trailing instruction; only that instruction, and the summary output, is uncached. Routing the summarizer to a different provider/model, or compacting a non-head range, forgoes this reuse.
+The replayed system prompt, tools, and shadowed-region messages match the conversation's last routed request byte-for-byte, so the provider's warm prefix cache is reused up to the trailing instruction; only that instruction, and the summary output, is uncached. Routing the summarizer to a different provider/model, or compacting a non-head range, forgoes this reuse. Dropping the tool schemas or the oldest messages for the budget gives up the corresponding reuse, which is why they are dropped only when the request would otherwise not fit.
 
 ## Known Limitations and Deferred Work
 

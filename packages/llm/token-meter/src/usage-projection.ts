@@ -171,7 +171,9 @@ export const tokenUsageProjectionDefinition = {
  * and a replacement shrinks it by its logged shadow price. A replacement
  * without a claim preserves the previous total. A usage sample is stamped
  * BEFORE the same event joins the surface, so an `assistant/message` anchors
- * against the surface its own request saw.
+ * against the surface its own request saw. A sample whose prompt-side total is
+ * zero never replaces an existing non-zero reading: a provider that rejects a
+ * request without a body reports placeholder counters, not a measurement.
  */
 export const contextPressureProjectionDefinition = {
   key: 'contextPressure',
@@ -195,7 +197,19 @@ export const contextPressureProjectionDefinition = {
     const usage = usageOf(event)
     if (usage !== undefined) {
       const pressureTokens = pressureFrom(usage)
-      if (pressureTokens !== next.pressureTokens || next.sampledSurfaceTokens !== next.surfaceTokens) {
+      // A provider that rejects a request without a body (a 400) still yields a
+      // usage chunk, but its counters are a zero-filled placeholder rather than
+      // a measurement of the prompt. Adopting it would zero the occupancy
+      // numerator while capacity stayed, so the meter would read "0%" for a
+      // context that is in fact full. A zero cannot be a real prompt-side
+      // sample once one was already taken: every routed request carries at
+      // least a system prompt and tool schemas, which are never free. The
+      // sample and its surface anchor stay untouched.
+      const rejectZeroSample = pressureTokens === 0
+        && next.pressureTokens !== undefined
+        && next.pressureTokens > 0
+      if (!rejectZeroSample
+        && (pressureTokens !== next.pressureTokens || next.sampledSurfaceTokens !== next.surfaceTokens)) {
         next = { ...next, pressureTokens, sampledSurfaceTokens: next.surfaceTokens }
       }
     }

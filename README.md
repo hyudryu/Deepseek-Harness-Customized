@@ -17,6 +17,15 @@ This fork adds custom updates to DeepSeek Harness plus a set of installable plug
 ### Updates to DeepSeek Harness
 
 <details>
+<summary><b>Accurate context meter and working recovery when a session exceeds its context window</b> — click to expand</summary>
+
+A session that had grown past its model's context window showed `0% of context used` and `~0 / 300K` in the composer's context meter while every further turn failed with `CONTEXT_WINDOW_EXCEEDED`. Two separate defects caused it. The meter's occupancy numerator was overwritten by a zero-filled usage object that providers return on a bodiless `400`, so the one condition the badge exists to report was displayed as empty. Separately, automatic recovery could never succeed: it summarizes the conversation by replaying it to the model, so the summarization call was itself built from the context that had just overflowed and was answered with the same rejection on every attempt. `maxOverflowRetries` bounded the retries, but nothing could make progress.
+
+Both are fixed. A failed attempt that reports zero prompt tokens no longer replaces a real reading, so the badge shows the true figure — `100%` for a session at 317K against a 300K window — instead of `0%`. The summarizer now budgets its own request against the routed model's advertised window, dropping the oldest messages and then the tool schemas (which it cannot use anyway) until the request fits, so overflow recovery condenses the newest portion of the conversation and the turn continues. A route advertising no capacity is left unbudgeted rather than being given an invented limit. See the [token meter reference](packages/llm/token-meter/README.md) and the [compaction backend reference](packages/compaction/compaction-basic/README.md).
+
+</details>
+
+<details>
 <summary><b>Per-row operation durations in the transcript</b> — click to expand</summary>
 
 Every Tool-call row and every thinking (`Think`) row now carries how long that operation took, drawn as `45.2s` under a minute and `2m 42s` from there on. A settled Tool row takes its span from the paired `tool/call` and `tool/result` event times; a running row shows nothing until it settles. A thinking row counts up live while the model is still streaming that block — including across a quiet stretch where no new token has arrived — and freezes at its recorded end once the step settles.
@@ -187,7 +196,7 @@ The same fields can be set in `cordis.patch.yml` as composition defaults. Routin
 <details>
 <summary><b>Global personal-assistant supervisor plugin</b> — click to expand</summary>
 
-A global personal-assistant supervisor (one per Harness profile). It owns a dedicated control session titled "Personal Assistant" and watches every coding session through a Strands Agents SDK reasoning loop: it surfaces completions, failures, and questions from your sessions, routes your answers back to the right session, operates interactive TUI menus cross-session, and keeps persistent GitHub/Codex PR review watches. It is a control plane, not a coding worker — it never writes or edits code itself.
+A global personal-assistant supervisor (one per Harness profile). It owns a dedicated control session titled "Personal Assistant" and watches every coding session through a Strands Agents SDK reasoning loop: it surfaces completions, failures, and questions from your sessions, routes your answers back to the right session, operates interactive TUI menus cross-session, and keeps persistent GitHub watches on pull requests and Actions runs. It is a control plane, not a coding worker — it never writes or edits code itself.
 
 Capabilities include:
 
@@ -196,14 +205,16 @@ Capabilities include:
 - cross-session messaging: followup when idle, inject when running, steer when urgent;
 - an owner-fenced TUI bridge (`tui_snapshot` / `tui_select` / `tui_keypress`, named keys only, ambiguous menus refused rather than guessed);
 - a compact `github_pr_review_state` tool: Codex thumbs-up detection on the main post, timeline-aware latest activity;
-- persistent review watches riding on durable Harness schedules, with an in-process timer fallback;
+- persistent watches riding on durable Harness schedules, with an in-process timer fallback. `watch_create` takes an explicit `kind`: `github_codex_review` watches a PR for Codex review activity and ends on a Codex thumbs-up on the main post or a merge, and `github_actions_run` watches one workflow run and ends when the run reports a conclusion, whatever that conclusion is;
+- watches that report when they stop watching. A watch keeps its own liveness evidence — when it last polled, when it last succeeded, and how many polls have failed in a row — and raises a `WATCH_UNHEALTHY` event once per outage. Two detectors cover it: a poll-failure streak crossing `watches.failureThreshold` (default 3), and a stall watchdog that runs on its own timer, because a watch whose schedule stopped firing never ticks and so nothing inside a poll could notice. A successful poll closes the outage and reports the recovery; `watch_list` exposes the same evidence directly;
+- an unreadable watch record is quarantined on recovery instead of aborting it, and its orphaned recurring reminder is deleted with it — one bad record no longer strands every other watch or keeps the plugin from loading;
 - dedupe everywhere, so nothing is ever announced twice — including across restarts;
 - Level-2 permissions enforced outside the prompt: every supervisor tool is policy-wrapped, and destructive or unlisted actions refuse with `approval_required` until an approval UI exists;
 - personality presets (`friendly`/`playful`/`professional`/`serious`/`minimal`/`custom`) that change phrasing only, never behavior.
 
 **Prerequisites:**
 
-- the GitHub CLI (`gh`), installed and authenticated, for PR review watches;
+- the GitHub CLI (`gh`), installed and authenticated, for watches;
 - an OpenAI-compatible model endpoint for the supervisor loop (configured via `strands.baseUrl` / `strands.model`; the API key is read at runtime from the env var named by `strands.apiKeyEnv`, never stored in config).
 
 </details>

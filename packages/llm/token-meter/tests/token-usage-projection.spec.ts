@@ -505,6 +505,34 @@ describe('contextPressure session projection', () => {
     expect(pressure(ctx, session)).toEqual(before)
   })
 
+  it('keeps the last real sample when a failed attempt reports zero usage', async () => {
+    // A provider 400 carries no body, so the adapter's error path still emits a
+    // usage chunk built from a zero-filled object. Treating that as a sample
+    // zeroed the occupancy numerator while capacity stayed, which is the
+    // "0% of ~0 / 300K" reading this covers.
+    const { ctx, session } = await harness()
+    startStep(session, 1, 1)
+    recordContext(session, 'large', 300_000)
+    finalUsage(session, { inputTokens: 317_137, outputTokens: 90 }, 1, 1)
+    expect(pressure(ctx, session).pressureTokens).toBe(317_137)
+
+    startStep(session, 2, 1)
+    usageChunk(session, { inputTokens: 0, outputTokens: 0, totalTokens: 0 }, 2, 1)
+    expect(pressure(ctx, session).pressureTokens).toBe(317_137)
+  })
+
+  it('still reports a genuine zero for a fresh session whose first prompt is empty', async () => {
+    // The guard must reject a zero that replaces a known reading, not a
+    // legitimately empty prompt: nothing was sampled before it.
+    const { ctx, session } = await harness()
+    startStep(session, 1, 1)
+    recordContext(session, 'large', 128_000)
+    usageChunk(session, { inputTokens: 0, outputTokens: 0, totalTokens: 0 }, 1, 1)
+    expect(pressure(ctx, session)).toEqual({
+      pressureTokens: 0, projectedTokens: 0, contextWindow: 128_000,
+    })
+  })
+
   it('clamps a projection that heuristic error drove below zero', async () => {
     const { ctx, session } = await harness()
     recordContext(session, 'large', 128_000)
