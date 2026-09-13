@@ -9,9 +9,10 @@ non-empty text makes it the *entire* system prompt for sessions whose working
 directory is that project. An empty field removes the override.
 
 **Restore DeepSeek default** copies the prompt the deployment would otherwise
-assemble into the field, so an override can start from the shipped text instead
-of a blank page. Prompt variables are already interpolated in that copy — it is
-the literal text the model would receive.
+send into the field, so an override can start from the shipped text instead of a
+blank page. Prompt variables are already interpolated in that copy — it is the
+literal text the model would receive, with `{{cwd}}` re-resolved to the project
+being edited.
 
 ## Storage
 
@@ -52,6 +53,12 @@ Tool schemas, runtime contexts, and prompt variables still assemble normally.
 Only the section list that renders the request's `system` field is replaced, so
 the tool set the model is offered is unchanged.
 
+The listener also records the **pre-override** sections and variables of the
+most recent real assembly. That record is what **Restore DeepSeek default**
+renders. The plugin does not assemble on demand: several shipped providers read
+`context.agent` while contributing to an assembly, and a bare `assemble()` has
+no agent to give them.
+
 Because the assembled prompt is written to the session log's `request/header`
 events, the override is recorded in durable history exactly like the default
 prompt, and the Chat transcript's system-prompt row shows the override text.
@@ -67,6 +74,11 @@ only. A project with no override file behaves exactly as before.
   persona and the per-tool usage sections are part of the assembled prompt, so
   an override that does not carry them over removes them. **Restore DeepSeek
   default** exists to make that recoverable; start from it and edit.
+- **Restore needs one assembled request first.** The baseline is captured from a
+  live assembly, so on a freshly started process the button stays disabled until
+  some session has sent a request; the dialog says so. The captured baseline is
+  deployment-wide, so a project that never ran a request still gets the right
+  text, with `{{cwd}}` re-resolved to that project.
 - **A `complete` prompt section still wins.** A composition that registers a
   section with `complete: true` (an agent preset persona, for example) is
   restored *after* the assembly waterfall, so an override does not apply to that
