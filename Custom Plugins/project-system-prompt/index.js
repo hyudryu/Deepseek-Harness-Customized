@@ -111,12 +111,19 @@ export function apply(ctx, rawConfig = {}) {
     root: typeof rawConfig.root === 'string' ? rawConfig.root : '',
   }
   const cache = new Map()
+  // The section list and variables of the most recent real assembly, captured
+  // before this plugin replaces the sections. This is how the modal gets the
+  // deployment default to restore: assembling on demand cannot serve it,
+  // because providers such as plan-mode read `context.agent` and a bare
+  // `assemble()` has none.
+  let baseline
 
   // Registered on the plugin's own unscoped context, so it receives every
   // assembly: scope filtering admits untagged listeners globally, and the
   // assembly context carries the agent whose session names the project.
   ctx.effect(() => ctx.on('system-prompt/assemble', async (assembly, context, next) => {
     const built = await next()
+    baseline = { sections: built.sections, variables: built.variables }
     const projectDir = projectDirFor(context)
     if (projectDir === undefined) return built
     const text = await readPromptFile(
@@ -139,19 +146,35 @@ export function apply(ctx, rawConfig = {}) {
       const workspaceId = parts[1]
 
       let filePath
+      let projectDir
       try {
-        filePath = resolvePromptPath(workspacePathFor(ctx, workspaceId), config.promptFile, config.root)
+        projectDir = workspacePathFor(ctx, workspaceId)
+        filePath = resolvePromptPath(projectDir, config.promptFile, config.root)
       } catch (error) {
         return respond(res, 404, { ok: false, error: error.message })
       }
 
       if (req.method === 'GET') {
         const text = await readPromptFile(filePath, config.maxBytes, cache)
-        // The deployment default is what the model would receive without an
-        // override; the modal offers it as the "Restore DeepSeek default"
-        // baseline. Assembling without a scope keeps this listener inert, so
-        // this is the prompt before any project override is applied.
-        const defaultText = renderPrompt(await ctx.systemPrompt.assemble())
+        // The deployment default is the prompt the model would receive without
+        // an override; the modal offers it as the "Restore DeepSeek default"
+        // baseline. It is rendered from the captured pre-override assembly, and
+        // `cwd` is re-resolved to THIS project so a baseline captured in
+        // another project still names the right directory. Empty means no
+        // request has been assembled yet in this process.
+        let defaultText = ''
+        if (baseline !== undefined) {
+          try {
+            defaultText = renderPrompt({
+              sections: baseline.sections,
+              contexts: [],
+              tools: [],
+              variables: { ...baseline.variables, cwd: projectDir },
+            })
+          } catch (error) {
+            return respond(res, 500, { ok: false, error: `default prompt: ${error.message}` })
+          }
+        }
         return respond(res, 200, { ok: true, text, defaultText, path: filePath })
       }
 

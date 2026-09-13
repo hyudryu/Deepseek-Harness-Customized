@@ -134,7 +134,9 @@ function ProjectSystemPromptEditor({ workspaceId, onClose, t }: {
         placeholder={loaded ? t('placeholder') : t('loading')}
         onChange={e => setText(e.currentTarget.value)}
       />
-      <p style={{ margin: '8px 0 0', fontSize: 12, opacity: 0.7 }}>{t('hint')}</p>
+      <p style={{ margin: '8px 0 0', fontSize: 12, opacity: 0.7 }}>
+        {loaded && defaultText === '' ? t('noDefault') : t('hint')}
+      </p>
     </Modal>
   )
 }

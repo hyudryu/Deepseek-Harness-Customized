@@ -43,27 +43,47 @@ async function writePrompt(dir, text) {
   await writeRaw(promptFileIn(dir), text, 'utf8')
 }
 
-/** A context double exposing exactly the services and hooks the plugin uses. */
-function createHarness({ workspaces = {}, assembly = BASE_ASSEMBLY } = {}) {
+/**
+ * A context double exposing exactly the services and hooks the plugin uses.
+ * `assembleThrows` models a real composition, where assembling on demand
+ * without an agent fails; the route must never do it.
+ */
+function createHarness({ workspaces = {}, assembly = BASE_ASSEMBLY, assembleThrows = true } = {}) {
   const listeners = []
   const routes = []
+  let assembleCalls = 0
   const ctx = {
     effect(fn) { return fn() },
     on(event, listener) { listeners.push({ event, listener }); return () => {} },
     webServer: { register(route) { routes.push(route); return () => {} } },
     workspaceRegistry: { get: (id) => workspaces[id] },
-    systemPrompt: { assemble: async () => assembly },
+    systemPrompt: {
+      assemble: async () => {
+        assembleCalls += 1
+        if (assembleThrows) throw new TypeError("Cannot read properties of undefined (reading 'session')")
+        return assembly
+      },
+    },
   }
   apply(ctx)
   return {
     assembly: listeners.find(entry => entry.event === 'system-prompt/assemble').listener,
     route: routes[0],
+    assembleCalls: () => assembleCalls,
   }
 }
 
 /** Run the registered assembly listener over one agent-shaped context. */
-function assemble(harness, context) {
-  return harness.assembly(BASE_ASSEMBLY, context, async () => BASE_ASSEMBLY)
+function assemble(harness, context, assembly = BASE_ASSEMBLY) {
+  return harness.assembly(assembly, context, async () => assembly)
+}
+
+/**
+ * Seed the pre-override baseline the way a real request does, by assembling
+ * once for an agent in a project that has no override.
+ */
+async function seedBaseline(harness, cwd, assembly = BASE_ASSEMBLY) {
+  await assemble(harness, AGENT_CONTEXT(cwd), assembly)
 }
 
 /** A minimal Node request double for the prefix route. */
@@ -241,26 +261,46 @@ describe('real SystemPrompt composition', () => {
     assert.doesNotMatch(rendered, /PROJECT ONLY/)
   })
 
-  it('interpolates prompt variables into the restored default', async () => {
+  it('re-resolves cwd so a baseline captured elsewhere names this project', async () => {
     const dir = await projectDir()
-    const harness = createHarness({
-      workspaces: { w1: { path: dir } },
-      assembly: {
-        sections: [{ name: 'deployment:persona', text: 'Working directory is {{cwd}}.' }],
-        contexts: [],
-        tools: [],
-        variables: { cwd: dir },
-      },
-    })
+    const captured = {
+      sections: [{ name: 'deployment:persona', text: 'Working directory is {{cwd}}.' }],
+      contexts: [],
+      tools: [],
+      variables: { cwd: await projectDir() },
+    }
+    const harness = createHarness({ workspaces: { w1: { path: dir } } })
+    await seedBaseline(harness, await projectDir(), captured)
     const loaded = await call(harness.route, 'GET', '/project-system-prompt/w1')
     assert.equal(loaded.body.defaultText, `Working directory is ${dir}.`)
   })
 })
 
 describe('browser routes', () => {
+  it('serves the default from the captured assembly without assembling on demand', async () => {
+    const dir = await projectDir()
+    // The double's assemble() throws, modelling a real composition where an
+    // agent-less assembly fails; reaching it would fail this test.
+    const harness = createHarness({ workspaces: { w1: { path: dir } }, assembleThrows: true })
+    await seedBaseline(harness, dir)
+    const loaded = await call(harness.route, 'GET', '/project-system-prompt/w1')
+    assert.equal(loaded.status, 200)
+    assert.equal(loaded.body.defaultText, 'DEFAULT')
+    assert.equal(harness.assembleCalls(), 0)
+  })
+
+  it('serves an empty default before any request has been assembled', async () => {
+    const dir = await projectDir()
+    const harness = createHarness({ workspaces: { w1: { path: dir } } })
+    const loaded = await call(harness.route, 'GET', '/project-system-prompt/w1')
+    assert.equal(loaded.status, 200)
+    assert.equal(loaded.body.defaultText, '')
+  })
+
   it('returns the saved override, the deployment default, and the file path', async () => {
     const dir = await projectDir()
     const harness = createHarness({ workspaces: { w1: { path: dir } } })
+    await seedBaseline(harness, dir)
     const saved = await call(harness.route, 'PUT', '/project-system-prompt/w1', JSON.stringify({ text: 'MINE' }))
     assert.equal(saved.status, 200)
     const loaded = await call(harness.route, 'GET', '/project-system-prompt/w1')
@@ -273,6 +313,7 @@ describe('browser routes', () => {
   it('serves an empty override for a project that never saved one', async () => {
     const dir = await projectDir()
     const harness = createHarness({ workspaces: { w1: { path: dir } } })
+    await seedBaseline(harness, dir)
     const loaded = await call(harness.route, 'GET', '/project-system-prompt/w1')
     assert.equal(loaded.body.text, '')
     assert.equal(loaded.body.defaultText, 'DEFAULT')
