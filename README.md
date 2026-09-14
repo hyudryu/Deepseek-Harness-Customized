@@ -119,9 +119,9 @@ This matters for servers whose value depends on being chosen over general-purpos
 
 While the session's model rides the DeepSeek API, a small badge sits beside the model in the chat box. Inside a peak-rate window it reads **Peak** with a lit amber dot; outside one it reads **Off-peak** in the dimmed caption tone, so a glance tells you whether this turn is billed at peak rates. Peak is 01:00–04:00 and 06:00–10:00 UTC, Monday through Friday; every other hour, including all weekend UTC, is off-peak.
 
-Hovering the badge shows both windows as clock times in Pacific time and in UTC, for example `Pacific time: 5:00 PM–8:00 PM, 10:00 PM–2:00 AM` in winter and an hour later in summer, because the Pacific line follows daylight saving. The badge reads the clock on its own, so a session left open crosses a window boundary without a reload or a model switch.
+Hovering the badge, or focusing it from the keyboard, shows both windows as clock times in Pacific time and in UTC, with the Pacific weekdays named because the UTC windows open on the previous Pacific day: `Pacific time (Sunday–Thursday, second window ending the next morning): 5:00 PM–8:00 PM, 10:00 PM–2:00 AM` in winter, an hour later in summer. The badge reads the clock on its own, so a session left open crosses a window boundary without a reload or a model switch.
 
-The badge appears only on the DeepSeek API route (`deepseek-official`, the `dsh-llm-deepseek` adapter). An aggregator or local endpoint that serves a DeepSeek model shows nothing, because its pricing is not the API's schedule. No setup is needed. See the [model selection reference](packages/client/ui-model-selection/README.md#deepseek-api-peak-hours).
+The badge appears only where the DeepSeek API's own rates apply: the route must be `deepseek-official` *and* still reach the public API, as the `dsh-llm-deepseek` adapter reports. Pointing that route at a proxy, or running a gateway that serves DeepSeek models under its own provider name, shows nothing, because neither bills at this schedule. No setup is needed. See the [model selection reference](packages/client/ui-model-selection/README.md#deepseek-api-peak-hours).
 
 </details>
 

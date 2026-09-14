@@ -23,7 +23,7 @@ import {
 } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { PropsLocale } from '@deepseek-ai/dsh-client-ui-slots'
 import type { ModelSelectInjected } from './slots.ts'
-import { DEEPSEEK_API_PROVIDER } from './peak-hours.ts'
+import { showsPeakSchedule } from './peak-hours.ts'
 import { PeakHoursBadge } from './PeakHoursBadge.tsx'
 import css from './ModelSelect.module.css'
 
@@ -239,7 +239,7 @@ export function ModelSelect(
         <IconChevronDownOutline14 className={clsx(css.chevron, open && css.chevronOpen)} />
       </button>
 
-      {state.current?.provider === DEEPSEEK_API_PROVIDER && <PeakHoursBadge t={t} />}
+      {showsPeakSchedule(currentChoice?.group) && <PeakHoursBadge t={t} />}
 
       {open && (
         <div

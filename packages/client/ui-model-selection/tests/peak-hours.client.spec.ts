@@ -36,6 +36,17 @@ describe('isPeakInstant', () => {
 })
 
 describe('peakWindowsIn', () => {
+  it('draws a weekend presentation from the next billable day', () => {
+    // Neither weekend day has a window of its own, so the hours shown are the
+    // next Monday's: 2026-09-19 is a Saturday and 2026-09-20 its Sunday.
+    const monday = [
+      { start: '6:00 PM', end: '9:00 PM' },
+      { start: '11:00 PM', end: '3:00 AM' },
+    ]
+    expect(peakWindowsIn(new Date('2026-09-19T12:00:00Z'), PACIFIC_TIME_ZONE, 'en')).toEqual(monday)
+    expect(peakWindowsIn(new Date('2026-09-20T12:00:00Z'), PACIFIC_TIME_ZONE, 'en')).toEqual(monday)
+  })
+
   it('renders the summer windows at their daylight-saving Pacific hours', () => {
     expect(peakWindowsIn(new Date(PEAK_MONDAY), PACIFIC_TIME_ZONE, 'en'))
       .toEqual([

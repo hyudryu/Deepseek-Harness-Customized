@@ -67,7 +67,10 @@ export function PeakHoursBadge({ t }: PeakHoursBadgeProps) {
 
   return (
     <Tooltip label={schedule} side="top" delayMs={200}>
-      <span className={clsx(css.badge, peak ? css.peak : css.offPeak)}>
+      <span
+        className={clsx(css.badge, peak ? css.peak : css.offPeak)}
+        tabIndex={0}
+      >
         <span className={css.dot} aria-hidden />
         {t(peak ? 'peak.state.peak' : 'peak.state.offPeak')}
       </span>

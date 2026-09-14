@@ -49,9 +49,21 @@ describe('PeakHoursBadge', () => {
     const badge = screen.getByText('高峰')
     expect(hover(badge)).toBe([
       'DeepSeek API 高峰时段',
-      '太平洋时间：18:00–21:00、23:00–03:00',
-      'UTC 工作日：01:00–04:00、06:00–10:00',
+      '太平洋时间（周日至周四，第二个时段至次日凌晨）：18:00–21:00、23:00–03:00',
+      'UTC 工作日（周一至周五）：01:00–04:00、06:00–10:00',
     ].join('\n'))
+  })
+
+  it('opens the schedule from the keyboard, not only from the pointer', () => {
+    vi.setSystemTime(new Date('2026-09-14T01:30:00Z'))
+    render(<PeakHoursBadge t={t} />)
+
+    const badge = screen.getByText('高峰')
+    expect(badge.tabIndex).toBe(0)
+    expect(screen.queryByRole('tooltip')).toBeNull()
+
+    fireEvent.focus(badge)
+    expect(screen.getByRole('tooltip').textContent).toContain('UTC 工作日（周一至周五）：01:00–04:00、06:00–10:00')
   })
 
   it('shades the badge outside a peak window', () => {
@@ -70,9 +82,19 @@ describe('PeakHoursBadge', () => {
 
     expect(hover(screen.getByText('Off-peak'))).toBe([
       'DeepSeek API peak hours',
-      'Pacific time: 5:00 PM–8:00 PM, 10:00 PM–2:00 AM',
-      'UTC weekdays: 1:00 AM–4:00 AM, 6:00 AM–10:00 AM',
+      'Pacific time (Sunday–Thursday, second window ending the next morning): 5:00 PM–8:00 PM, 10:00 PM–2:00 AM',
+      'UTC weekdays (Monday–Friday): 1:00 AM–4:00 AM, 6:00 AM–10:00 AM',
     ].join('\n'))
+  })
+
+  it('draws a weekend tooltip from the next billable day, across the fall-back transition', () => {
+    // Sunday 2026-11-01 12:00 UTC is off-peak and past that morning's fall-back,
+    // so the day itself has no window and mixes both offsets. The next Monday
+    // runs the winter windows, which is what the tooltip must report.
+    vi.setSystemTime(new Date('2026-11-01T12:00:00Z'))
+    render(<PeakHoursBadge t={tEn} />)
+
+    expect(hover(screen.getByText('Off-peak'))).toContain('Pacific time (Sunday–Thursday, second window ending the next morning): 5:00 PM–8:00 PM, 10:00 PM–2:00 AM')
   })
 
   it('flips to peak on its own clock when a window opens', () => {

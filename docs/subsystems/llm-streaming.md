@@ -459,6 +459,16 @@ interface LlmProviderInfo {
   id: string
   /** Human-readable provider name for selectors and diagnostics. */
   name: string
+  /**
+   * Whether this route reaches the provider's own public API.
+   *
+   * A provider id and its model ids survive being pointed at a proxy or a local
+   * server, so they cannot establish whose rates a request is billed at.
+   * Adapters that can be redirected that way set this only while their resolved
+   * endpoint is the public one, and omit it otherwise. A consumer that renders
+   * provider-owned pricing requires this fact rather than the id alone.
+   */
+  officialEndpoint?: boolean
 }
 ```
 

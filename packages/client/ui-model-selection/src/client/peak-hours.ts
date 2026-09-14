@@ -12,6 +12,8 @@
  * @module dsh-client-ui-model-selection/peak-hours
  */
 
+import type { ModelProviderGroup } from '@deepseek-ai/dsh-api-session-controller/types'
+
 /**
  * Provider id of the DeepSeek API adapter (`@deepseek-ai/dsh-llm-deepseek`).
  *
@@ -50,6 +52,9 @@ export interface PeakWindowText {
 /** Both windows' clock bounds, in schedule order. */
 export type PeakWindowsText = readonly [PeakWindowText, PeakWindowText]
 
+/** Milliseconds in one UTC calendar day. */
+const DAY_MS = 86_400_000
+
 /**
  * Classify an instant against the DeepSeek API peak schedule.
  *
@@ -67,21 +72,58 @@ export function isPeakInstant(now: Date): boolean {
 }
 
 /**
+ * Whether the DeepSeek API peak schedule applies to one provider group.
+ *
+ * Both facts are required. The provider id selects the route the adapter owns,
+ * and `officialEndpoint` is the adapter's own report that the route still
+ * reaches the public API: a deployment can point `deepseek-official` at a proxy
+ * or a local server, which keeps the provider id and its model ids while
+ * replacing the rates this schedule describes.
+ * @param group - the current selection's provider group, absent when the advisory catalog does not list it.
+ * @returns whether the badge may present DeepSeek's schedule.
+ */
+export function showsPeakSchedule(
+  group: Pick<ModelProviderGroup, 'id' | 'officialEndpoint'> | undefined,
+): boolean {
+  return group?.id === DEEPSEEK_API_PROVIDER && group.officialEndpoint === true
+}
+
+/**
+ * The UTC day whose windows a presentation should render.
+ *
+ * Weekends are skipped rather than rendered: no window exists on a UTC
+ * Saturday or Sunday, so anchoring there would print hours that never apply
+ * that day. The fall-back transition is always a Sunday, and formatting bounds
+ * across an offset change is what made a Sunday anchor print `6:00–9:00 PM` for
+ * a Monday whose windows actually run `5:00–8:00 PM`. The next Monday is the
+ * first day a window applies to and, with it, the smaller offset.
+ * @param now - the instant whose presentation day is resolved.
+ * @returns UTC midnight of the day the windows are drawn from.
+ */
+function billableDayStart(now: Date): number {
+  const midnight = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate())
+  const weekday = now.getUTCDay()
+  if (weekday === 6) return midnight + 2 * DAY_MS
+  if (weekday === 0) return midnight + DAY_MS
+  return midnight
+}
+
+/**
  * Render both peak windows as clock times in one zone.
  *
- * The windows are taken from the UTC calendar day containing `now`, so they
- * stay in schedule order and a window that has already closed today still
+ * The windows are taken from the billable UTC calendar day containing `now`, so
+ * they stay in schedule order and a window that has already closed today still
  * renders the hours it keeps. Formatting each bound as its own instant is what
  * makes a Pacific line follow daylight saving: the zone's offset is read for
  * the bound being drawn, so the summer and winter renderings differ by the
  * hour they actually differ by.
- * @param now - the instant whose UTC day supplies the windows.
+ * @param now - the instant whose presentation day supplies the windows.
  * @param timeZone - IANA zone to render the clock times in.
  * @param locale - BCP 47 tag deciding the clock convention (12- or 24-hour).
  * @returns both windows in schedule order.
  */
 export function peakWindowsIn(now: Date, timeZone: string, locale: string): PeakWindowsText {
-  const dayStart = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate())
+  const dayStart = billableDayStart(now)
   const clock = new Intl.DateTimeFormat(locale, { timeZone, hour: 'numeric', minute: '2-digit' })
   // A 24-hour locale reads `numeric` as a dropped leading zero, which would
   // spell the second window "23:00–3:00"; pad it there. A 12-hour locale keeps

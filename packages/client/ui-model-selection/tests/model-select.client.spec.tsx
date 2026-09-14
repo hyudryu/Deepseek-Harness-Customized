@@ -36,6 +36,7 @@ function state(overrides: Partial<ModelDirectoryState> = {}): ModelDirectoryStat
     groups: [{
       id: 'deepseek-official',
       name: 'DeepSeek',
+      officialEndpoint: true,
       models: [{
         id: 'deepseek-v4-flash',
         name: 'DeepSeek-V4-Flash',
@@ -236,6 +237,45 @@ describe('ModelSelect reasoning effort', () => {
         locked={false}
         available
         directory={createSnapshotStore(state({ current: { provider: 'gx10cluster', model: 'qwen3.8' } }))}
+        load={vi.fn()}
+        select={vi.fn().mockResolvedValue(true)}
+        t={t}
+      />)
+      // A gateway serving DeepSeek models under its own provider id.
+      render(<ModelSelect
+        locked={false}
+        available
+        directory={createSnapshotStore(state({ current: { provider: 'gx10cluster', model: 'qwen3.8' } }))}
+        load={vi.fn()}
+        select={vi.fn().mockResolvedValue(true)}
+        t={t}
+      />)
+      expect(screen.queryByText('高峰')).toBeNull()
+      expect(screen.queryByText('非高峰')).toBeNull()
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('hides the badge when the DeepSeek route does not reach the public API', () => {
+    // Same provider id and model ids, redirected to a proxy: the schedule is the
+    // platform's, the adapter owns the endpoint fact, and the id alone cannot
+    // establish whose rates the requests are billed at.
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date('2026-09-14T01:30:00Z'))
+    try {
+      const advertised = state()
+      render(<ModelSelect
+        locked={false}
+        available
+        directory={createSnapshotStore<ModelDirectoryState>({
+          ...advertised,
+          groups: advertised.groups.map(group => ({
+            id: group.id,
+            name: group.name,
+            models: group.models,
+          })),
+        })}
         load={vi.fn()}
         select={vi.fn().mockResolvedValue(true)}
         t={t}

@@ -34,8 +34,8 @@ export const zh = {
   'peak.tooltip.title': 'DeepSeek API 高峰时段',
   'peak.window': '{start}–{end}',
   'peak.windows': '{first}、{second}',
-  'peak.tooltip.pacific': '太平洋时间：{windows}',
-  'peak.tooltip.utc': 'UTC 工作日：{windows}',
+  'peak.tooltip.pacific': '太平洋时间（周日至周四，第二个时段至次日凌晨）：{windows}',
+  'peak.tooltip.utc': 'UTC 工作日（周一至周五）：{windows}',
 } satisfies Record<string, string>
 
 /** The model namespace key union. */
@@ -67,6 +67,6 @@ export const en = {
   'peak.tooltip.title': 'DeepSeek API peak hours',
   'peak.window': '{start}–{end}',
   'peak.windows': '{first}, {second}',
-  'peak.tooltip.pacific': 'Pacific time: {windows}',
-  'peak.tooltip.utc': 'UTC weekdays: {windows}',
+  'peak.tooltip.pacific': 'Pacific time (Sunday–Thursday, second window ending the next morning): {windows}',
+  'peak.tooltip.utc': 'UTC weekdays (Monday–Friday): {windows}',
 } satisfies Record<ModelKey, string>

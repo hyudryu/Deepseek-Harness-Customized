@@ -19,6 +19,12 @@
   white-space: nowrap;
 }
 
+/* The chip is focusable so its schedule opens from the keyboard, matching the
+   seat's own trigger rather than inventing a second focus treatment. */
+.badge:focus-visible {
+  box-shadow: 0 0 0 2px var(--dsw-alias-border-l3);
+}
+
 /* Solid core with a 0.10-opacity halo, the 8px reading of StateDot's 10px dot. */
 .dot {
   position: relative;
