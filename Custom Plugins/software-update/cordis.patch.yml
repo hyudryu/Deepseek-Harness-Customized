@@ -1,0 +1,29 @@
+# The software-update row owns the checkout status endpoint and the detached
+# rebuild-and-restart helper. Its package manifest declares `dsh.client`, so the
+# modules node half composes the sidebar control from this same row.
+#
+# buildCommands replace the refresh pipeline an update runs after pulling. They
+# are passed to the package manager (pnpm) resolved from this launcher, so a
+# deployment with a different build entry point configures it here.
+#
+# resumeOnRestart continues the sessions whose turns the restart interrupts.
+# resumeMessage is the prompt those sessions receive, and resumeWindowMs is how
+# long a captured session list stays actionable.
+- insert:
+    - id: software-update
+      name: dsh-software-update
+      config:
+        remote: origin
+        branch: main
+        fetchTtlMs: 60000
+        commandTimeoutMs: 300000
+        buildTimeoutMs: 1800000
+        gracefulStopMs: 15000
+        relaunchTimeoutMs: 1800000
+        commitListLimit: 20
+        resumeOnRestart: true
+        resumeWindowMs: 3600000
+        buildCommands:
+          - ['install']
+          - ['run', 'install:custom-plugins']
+          - ['run', 'build']

@@ -1,0 +1,46 @@
+/** Localized software-update control. */
+export const en = {
+  title: 'Software update',
+  close: 'Close software update',
+  trigger: 'Software update available',
+  available: 'Newer commits are available on the tracked branch.',
+  commits: 'New commits',
+  truncated: 'Only the most recent commits are listed.',
+  changed: 'Uncommitted changes',
+  changedNote: 'They are set aside before the update and put back afterwards.',
+  sessionsContinue: 'Sessions that are running right now are continued automatically once the server is back.',
+  switchBranch: 'The checkout switches to',
+  update: 'Update and restart',
+  cancel: 'Cancel',
+  starting: 'Starting the update…',
+  waiting: 'Installing and rebuilding. The server restarts on its own and this page reloads when it is back.',
+  slow: 'This is taking longer than expected. The install and build keep running in the background; leave this page open.',
+  startFailed: 'The update could not be started. Check that git and the package manager are available, then try again.',
+  lastFailed: 'The last update attempt failed.',
+  lastDone: 'The last update completed.',
+  stashKept: 'Your stashed changes could not be restored automatically and are still in the stash.',
+} satisfies Record<string, string>
+/** Keys shared by the software-update dictionaries. */
+export type SoftwareUpdateKey = keyof typeof en
+/** Simplified Chinese software-update control. */
+export const zh = {
+  title: '软件更新',
+  close: '关闭软件更新',
+  trigger: '有可用的软件更新',
+  available: '跟踪的分支上有更新的提交。',
+  commits: '新提交',
+  truncated: '仅列出最近的提交。',
+  changed: '未提交的更改',
+  changedNote: '更新前会暂时收起，更新后恢复。',
+  sessionsContinue: '当前正在运行的会话会在服务器恢复后自动继续。',
+  switchBranch: '检出版本将切换到',
+  update: '更新并重启',
+  cancel: '取消',
+  starting: '正在启动更新…',
+  waiting: '正在安装并重新构建。服务器会自动重启，恢复后本页面将自动刷新。',
+  slow: '耗时比预期更长。安装和构建仍在后台运行，请保持本页面打开。',
+  startFailed: '无法启动更新。请确认 git 与包管理器可用后重试。',
+  lastFailed: '上次更新失败。',
+  lastDone: '上次更新已完成。',
+  stashKept: '暂存的更改无法自动恢复，仍保存在 stash 中。',
+} satisfies Record<SoftwareUpdateKey, string>
