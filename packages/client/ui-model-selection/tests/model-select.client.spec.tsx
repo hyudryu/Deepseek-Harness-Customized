@@ -214,4 +214,36 @@ describe('ModelSelect reasoning effort', () => {
     expect(screen.queryByRole('button')).toBeNull()
     expect(load).not.toHaveBeenCalled()
   })
+
+  it('carries the peak badge only while the session rides the DeepSeek API', () => {
+    // Frozen inside the first window (Monday 01:30 UTC) so the badge's state
+    // is pinned rather than read from the machine's clock.
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date('2026-09-14T01:30:00Z'))
+    try {
+      const deepseek = render(<ModelSelect
+        locked={false}
+        available
+        directory={createSnapshotStore(state())}
+        load={vi.fn()}
+        select={vi.fn().mockResolvedValue(true)}
+        t={t}
+      />)
+      expect(screen.getByText('高峰')).toBeTruthy()
+      deepseek.unmount()
+
+      render(<ModelSelect
+        locked={false}
+        available
+        directory={createSnapshotStore(state({ current: { provider: 'gx10cluster', model: 'qwen3.8' } }))}
+        load={vi.fn()}
+        select={vi.fn().mockResolvedValue(true)}
+        t={t}
+      />)
+      expect(screen.queryByText('高峰')).toBeNull()
+      expect(screen.queryByText('非高峰')).toBeNull()
+    } finally {
+      vi.useRealTimers()
+    }
+  })
 })

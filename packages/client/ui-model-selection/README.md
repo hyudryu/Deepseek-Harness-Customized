@@ -35,6 +35,12 @@ Models stay grouped by provider. The menu shows model and effort names only; cat
 
 When the Host reports that no adapter serves the session's route, this plugin raises a composer block and the input goes inert with its own copy; recovering clears it without a reload. A `null` before the first load or after one failed never blocks, and catalog membership never blocks either — a route serving a model it does not advertise is missing from the groups yet usable.
 
+### DeepSeek API peak hours
+
+While the session's model rides the DeepSeek API (`deepseek-official`), a small badge sits beside the model seat. Inside a peak-rate window it reads **Peak** with a lit amber dot; outside one it reads **Off-peak** in the dimmed caption tone. Peak is 01:00–04:00 and 06:00–10:00 UTC, Monday through Friday; every other hour, including all of Saturday and Sunday UTC, is off-peak. Hovering the badge shows both windows as clock times in Pacific time and in UTC.
+
+The badge reads the clock on its own, so a session left open crosses a window boundary without a reload or a model switch, and the Pacific line follows daylight saving. On any other route it renders nothing: an aggregator or local endpoint that serves a DeepSeek model bills on its own terms and must not borrow the API's schedule.
+
 -----
 
 <a id="understand-the-implementation"></a>
@@ -64,7 +70,7 @@ Read these pages when the model surface is not enough. They move from the browse
 <a id="model-experience"></a>
 ## Model Experience
 
-Indirectly, through the `session.selectModel` selection both entries submit: the Host snapshots the complete `ModelSelection` at the next prompt-assembly boundary and owns the model-visible effect, while a running step keeps its assembled selection.
+Indirectly, through the `session.selectModel` selection both entries submit: the Host snapshots the complete `ModelSelection` at the next prompt-assembly boundary and owns the model-visible effect, while a running step keeps its assembled selection. The peak badge adds no model-visible input and no request field: it is presentation of a provider-side schedule, derived on the client from the clock.
 
 #### KV Cache effect
 
@@ -80,6 +86,7 @@ These limits define the current model surface. They are current package constrai
 - **No create-time or addressed-subagent selection** — both entries require an existing ordinary session's Agent; there is no draft-phase model choice to fold into session creation, and subagent continuation deliberately exposes no independent model-selection contract.
 - **Directory names are presentation-only** — selection and persistence use provider/model/effort ids; a provider whose catalog or exact-model metadata lookup fails lists as an unselectable failure row until reload.
 - **No arbitrary effort input** — the composer offers only the exact model's adapter-advertised levels; an adapter without reasoning metadata leaves the Effort row absent.
+- **Peak badging is keyed to the DeepSeek API route** — the badge appears only for provider id `deepseek-official`. A gateway that proxies the same endpoint under its own provider id shows no badge, because the client has no way to tell that route's pricing from the id alone, and the schedule is a provider fact rather than a deployment one.
 
 <a id="dev-note"></a>
 ### Dev Note

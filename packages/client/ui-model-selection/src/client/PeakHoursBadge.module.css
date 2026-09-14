@@ -1,0 +1,66 @@
+/* DeepSeek API peak badge: the state chip beside the composer's model seat.
+   Materials follow Pill.module.css (rounded chip, 12/18 label) one step down
+   in size, because this sits in the composer's 28px control row rather than
+   on a card. Peak is the amber state family — the one the app already uses
+   for "attention", which is what a peak-rate window is; off-peak stays in the
+   caption tone so the shaded chip recedes beside the model name. */
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  flex: 0 0 auto;
+  height: 20px;
+  padding: 0 7px;
+  border-radius: 10px;
+  font-size: 11px;
+  line-height: 16px;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+/* Solid core with a 0.10-opacity halo, the 8px reading of StateDot's 10px dot. */
+.dot {
+  position: relative;
+  display: inline-block;
+  flex: none;
+  width: 8px;
+  height: 8px;
+}
+
+.dot::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  corner-shape: round;
+  background: currentColor;
+  opacity: 0.1;
+}
+
+.dot::after {
+  content: '';
+  position: absolute;
+  inset: 20%;
+  border-radius: 50%;
+  corner-shape: round;
+  background: currentColor;
+}
+
+.peak {
+  background: var(--dsw-alias-state-warn-tertiary);
+  color: var(--dsw-alias-state-warn-label);
+}
+
+.peak .dot {
+  color: var(--dsw-alias-state-warn-primary);
+}
+
+.offPeak {
+  background: var(--dsw-alias-interactive-bg-hover);
+  color: var(--dsw-alias-label-caption);
+}
+
+.offPeak .dot {
+  color: var(--dsw-alias-label-dimmed);
+}

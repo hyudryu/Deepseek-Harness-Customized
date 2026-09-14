@@ -10,6 +10,7 @@
 
 /** Simplified Chinese dictionary (the key-set source of truth). */
 export const zh = {
+  'language': 'zh-CN',
   'command.description': '选择本会话使用的模型',
   'option.loadError': '目录加载失败：{message}',
   'trigger.fallback': '选择模型',
@@ -28,6 +29,13 @@ export const zh = {
   'empty.models': '没有可用的模型。',
   'blocked.composer': '当前模型不可用，请先选择模型',
   'empty.efforts': '当前模型未提供推理等级。',
+  'peak.state.peak': '高峰',
+  'peak.state.offPeak': '非高峰',
+  'peak.tooltip.title': 'DeepSeek API 高峰时段',
+  'peak.window': '{start}–{end}',
+  'peak.windows': '{first}、{second}',
+  'peak.tooltip.pacific': '太平洋时间：{windows}',
+  'peak.tooltip.utc': 'UTC 工作日：{windows}',
 } satisfies Record<string, string>
 
 /** The model namespace key union. */
@@ -35,6 +43,7 @@ export type ModelKey = keyof typeof zh
 
 /** English dictionary, checked complete against the zh key set. */
 export const en = {
+  'language': 'en',
   'command.description': 'Select the model for this conversation',
   'option.loadError': 'Catalog failed to load: {message}',
   'trigger.fallback': 'Select model',
@@ -53,4 +62,11 @@ export const en = {
   'empty.models': 'No models available.',
   'blocked.composer': 'This model is unavailable — select one to continue',
   'empty.efforts': 'This model provides no reasoning effort levels.',
+  'peak.state.peak': 'Peak',
+  'peak.state.offPeak': 'Off-peak',
+  'peak.tooltip.title': 'DeepSeek API peak hours',
+  'peak.window': '{start}–{end}',
+  'peak.windows': '{first}, {second}',
+  'peak.tooltip.pacific': 'Pacific time: {windows}',
+  'peak.tooltip.utc': 'UTC weekdays: {windows}',
 } satisfies Record<ModelKey, string>

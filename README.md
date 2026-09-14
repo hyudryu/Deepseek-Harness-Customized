@@ -114,6 +114,17 @@ This matters for servers whose value depends on being chosen over general-purpos
 
 </details>
 
+<details>
+<summary><b>DeepSeek API peak-hour badge in the composer</b> — click to expand</summary>
+
+While the session's model rides the DeepSeek API, a small badge sits beside the model in the chat box. Inside a peak-rate window it reads **Peak** with a lit amber dot; outside one it reads **Off-peak** in the dimmed caption tone, so a glance tells you whether this turn is billed at peak rates. Peak is 01:00–04:00 and 06:00–10:00 UTC, Monday through Friday; every other hour, including all weekend UTC, is off-peak.
+
+Hovering the badge shows both windows as clock times in Pacific time and in UTC, for example `Pacific time: 5:00 PM–8:00 PM, 10:00 PM–2:00 AM` in winter and an hour later in summer, because the Pacific line follows daylight saving. The badge reads the clock on its own, so a session left open crosses a window boundary without a reload or a model switch.
+
+The badge appears only on the DeepSeek API route (`deepseek-official`, the `dsh-llm-deepseek` adapter). An aggregator or local endpoint that serves a DeepSeek model shows nothing, because its pricing is not the API's schedule. No setup is needed. See the [model selection reference](packages/client/ui-model-selection/README.md#deepseek-api-peak-hours).
+
+</details>
+
 ### Plugins
 
 These bundles live in [`Custom Plugins/`](Custom Plugins/). They are intentionally kept outside the core `packages/` tree and are installed per profile via `dsh plugin --profile <name> add <path>`.
