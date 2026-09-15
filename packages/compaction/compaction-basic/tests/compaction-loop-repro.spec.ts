@@ -5,7 +5,8 @@ import { createUserMessage, CONTEXT_WINDOW_EXCEEDED_CODE, LlmError, resolveRetry
 import type { ContentBlock, GenerateOptions, LlmResolvedModelInfo, ResolvedRetryPolicy, StreamChunk } from '@deepseek-ai/dsh-llm'
 import { ToolCallId, LlmAdapter } from '@deepseek-ai/dsh-llm'
 import { defineContentToolFixture } from '@deepseek-ai/dsh-tools'
-import type { Agent } from '@deepseek-ai/dsh-agent'
+import { installModelSelection } from '@deepseek-ai/dsh-agent'
+import type { Agent, ModelSelectionRef } from '@deepseek-ai/dsh-agent'
 import AgentLoop from '@deepseek-ai/dsh-agent-loop'
 import { mountAgentLoopTestDependencies } from '@deepseek-ai/dsh-agent-loop-testkit'
 import InvariantRegistry from '@deepseek-ai/dsh-invariants'
@@ -38,7 +39,7 @@ class ReproCompactionEngine extends BasicCompactionEngine {
 /** Each call emits one tool-call until exhausted, then a final text answer. */
 class StepwiseToolAdapter extends LlmAdapter {
   calls = 0
-  constructor(private toolSteps: number) {
+  constructor(private toolSteps: number, private readonly contextWindow = 400) {
     super()
   }
 
@@ -47,7 +48,7 @@ class StepwiseToolAdapter extends LlmAdapter {
       provider,
       id: model,
       name: model,
-      context: { contextWindow: 400 },
+      context: { contextWindow: this.contextWindow },
     })
   }
 
@@ -206,7 +207,10 @@ async function mountInvariants(ctx: Context): Promise<void> {
   await ctx.plugin(AgentLoopInvariant)
 }
 
-async function harness(toolSteps: number): Promise<{ ctx: Context; compact: ReproCompactionEngine }> {
+async function harness(
+  toolSteps: number,
+  toolResult = 'work result',
+): Promise<{ ctx: Context; compact: ReproCompactionEngine }> {
   const ctx = new Context()
   await mountAgentLoopTestDependencies(ctx)
   await mountInvariants(ctx)
@@ -221,7 +225,7 @@ async function harness(toolSteps: number): Promise<{ ctx: Context; compact: Repr
     description: 'does work',
     parameters: { i: { type: 'number' } },
     async execute() {
-      return [{ type: 'text', text: 'work result' }]
+      return [{ type: 'text', text: toolResult }]
     },
   }))
   // Small window so several tool steps cross the threshold and compaction
@@ -299,6 +303,53 @@ describe('CBR-001: a real-loop checkpoint is a valid boundary on both sides', ()
         data: { reason: { kind: 'completed' } },
       })
     } finally {
+      await ctx.fiber.dispose()
+    }
+  })
+
+  it('sizes pressure from the model selection installed for the Agent scope before its first request', async () => {
+    const { ctx } = await harness(8, `work result ${'padding '.repeat(60)}`)
+    // A second route wide enough that the same pressure never qualifies there,
+    // so only the selected route can trigger compaction.
+    ctx.llm.registerAdapter(['wide'], new StepwiseToolAdapter(8, 100_000))
+    const selection: ModelSelectionRef = {
+      current: { provider: 'wide', model: 'wide' },
+      assembled: undefined,
+    }
+    // Switch routes once the first response is durable. Until the next request
+    // replaces it, the logged header still names the wide route — the window
+    // the pressure check used to size itself from.
+    const stopSwitching = ctx.on('session/event', (_session, event) => {
+      if (event.type !== 'assistant/message') return
+      selection.current = { provider: 'mock', model: 'mock' }
+    })
+    try {
+      const { agent } = await ctx.agentLoop.createAgent(ctx, {
+        sessionId: SessionId('selected-route-pressure'),
+        agentOptions: { provider: 'wide', model: 'wide' },
+        setup: (agentCtx) => { installModelSelection(agentCtx, selection) },
+      })
+      agent.followup(createUserMessage({
+        content: [{ type: 'text', text: `do tool work ${'pressure '.repeat(200)}` }],
+        source: { kind: 'user' },
+      }))
+      await agent.whenIdle()
+
+      const events = agent.session.snapshotEvents()
+      const narrowRequest = events.find(event =>
+        event.type === 'request/header' && event.data.header.config.provider === 'mock')
+      const summary = events.find(event => event.type === 'compaction/summary')
+      expect(narrowRequest).toBeDefined()
+      expect(summary).toBeDefined()
+      // Compaction sized the narrow route before that route's first request,
+      // not one step after it had already been dispatched.
+      expect(summary!.seq).toBeLessThan(narrowRequest!.seq)
+      expect(events.at(-1)).toMatchObject({
+        type: 'turn/end',
+        data: { reason: { kind: 'completed' } },
+      })
+    } finally {
+      stopSwitching()
       await ctx.fiber.dispose()
     }
   })

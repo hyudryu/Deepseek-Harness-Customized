@@ -134,6 +134,15 @@ The badge appears only where the DeepSeek API's own rates apply: the route must 
 
 </details>
 
+<details>
+<summary><b>Automatic compaction sizes the model you just switched to</b> — click to expand</summary>
+
+Automatic compaction now measures token pressure against the model the next request will actually use, not the model that served the previous one. Before this change, switching a long conversation onto a smaller-context model dispatched one request under the new model before any threshold could fire: that request failed with a context-window error, and the recovery compaction then tried to summarize through the same too-small model and failed too. Switching between a local 300K model and a 1M API model mid-session was the common way to hit it.
+
+Pressure sizing now reads the live model selection installed for the agent, falling back to the latest routed request only when no selection is installed. Switching to a smaller model compacts before that model's first request. A summarization call still replays on the conversation's own model unless you configure `summarizationProvider`/`summarizationModel`; see the [compaction reference](packages/compaction/compaction-basic/README.md) and the [route-sizing decision](.agents/notes/implemented/bug-fix/2026-09-13-compaction-sizes-the-selected-route.md).
+
+</details>
+
 ### Plugins
 
 These bundles live in [`Custom Plugins/`](Custom Plugins/). They are intentionally kept outside the core `packages/` tree and are installed per profile via `dsh plugin --profile <name> add <path>`.

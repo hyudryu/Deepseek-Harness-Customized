@@ -25,6 +25,32 @@ export interface ModelSelectionRef {
 }
 
 /**
+ * Live selections keyed by the Agent scope that consumes them. A weak key
+ * makes disposal automatic, and the guarded removal below keeps a superseded
+ * install from erasing the ref that replaced it.
+ */
+const installed = new WeakMap<Context, ModelSelectionRef>()
+
+/**
+ * Read the route the next model request from one Agent scope will use. The
+ * `assembled` snapshot wins because prompt assembly has already captured it for
+ * the step in flight; `current` covers a scope that has not assembled yet. A
+ * consumer that must size work for the upcoming request — automatic compaction
+ * sizing its pressure threshold, for instance — reads this instead of the
+ * latest durable request header, which still names the previous route until the
+ * first request under a newly selected model is logged.
+ *
+ * @param agentCtx - The Agent's own scoped context.
+ * @returns A detached selection snapshot, or `undefined` when no entry point installed one.
+ */
+export function selectedRouteFor(agentCtx: Context): ModelSelection | undefined {
+  const selection = installed.get(agentCtx)
+  if (selection === undefined) return undefined
+  const selected = selection.assembled ?? selection.current
+  return selected === undefined ? undefined : { ...selected }
+}
+
+/**
  * Couple one mutable selection to Agent-scoped prompt assembly and request routing.
  * Prompt assembly snapshots the selected model before delegating, then applies
  * its provider/model pair and effort to request config so a
@@ -34,9 +60,11 @@ export interface ModelSelectionRef {
  *
  * @param agentCtx - The selected Agent's scoped context.
  * @param selection - Mutable selection owned by the calling entry point.
- * @returns Disposer for both scoped waterfall listeners.
+ * @returns Disposer for both scoped waterfall listeners, which also retires this
+ *   selection from {@link selectedRouteFor} unless a later install replaced it.
  */
 export function installModelSelection(agentCtx: Context, selection: ModelSelectionRef): () => void {
+  installed.set(agentCtx, selection)
   const disposeAssembly = agentCtx.on('system-prompt/assemble', async (_assembly, _context, next) => {
     const selected = selection.current
     const assembled = await next()
@@ -71,5 +99,6 @@ export function installModelSelection(agentCtx: Context, selection: ModelSelecti
   return () => {
     disposeAssembly()
     disposeRequest()
+    if (installed.get(agentCtx) === selection) installed.delete(agentCtx)
   }
 }

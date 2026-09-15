@@ -100,10 +100,11 @@ export abstract class CompactionEngine extends Service {
 
   /**
    * Consider automatic compaction for one explicit trigger. Pressure policy
-   * uses the latest durable routed request, while context-overflow policy may
-   * force a useful balanced reduction even below the normal threshold. Return
-   * `null` when no safe range can be compacted. A single oversized retained
-   * unit or request envelope cannot be repaired through surface compaction.
+   * sizes itself against the model the agent's next request will use, while
+   * context-overflow policy may force a useful balanced reduction even below the
+   * normal threshold. Return `null` when no safe range can be compacted. A single
+   * oversized retained unit or request envelope cannot be repaired through
+   * surface compaction.
    *
    * @param agent - agent context owning the session surface and routing options.
    * @param trigger - normal pressure or provider-confirmed context overflow.
