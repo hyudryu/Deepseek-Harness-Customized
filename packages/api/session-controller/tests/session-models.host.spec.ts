@@ -45,12 +45,17 @@ class CatalogAdapter extends LlmAdapter {
     private readonly models: readonly LlmModelInfo[] | Error,
     private readonly reasoning?: LlmModelReasoningInfo,
     private readonly exactError?: Error,
+    private readonly officialEndpoint?: boolean,
   ) {
     super()
   }
 
   override providerInfo(provider: string): LlmProviderInfo {
-    return { id: provider, name: this.name }
+    return {
+      id: provider,
+      name: this.name,
+      ...this.officialEndpoint === true ? { officialEndpoint: true } : {},
+    }
   }
 
   override listModels(): Promise<readonly LlmModelInfo[]> {
@@ -383,6 +388,31 @@ describe('Web session model selection', () => {
         message: 'adapter returned invalid or duplicate model metadata for provider "duplicate"',
       },
     ])
+    await ctx.fiber.dispose()
+  })
+
+  it('carries an adapter-reported public endpoint onto its provider group', async () => {
+    // A consumer that presents the provider's published pricing needs this fact
+    // alongside the id: an adapter pointed at a proxy reports no such thing.
+    const { ctx } = await harness()
+    ctx.llm.registerAdapter(['public-api'], new CatalogAdapter('Public API', [
+      { provider: 'public-api', id: 'public-model', name: 'Public Model' },
+    ], undefined, undefined, true))
+    const remote = createSessionTestRemote(ctx, {
+      defaultModelSelection: () => ({ provider: 'public-api', model: 'public-model' }),
+      cwd: '/tmp',
+    })
+
+    const catalog = expectValue(await remote.modelCatalog())
+    expect(catalog.groups).toEqual(expect.arrayContaining([{
+      id: 'public-api',
+      name: 'Public API',
+      officialEndpoint: true,
+      models: [{ id: 'public-model', name: 'Public Model' }],
+    }]))
+    expect(catalog.groups).not.toEqual(expect.arrayContaining([
+      expect.objectContaining({ id: 'deepseek-official', officialEndpoint: expect.anything() }),
+    ]))
     await ctx.fiber.dispose()
   })
 

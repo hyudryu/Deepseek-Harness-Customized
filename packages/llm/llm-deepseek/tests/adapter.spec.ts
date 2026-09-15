@@ -2252,6 +2252,19 @@ describe('plugin registration and config', () => {
     await ctx.plugin(LlmRuntime)
     // Registration succeeds; no call is made (would hit api.deepseek.com).
     await ctx.plugin(LlmDeepSeek, {})
+    expect(ctx.llm.listProviders()).toEqual([
+      { id: 'deepseek-official', name: 'DeepSeek', officialEndpoint: true },
+    ])
+  })
+
+  it('stops reporting the public API once the endpoint is redirected', async () => {
+    // The provider id and the model ids both survive a proxy, so a consumer
+    // that presents DeepSeek's published rates needs this fact to withhold them.
+    vi.stubEnv('DEEPSEEK_API_KEY', 'k')
+    vi.stubEnv('DEEPSEEK_BASE_URL', undefined)
+    const ctx = new Context()
+    await ctx.plugin(LlmRuntime)
+    await ctx.plugin(LlmDeepSeek, { baseURL: 'https://gateway.internal' })
     expect(ctx.llm.listProviders()).toEqual([{ id: 'deepseek-official', name: 'DeepSeek' }])
   })
 

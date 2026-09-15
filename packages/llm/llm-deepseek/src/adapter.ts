@@ -66,6 +66,14 @@ export interface DeepSeekCatalogModel {
 }
 
 /**
+ * Public API default; the internal endpoint comes from $DEEPSEEK_BASE_URL.
+ *
+ * Exported from here rather than the plugin entry because the adapter is what
+ * compares a resolved endpoint against it.
+ */
+export const PUBLIC_BASE_URL = 'https://api.deepseek.com'
+
+/**
  * Validated connection facts for one operation. The plugin's
  * `resolveAdapterOptions` is the one explicit resolve step producing this
  * shape; the adapter trusts it and re-reads it per operation, which is what
@@ -359,7 +367,14 @@ export class DeepSeekAdapter extends LlmAdapter {
   }
 
   override providerInfo(provider: string): LlmProviderInfo {
-    return { id: provider, name: 'DeepSeek' }
+    // `name` is this adapter's own label either way; the endpoint is what
+    // decides whether the DeepSeek platform's rates apply, and a redirect to a
+    // proxy or a local server keeps both the provider id and the model ids.
+    return {
+      id: provider,
+      name: 'DeepSeek',
+      ...this.config.options().baseURL.replace(/\/+$/u, '') === PUBLIC_BASE_URL ? { officialEndpoint: true } : {},
+    }
   }
 
   override providerRetryPolicy(_provider: string): ResolvedRetryPolicy {
