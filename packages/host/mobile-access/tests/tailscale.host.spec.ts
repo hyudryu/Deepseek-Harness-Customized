@@ -8,7 +8,7 @@ vi.mock('node:child_process', () => {
   const execFile = Object.assign(vi.fn(), { [Symbol.for('nodejs.util.promisify.custom')]: external.command })
   return { execFile }
 })
-const config = { tailscaleExecutable: 'tailscale', discoveryTimeoutMs: 3000 }
+const config = { tailscaleExecutable: 'tailscale', discoveryTimeoutMs: 3000, enabled: false }
 beforeEach(() => { external.interfaces.mockReset(); external.command.mockReset() })
 
 it('uses the active named Tailscale IPv4 interface', async () => {

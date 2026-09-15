@@ -1,0 +1,7 @@
+- insert:
+    - id: project-secrets
+      name: dsh-project-secrets
+      config:
+        secretsFile: .dsh/project-secrets
+        maxBytes: 200000
+        root: ''

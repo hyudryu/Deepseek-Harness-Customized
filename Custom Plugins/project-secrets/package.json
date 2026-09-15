@@ -1,0 +1,37 @@
+{
+  "name": "dsh-project-secrets",
+  "version": "0.1.0",
+  "description": "Project-scoped secrets note-pad for DeepSeek Harness: a Project Secrets item on a project's 3-dots menu opens a modal to paste/edit a secrets block stored in the project directory, plus a project_secrets tool for the agent",
+  "type": "module",
+  "main": "index.js",
+  "exports": {
+    ".": "./index.js",
+    "./client": "./lib/client.js",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "index.js",
+    "lib/client.js",
+    "lib/client.js.map",
+    "cordis.patch.yml",
+    "skills/project-secrets.md"
+  ],
+  "scripts": {
+    "build": "tsdown",
+    "watch": "tsdown --watch"
+  },
+  "license": "MIT",
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "inject": [
+        "@deepseek-ai/dsh-client-ui-slots",
+        "@deepseek-ai/dsh-client-api-remotes",
+        "@deepseek-ai/dsh-client-locale"
+      ],
+      "platform": "web"
+    }
+  }
+}

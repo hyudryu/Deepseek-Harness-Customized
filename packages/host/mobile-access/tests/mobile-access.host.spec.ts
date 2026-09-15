@@ -1,5 +1,5 @@
 /** Real Loader composition exercises authenticated desktop controls and listener disposal. */
-import { mkdtemp, rm, writeFile } from 'node:fs/promises'
+import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { pathToFileURL } from 'node:url'
@@ -12,25 +12,37 @@ import Include from '@deepseek-ai/cordis-plugin-include'
 import * as Connection from '@deepseek-ai/dsh-client-connection'
 import LocalCredentials from '@deepseek-ai/dsh-credentials-local'
 import WebServer from '@deepseek-ai/dsh-host-webserver'
+import * as SettingsFile from '@deepseek-ai/dsh-settings-file'
 import * as MobileAccess from '../src/index.ts'
 import { tailscaleAddress } from '../src/tailscale.ts'
 
 vi.mock('../src/tailscale.ts', () => ({ tailscaleAddress: vi.fn(async () => '127.0.0.2') }))
 let context: Context | undefined
-let directory: string | undefined
+const temporaryDirectories: string[] = []
 
 afterEach(async () => {
   await context?.fiber.dispose()
   context = undefined
-  if (directory !== undefined) await rm(directory, { recursive: true, force: true })
+  for (const path of temporaryDirectories.splice(0)) await rm(path, { recursive: true, force: true })
   vi.mocked(tailscaleAddress).mockResolvedValue('127.0.0.2')
 })
 
-async function boot(host = '127.0.0.1'): Promise<Context> {
-  directory = await mkdtemp(join(tmpdir(), 'dsh-mobile-'))
+/** A settings document the next boot reads, outside the boot's own temporary directory. */
+async function settingsDocument(initial?: string): Promise<string> {
+  const root = await mkdtemp(join(tmpdir(), 'dsh-mobile-settings-'))
+  temporaryDirectories.push(root)
+  const path = join(root, 'settings.yaml')
+  if (initial !== undefined) await writeFile(path, initial, 'utf8')
+  return path
+}
+
+async function boot(host = '127.0.0.1', settings?: string): Promise<Context> {
+  const directory = await mkdtemp(join(tmpdir(), 'dsh-mobile-'))
+  temporaryDirectories.push(directory)
   const config = join(directory, 'cordis.yml')
   await writeFile(config, [
     '- name: credentials', '  config:', `    path: '${join(directory, 'credentials.yaml')}'`, '    watch: false',
+    ...settings === undefined ? [] : ['- name: settings', '  config:', `    path: '${settings}'`, '    watch: false'],
     '- name: webserver', '  config:', `    host: '${host}'`, '    port: 0',
     '- name: connection', '  config:', '    requireAuth: true',
     '- id: mobile', '  name: mobile-access', '',
@@ -40,7 +52,8 @@ async function boot(host = '127.0.0.1'): Promise<Context> {
   await ctx.plugin(Loader)
   ctx.loader.builtins.include = Include
   const modules = new Map<string, unknown>([
-    ['credentials', LocalCredentials], ['webserver', WebServer], ['connection', Connection], ['mobile-access', MobileAccess],
+    ['credentials', LocalCredentials], ['webserver', WebServer], ['connection', Connection],
+    ['settings', SettingsFile], ['mobile-access', MobileAccess],
   ])
   ctx.loader.internal = {
     version: 'v2', async import(specifier: string) {
@@ -218,4 +231,49 @@ it('accepts canonical default-port Host and Origin without binding a shared port
     expect((await call(mobile + '/asset.js', paired.cookie, 'GET', undefined, { ...headers, origin: 'http://127.0.0.2:81' })).status).toBe(403)
     expect((await call(mobile + '/asset.js', paired.cookie, 'GET', undefined, { ...headers, host: '127.0.0.2:81' })).status).toBe(403)
   } finally { reportedPort.mockRestore() }
+})
+
+it('restores the stored setting at load without any desktop action', async () => {
+  const settings = await settingsDocument('mobile-access:\n  enabled: true\n')
+  const ctx = await boot('127.0.0.1', settings)
+  const desktop = `http://127.0.0.1:${String(ctx.webServer.port)}`
+  const cookie = (await call(ctx.connection.authenticatedUrl(desktop))).cookie
+  const readState = async (): Promise<{ enabled: boolean; url: string }> =>
+    JSON.parse((await call(desktop + '/mobile-access', cookie)).body) as { enabled: boolean; url: string }
+  await vi.waitFor(async () => { expect((await readState()).enabled).toBe(true) })
+  const mobile = `http://127.0.0.2:${String(ctx.webServer.port)}`
+  const mobileCookie = (await call((await readState()).url)).cookie
+  expect((await call(mobile + '/', mobileCookie)).body).toBe('existing sessions')
+})
+
+it('keeps a stored setting whose listener cannot start, and leaves it for the next load', async () => {
+  const settings = await settingsDocument('mobile-access:\n  enabled: true\n')
+  vi.mocked(tailscaleAddress).mockRejectedValue(new Error('Tailscale is offline'))
+  const ctx = await boot('127.0.0.1', settings)
+  const desktop = `http://127.0.0.1:${String(ctx.webServer.port)}`
+  const cookie = (await call(ctx.connection.authenticatedUrl(desktop))).cookie
+  await vi.waitFor(() => { expect(vi.mocked(tailscaleAddress)).toHaveBeenCalled() })
+  expect(JSON.parse((await call(desktop + '/mobile-access', cookie)).body)).toEqual({ enabled: false, url: null })
+  expect((await call(desktop + '/', cookie)).status).toBe(200)
+  expect(await readFile(settings, 'utf8')).toContain('enabled: true')
+})
+
+it('stores a desktop toggle and restores it on the next load', async () => {
+  const settings = await settingsDocument()
+  const first = await boot('127.0.0.1', settings)
+  const firstDesktop = `http://127.0.0.1:${String(first.webServer.port)}`
+  const firstCookie = (await call(first.connection.authenticatedUrl(firstDesktop))).cookie
+  expect((await call(firstDesktop + '/mobile-access', firstCookie, 'POST', '{"enabled":true}')).status).toBe(200)
+  expect(await readFile(settings, 'utf8')).toContain('enabled: true')
+  await first.fiber.dispose()
+
+  const second = await boot('127.0.0.1', settings)
+  const secondDesktop = `http://127.0.0.1:${String(second.webServer.port)}`
+  const secondCookie = (await call(second.connection.authenticatedUrl(secondDesktop))).cookie
+  await vi.waitFor(async () => {
+    const state = JSON.parse((await call(secondDesktop + '/mobile-access', secondCookie)).body) as { enabled: boolean }
+    expect(state.enabled).toBe(true)
+  })
+  expect((await call(secondDesktop + '/mobile-access', secondCookie, 'POST', '{"enabled":false}')).status).toBe(200)
+  expect(await readFile(settings, 'utf8')).toContain('enabled: false')
 })

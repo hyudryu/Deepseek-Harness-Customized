@@ -123,6 +123,17 @@ This matters for servers whose value depends on being chosen over general-purpos
 
 </details>
 
+<details>
+<summary><b>DeepSeek API peak-hour badge in the composer</b> — click to expand</summary>
+
+While the session's model rides the DeepSeek API, a small badge sits beside the model in the chat box. Inside a peak-rate window it reads **Peak** with a lit amber dot; outside one it reads **Off-peak** in the dimmed caption tone, so a glance tells you whether this turn is billed at peak rates. Peak is 01:00–04:00 and 06:00–10:00 UTC, Monday through Friday; every other hour, including all weekend UTC, is off-peak.
+
+Hovering the badge, or focusing it from the keyboard, shows both windows as clock times in Pacific time and in UTC, with the Pacific weekdays named because the UTC windows open on the previous Pacific day: `Pacific time (Sunday–Thursday, second window ending the next morning): 5:00 PM–8:00 PM, 10:00 PM–2:00 AM` in winter, an hour later in summer. The badge reads the clock on its own, so a session left open crosses a window boundary without a reload or a model switch.
+
+The badge appears only where the DeepSeek API's own rates apply: the route must be `deepseek-official` *and* still reach the public API, as the `dsh-llm-deepseek` adapter reports. Pointing that route at a proxy, or running a gateway that serves DeepSeek models under its own provider name, shows nothing, because neither bills at this schedule. No setup is needed. See the [model selection reference](packages/client/ui-model-selection/README.md#deepseek-api-peak-hours).
+
+</details>
+
 ### Plugins
 
 These bundles live in [`Custom Plugins/`](Custom Plugins/). They are intentionally kept outside the core `packages/` tree and are installed per profile via `dsh plugin --profile <name> add <path>`.
@@ -249,7 +260,8 @@ Capabilities include:
 - a secrets file scoped to the project's working directory, defaulting to `.dsh/project-secrets` (configurable via `secretsFile`, `maxBytes`, and `root`);
 - a **Project Secrets** item on each project's 3-dots menu that opens a modal to paste/edit the block, backed by HTTP `GET`/`PUT` on `/project-secrets/<workspaceId>`;
 - a `project_secrets` tool (`action: read`/`write`) for the agent, with byte-limit validation and atomic writes (temp file plus rename);
-- a progressively loaded `project-secrets` skill that tells the agent to read first, never echo secrets into the conversation, commits, or logs, write authoritatively, and respect the project boundary;
+- a model-visible runtime-context snapshot of the block's **key names only** — never a value — contributed once the block has content, so the agent knows the project keeps e.g. `Node 4` and reads the block instead of answering that it does not know;
+- a progressively loaded `project-secrets` skill that tells the agent to read the block before reporting that it does not know a project-specific value, never echo secrets into the conversation, commits, or logs, write authoritatively, and respect the project boundary;
 - safely handles a missing file as empty.
 
 </details>

@@ -137,6 +137,13 @@ export interface ModelProviderGroup {
   readonly id: string
   readonly name: string
   readonly models: readonly ModelCatalogModel[]
+  /**
+   * Whether this route reaches the provider's own public API, as the adapter
+   * reports it. A consumer rendering provider-owned pricing requires this fact
+   * rather than {@link id}: a provider id and its model ids both survive a
+   * redirect to a proxy or a local server, while the rates do not.
+   */
+  readonly officialEndpoint?: boolean
 }
 
 /** One provider whose model catalog lookup failed. */

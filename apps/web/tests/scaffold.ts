@@ -219,7 +219,13 @@ class RouteOnlyAdapter extends LlmAdapter {
   }
 
   override providerInfo(provider: string): LlmProviderInfo {
-    return { id: provider, name: this.providers.find(entry => entry.id === provider)?.name ?? provider }
+    return {
+      id: provider,
+      name: this.providers.find(entry => entry.id === provider)?.name ?? provider,
+      // A replayed DeepSeek route stands in for the public API, which is what
+      // the composer's peak badge is gated on.
+      ...provider === 'deepseek-official' ? { officialEndpoint: true } : {},
+    }
   }
 
   override listModels(provider: string): Promise<readonly LlmModelInfo[]> {
@@ -1363,7 +1369,7 @@ function normalizeAria(snapshot: string, workspaceCwd: string, age: boolean): st
   // The session heading renders the workspace's basename, not the full
   // path, so both spellings must collapse to the token.
   const base = workspaceCwd.split('/').pop()!
-  return (age ? snapshot.replace(ARIA_AGE, '{{age}}') : snapshot)
+  return normalizePeakBadge((age ? snapshot.replace(ARIA_AGE, '{{age}}') : snapshot)
     .split(workspaceCwd).join('{{cwd}}')
     .split(base).join('{{workspace}}')
     .replace(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/gi, '{{uuid}}')
@@ -1388,7 +1394,34 @@ function normalizeAria(snapshot: string, workspaceCwd: string, age: boolean): st
     .replace(/\d{4}年\d{1,2}月\d{1,2}日 \d{2}:\d{2}/g, '{{clock}}')
     .replace(/\d{1,2}月\d{1,2}日 \d{2}:\d{2}/g, '{{clock}}')
     .replace(/(?<!\d)\d{1,2}:\d{2}:\d{2}(?:\.\d+)?(?:\s*[AP]M)?(?!\d)/gi, '{{clock}}')
-    .replace(/(?<!\d)\d{2}:\d{2}(?!\d)/g, '{{clock}}')
+    .replace(/(?<!\d)\d{2}:\d{2}(?!\d)/g, '{{clock}}'))
+}
+
+/** The composer's model seat, whose block the badge renders directly beneath. */
+const ARIA_MODEL_SEAT = /^- button "Select model, /
+
+/** The peak badge's own state line, in either state. */
+const ARIA_PEAK_STATE = /^- text: (?:Peak|Off-peak)$/
+
+/**
+ * Collapse the composer's DeepSeek API peak badge to a token.
+ *
+ * The badge names the rate window the wall clock is in, so a golden recorded
+ * inside one window would fail against a replay an hour later. Only a state
+ * line sitting directly beneath the model seat is rewritten: a transcript
+ * line that happens to read "Peak" is user, model, or tool content, and
+ * collapsing it would let an incorrect transcript match its golden.
+ * @param snapshot - the workspace-normalized aria snapshot.
+ * @returns the snapshot with the badge's state tokenized.
+ */
+function normalizePeakBadge(snapshot: string): string {
+  const lines = snapshot.split('\n')
+  return lines.map((line, index) => {
+    if (!ARIA_PEAK_STATE.test(line)) return line
+    let seat = index - 1
+    while (seat >= 0 && lines[seat]!.startsWith('  ')) seat -= 1
+    return seat >= 0 && ARIA_MODEL_SEAT.test(lines[seat]!) ? '- text: {{peak}}' : line
+  }).join('\n')
 }
 
 /**

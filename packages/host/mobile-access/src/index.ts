@@ -3,6 +3,7 @@ import type { Context } from '@deepseek-ai/cordis'
 import z from '@deepseek-ai/schemastery'
 import type {} from '@deepseek-ai/dsh-client-connection'
 import type {} from '@deepseek-ai/dsh-host-webserver'
+import type {} from '@deepseek-ai/dsh-settings'
 import type { IncomingMessage } from 'node:http'
 import { join } from 'node:path'
 import { tailscaleAddress } from './tailscale.ts'
@@ -12,12 +13,17 @@ export const name = 'host-mobile-access'
 /** Existing authenticated transport dependencies. */
 export const inject = ['webServer', 'connection']
 
-/** Tailscale executable discovery and bounded command execution. */
+/** Settings namespace holding the durable mobile-access intent. */
+export const MOBILE_ACCESS_SETTINGS_NAMESPACE = 'mobile-access'
+
+/** Tailscale executable discovery, bounded command execution, and the composition default. */
 export interface Config {
   /** Official CLI executable, used when the interface name does not identify Tailscale. */
   tailscaleExecutable: string
   /** Maximum CLI discovery duration in milliseconds. */
   discoveryTimeoutMs: number
+  /** Mobile access requested when no settings service owns {@link MOBILE_ACCESS_SETTINGS_NAMESPACE}. */
+  enabled: boolean
 }
 
 export const Config: z<Partial<Config>, Config> = z.object({
@@ -25,21 +31,46 @@ export const Config: z<Partial<Config>, Config> = z.object({
     ? join(process.env.ProgramFiles ?? 'C:\\Program Files', 'Tailscale', 'tailscale.exe')
     : 'tailscale'),
   discoveryTimeoutMs: z.natural().min(1).default(5000),
+  enabled: z.boolean().default(false),
 })
+
+/** Durable mobile-access intent stored in user settings. */
+export interface MobileAccessSettings {
+  /** Whether this deployment keeps mobile access listening. */
+  enabled: boolean
+}
+
+/** Schema of the stored intent, served to settings clients and the settings document. */
+export const MOBILE_ACCESS_SETTINGS_SCHEMA: z<MobileAccessSettings> = z.object({
+  enabled: z.boolean().default(false),
+})
+
+/** Why a requested listener change did not take effect, reported to the caller. */
+type MobileAccessFailure = 'settings-unwritable' | 'tailscale-unavailable'
 
 function loopback(address: string | undefined): boolean {
   return address === '::1' || address === '127.0.0.1'
 }
 
 /**
- * Register desktop-only controls; access starts off and is revoked on unload.
+ * Register desktop-only controls. The requested state is durable: it is stored
+ * in the settings namespace while a settings service owns it, and the listener
+ * is restored to it at load, so enabling access once survives a restart.
  * @param ctx - plugin owner providing the authenticated application transport.
- * @param config - resolved Tailscale discovery configuration.
+ * @param config - resolved discovery configuration and the composition default.
  */
 export function apply(ctx: Context, config: Config): void {
   let active: { url: string; close: () => Promise<void> } | undefined
-  let operations: Promise<void> = Promise.resolve()
+  let operations: Promise<unknown> = Promise.resolve()
   let disposed = false
+  // The durable intent. `installSection` replaces this thunk with the resolved
+  // settings value while a settings service is present, and restores the
+  // composition entry if that service detaches.
+  let fallback: MobileAccessSettings = { enabled: config.enabled }
+  let source: () => MobileAccessSettings = () => fallback
+  // Writes the intent through settings; absent without a settings service, where
+  // the last requested value is held in memory for this process only.
+  let store: ((enabled: boolean) => Promise<void>) | undefined
   const state = (): { enabled: boolean; url: string | null } => ({ enabled: active !== undefined, url: active?.url ?? null })
   const setEnabled = async (enabled: boolean): Promise<void> => {
     if (disposed) throw new Error('Mobile access is unloading')
@@ -73,6 +104,27 @@ export function apply(ctx: Context, config: Config): void {
       close: async () => { untrust(); await close() },
     }
   }
+  /** Serialize one listener change behind every earlier one; failures stay with their caller. */
+  const enqueue = <T>(work: () => Promise<T>): Promise<T> => {
+    const operation = operations.then(work)
+    operations = operation.then(() => undefined, () => undefined)
+    return operation
+  }
+  /** Report a restore failure the user cannot see in a request result. */
+  const reportRestoreFailure = (error: unknown): void => {
+    ctx.logger.warn(`mobile access was not restored from the stored setting: ${String(error)}`)
+  }
+  ctx.inject(['settings'], (settingsCtx) => {
+    const entry: MobileAccessSettings = { enabled: config.enabled }
+    settingsCtx.settings.installSection(ctx, MOBILE_ACCESS_SETTINGS_NAMESPACE, MOBILE_ACCESS_SETTINGS_SCHEMA, entry, {
+      setSource: (next) => { source = next },
+      // `installSection` invokes this once on install, which is the restore at
+      // load, and again after every commit — including an edit made directly in
+      // the settings document.
+      onChange: () => { void enqueue(async () => { await setEnabled(source().enabled) }).catch(reportRestoreFailure) },
+    })
+    store = async (enabled) => { await settingsCtx.settings.update(MOBILE_ACCESS_SETTINGS_NAMESPACE, { enabled }) }
+  })
   ctx.effect(() => ctx.webServer.register({
     kind: 'exact', path: '/mobile-access',
     handler: async (request, response) => {
@@ -104,11 +156,21 @@ export function apply(ctx: Context, config: Config): void {
           response.end('Expected enabled boolean')
           return
         }
-        const operation = operations.then(async () => { await setEnabled(enabled) })
-        operations = operation.catch(() => { /* Each HTTP caller receives its own activation failure below. */ })
-        try { await operation } catch {
+        // Store the intent first: a listener that came up without a durable
+        // record would silently revert at the next launch.
+        const failure = await enqueue(async (): Promise<MobileAccessFailure | undefined> => {
+          try {
+            if (store === undefined) fallback = { enabled }
+            else await store(enabled)
+          } catch { return 'settings-unwritable' }
+          try {
+            await setEnabled(enabled)
+          } catch { return 'tailscale-unavailable' }
+          return undefined
+        })
+        if (failure !== undefined) {
           response.writeHead(503, { 'content-type': 'application/json' })
-          response.end(JSON.stringify({ ...state(), error: 'tailscale-unavailable' }))
+          response.end(JSON.stringify({ ...state(), error: failure }))
           return
         }
       }
