@@ -7,6 +7,7 @@
 ## Table of Contents
 
 - [Start the application](#start-the-application)
+- [Update from the application](#update-from-the-application)
 - [Inspect a failure](#inspect-a-failure)
 - [Keep custom plugins available](#keep-custom-plugins-available)
 - [Dev Note](#dev-note)
@@ -17,7 +18,15 @@ Double-click `RUN.bat`. It first checks that port 3080 is free, then runs `pnpm 
 
 Open the token-bearing URL printed by dsh. Leave the launcher window open while using the application; press Ctrl+C to stop it.
 
-To restart, press Ctrl+C in the existing dsh console and wait for dsh to exit before rerunning the launcher. The launcher refuses an occupied port without terminating its owner. For another application's listener, use that application's shutdown controls. A port check failure also stops startup.
+To restart, press Ctrl+C in the existing dsh console and wait for dsh to exit before rerunning the launcher. The launcher refuses an occupied port without terminating its owner. For another application's listener, use that application's shutdown controls. A port check failure also stops startup. To update the checkout while the application is running, use the sidebar's update control instead of stopping the launcher; see [Update from the application](#update-from-the-application).
+
+## Update from the application
+
+When the tracked `main` branch carries commits this checkout lacks, the sidebar shows an update button beside the Settings trigger. Confirming it stops the server through its own graceful shutdown, then runs a detached helper that fetches, sets local work aside with `git stash --include-untracked`, moves the checkout to `main`, runs `pnpm install`, `pnpm run install:custom-plugins`, and `pnpm run build`, restores the local work, and starts the server again. The browser clears its caches and reloads once the helper reports an outcome.
+
+The helper is a Node script with no dependency beyond the checkout's own Node runtime, so the update path is the same on Windows, macOS, and Linux. It restarts the server by replaying the `dsh` profile invocation that the running server recorded about itself, so a checkout started by this launcher or by any other `dsh` launcher restarts the same way. A server not started through a `dsh` profile is refused rather than replayed.
+
+A failure after the checkout moved returns it to the commit the update started from, rebuilds, and starts the previous server anyway, so a failed update never leaves the machine without a server. Progress, the failing step, and the full command output are written under `%DSH_HOME%\software-update\<checkout-key>\` — `update.log` beside `update.json`; the replacement server's console output goes to `server.log` in that directory because it has no console of its own. `%DSH_HOME%` is `%USERPROFILE%\.dsh` unless the environment overrides it, and `<checkout-key>` is a digest of the resolved checkout path, so a machine serving two checkouts keeps their records apart. List that directory to find the key for this checkout.
 
 ## Inspect a failure
 

@@ -18,7 +18,7 @@ A TCP listener's PID does not establish that the Windows launcher owns its proce
 
 **Kill the port owner.** A port number proves neither ownership nor readiness for termination, and forced termination skips asynchronous cleanup.
 
-**Automate graceful restart.** The launcher has no authenticated stop endpoint or durable process identity record. Adding a cross-process shutdown protocol is a separate lifecycle feature; manual shutdown uses the existing disposal path without inventing ownership from a PID.
+**Automate graceful restart.** The launcher has no authenticated stop endpoint or durable process identity record. Adding a cross-process shutdown protocol is a separate lifecycle feature; manual shutdown uses the existing disposal path without inventing ownership from a PID. That feature now exists and keeps this note's rule intact: the [in-place software update note](../feature/2026-09-13-in-place-software-update-and-session-continuation.md) stops the process named by its own `launch.json` record after a flushed response, never the current port owner, and the launcher still refuses an occupied port.
 
 ## Consequences
 
