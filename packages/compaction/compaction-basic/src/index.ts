@@ -13,6 +13,7 @@ import type { Session, SessionSeq } from '@deepseek-ai/dsh-session'
 import { CONTEXT_WINDOW_EXCEEDED_CODE } from '@deepseek-ai/dsh-llm'
 import type { LlmCallConfig } from '@deepseek-ai/dsh-llm'
 import { assertNever } from '@deepseek-ai/dsh-util-values'
+import { selectedRouteFor } from '@deepseek-ai/dsh-agent'
 import type { Agent, PreStepDecision } from '@deepseek-ai/dsh-agent'
 import type { CommandId } from '@deepseek-ai/dsh-commands/brand'
 // Type-only: makes the optional sibling service available to `ctx.get()`.
@@ -58,6 +59,30 @@ function routedTarget(
     return undefined
   }
   return { provider: config.provider, model: config.model }
+}
+
+/**
+ * Resolve the exact provider/model the agent's next request will use. A durable
+ * routed request must exist first, so pressure policy still describes a
+ * completed logged request rather than a route that has never run. That route is
+ * then the live model selection when one is installed for the Agent scope,
+ * because prompt assembly has already applied it, or will apply it, to the
+ * upcoming request; the latest durable header is the fallback for a scope whose
+ * entry point installed no selection, and for a selection that names no route.
+ * Sizing pressure from the header alone defers a switch to a smaller-context
+ * model until after that model's first request is dispatched, which that request
+ * cannot survive.
+ * @param agent - agent whose next request is being sized.
+ * @returns the routed provider/model pair, or `undefined` when the session has no completed routed request.
+ */
+function requestTarget(agent: Agent): Pick<LlmCallConfig, 'provider' | 'model'> | undefined {
+  const routed = routedTarget(agent.session)
+  if (routed === undefined) return undefined
+  const selected = selectedRouteFor(agent.ctx)
+  if (selected === undefined || selected.provider.length === 0 || selected.model.length === 0) {
+    return routed
+  }
+  return { provider: selected.provider, model: selected.model }
 }
 
 /** Resolve the conversation target used to select an optional policy override. */
@@ -261,7 +286,7 @@ export class BasicCompactionEngine extends CompactionEngine {
     trigger: CompactionTrigger,
     signal: AbortSignal,
   ): Promise<CompactionResult | null> {
-    const target = routedTarget(agent.session)
+    const target = requestTarget(agent)
     if (target === undefined) return null
     const policy = resolveTargetPolicy(this.config, target)
     const meter = this.ctx.tokenMeter

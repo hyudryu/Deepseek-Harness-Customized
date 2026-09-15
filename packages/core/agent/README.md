@@ -62,6 +62,10 @@ await handle.agent.whenIdle()
 
 `Agent.ctx` is the agent's scoped context: registrations made through it (tools, prompt sections, variables, event listeners, restrictions) apply to that agent alone and unwind on disposal. The same mechanism is what agent presets use to give one session a different capability set without affecting its neighbors.
 
+### Read the route the next request will use
+
+`installModelSelection(agentCtx, selection)` couples one mutable selection to the agent's prompt assembly and request routing, so a switch applies to a later step instead of splitting the two. `selectedRouteFor(agentCtx)` answers the route that step will use: the selection captured when the agent last entered prompt assembly, the pending one before that happens, or `undefined` when no entry point installed a selection. A consumer that must size work for an upcoming request reads this instead of the latest durable request header, which still names the previous route until the request under the new one is recorded.
+
 ### Intercept or observe work in flight
 
 The `agent/*` events let plugins act on live work without depending on the loop package. `agent/pre-step` can reject a proposed step or replace the messages entering it; `agent/request-error` lets a listener retry a failed model request; `agent/turn-stopping` runs before an otherwise completed turn closes and can steer to keep it open. `agent/assistant-stream` carries one process-local Assistant attempt's ordered start, transient chunk, and end frames. Start names the attempt's turn and step, chunk indexes are dense from zero, and `end.index` is the next chunk position. The loop commits the complete compact stream as one `assistant/message` or `assistant/attempt` before a committed end frame, so the live event remains presentation data rather than the replay source. `agent/status`, `agent/created`, and `agent/disposed` drive UI and coordination state, and the per-message `agent/inbox/*` notifications keep inbox projections in sync. Exact signatures, dispatch modes, and payload contracts live in the generated region of the [core subsystem page](../../../docs/subsystems/core.md#cordis-surface).
@@ -94,7 +98,7 @@ The package is built on one separation: the public `Agent` surface and registry 
 | [`src/inbox.ts`](src/inbox.ts) | The `Inbox` projection over durable `agent/inbox/spliced` events |
 | [`src/dispatch.ts`](src/dispatch.ts) | `agentEvents` fused dispatcher and `assembleContextFor(agent)` |
 | [`src/consumed-work.ts`](src/consumed-work.ts) | `foldConsumedWork(events)`: what the log's consumed work became |
-| [`src/model-selection.ts`](src/model-selection.ts) | `installModelSelection`: coupling one selection to assembly and routing |
+| [`src/model-selection.ts`](src/model-selection.ts) | `installModelSelection`: coupling one selection to assembly and routing; `selectedRouteFor`: reading the route a scope's next request uses |
 | [`src/invariant.ts`](src/invariant.ts) | Invariant companion: no-op `agent/status` transitions fail |
 
 ### Registry and lifecycle

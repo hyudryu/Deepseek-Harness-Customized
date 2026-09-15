@@ -26,7 +26,7 @@ import type {
 import SessionStore, { Session, SessionId, SessionSeq } from '@deepseek-ai/dsh-session'
 import SessionProjectionRegistry from '@deepseek-ai/dsh-session-projection'
 import TokenMeter from '@deepseek-ai/dsh-token-meter'
-import { agentEvents, type Agent, type RequestErrorAction } from '@deepseek-ai/dsh-agent'
+import { agentEvents, installModelSelection, type Agent, type ModelSelectionRef, type RequestErrorAction } from '@deepseek-ai/dsh-agent'
 import ToolResultPruner from '@deepseek-ai/dsh-compaction-tool-result-pruner'
 
 const SIGNAL = new AbortController().signal
@@ -82,10 +82,11 @@ function createContext(contextWindow = 1_000): Context {
   return ctx
 }
 
-function agent(session: Session, model?: string): Agent {
+function agent(session: Session, model?: string, ctx: Context = new Context()): Agent {
   return {
     session,
     options: model === undefined ? {} : { provider: model, model },
+    ctx,
   } as Agent
 }
 
@@ -492,10 +493,19 @@ describe('pressure measurement and retention', () => {
   }
 
   it('skips when no durable routed model exists instead of using AgentOptions fallback', async () => {
-    const compact = service(compactConfig)
+    const ctx = createContext()
+    const compact = service(compactConfig, ctx)
     const session = Session.create(SessionId('headerless'))
     session.append('turn/start', { turn: 1 })
-    await expect(compact.compactIfNeeded(agent(session, MODEL), 'pressure', SIGNAL))
+    const selection: ModelSelectionRef = {
+      current: { provider: MODEL, model: MODEL },
+      assembled: undefined,
+    }
+    // An installed selection still names no completed routed request, so the
+    // initial boundary produces no pressure work.
+    installModelSelection(ctx, selection)
+
+    await expect(compact.compactIfNeeded(agent(session, MODEL, ctx), 'pressure', SIGNAL))
       .resolves.toBeNull()
     expect(compact.calls).toHaveLength(0)
   })
@@ -549,6 +559,51 @@ describe('pressure measurement and retention', () => {
       reason: 'change',
     })
     await expect(compactIfNeeded(compact, session)).resolves.not.toBeNull()
+  })
+
+  it('meters the model selection installed for the Agent scope over the routed header', async () => {
+    const ctx = new Context()
+    void new LlmRuntime(ctx)
+    new SessionProjectionRegistry(ctx)
+    void new TokenMeter(ctx)
+    ctx.llm.registerAdapter(['wide', 'narrow'], new RoutedContextAdapter({
+      wide: 10_000,
+      narrow: 1_000,
+    }))
+    const compact = service({
+      auto: false,
+      thresholdRatio: 0.5,
+      retainRatio: 0.1,
+    }, ctx)
+    const session = conversation(4)
+    session.append('request/header', {
+      header: { config: { provider: 'wide', model: 'shared-id' } },
+      reason: 'resume',
+    })
+    const selected = agent(session, undefined, ctx)
+
+    // The logged header still names the wide route, so pressure stays under it.
+    await expect(compact.compactIfNeeded(selected, 'pressure', SIGNAL)).resolves.toBeNull()
+
+    // Selecting the narrow route for the next request lowers the threshold now,
+    // before that request is dispatched under the narrower window.
+    const selection: ModelSelectionRef = {
+      current: { provider: 'narrow', model: 'shared-id' },
+      assembled: undefined,
+    }
+    installModelSelection(ctx, selection)
+    await expect(compact.compactIfNeeded(selected, 'pressure', SIGNAL)).resolves.not.toBeNull()
+  })
+
+  it('ignores a model selection that names no route', async () => {
+    const ctx = createContext()
+    const compact = service(compactConfig, ctx)
+    const session = conversation()
+    const selection: ModelSelectionRef = { current: { provider: '', model: '' }, assembled: undefined }
+    installModelSelection(ctx, selection)
+
+    await expect(compact.compactIfNeeded(agent(session, MODEL, ctx), 'pressure', SIGNAL))
+      .resolves.not.toBeNull()
   })
 
   it('requires capacity only for proactive pressure, not provider-confirmed overflow', async () => {
