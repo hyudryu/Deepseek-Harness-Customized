@@ -1,0 +1,37 @@
+{
+  "name": "dsh-software-update",
+  "version": "0.1.0",
+  "description": "One-click software update for DeepSeek Harness: a sidebar button that appears only when origin/main has commits this checkout lacks, confirms the update, then runs a detached cross-platform helper that stops the server, stashes local work, pulls, rebuilds, restores the work, and relaunches the server while the browser clears its cache and reloads itself",
+  "type": "module",
+  "main": "index.js",
+  "exports": {
+    ".": "./index.js",
+    "./client": "./lib/client.js",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "index.js",
+    "src",
+    "scripts",
+    "lib/client.js",
+    "lib/client.js.map",
+    "cordis.patch.yml"
+  ],
+  "scripts": {
+    "build": "tsdown",
+    "watch": "tsdown --watch"
+  },
+  "license": "MIT",
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "inject": [
+        "@deepseek-ai/dsh-client-ui-slots",
+        "@deepseek-ai/dsh-client-locale"
+      ],
+      "platform": "web"
+    }
+  }
+}
