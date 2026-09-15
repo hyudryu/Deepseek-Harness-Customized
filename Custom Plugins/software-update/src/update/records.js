@@ -178,6 +178,29 @@ export function normalizeUpdateRecord(value) {
   }
 }
 
+/** Basenames of the `dsh` CLI entry, which is the only supported application launch. */
+const DSH_ENTRY_NAMES = new Set(['bin.ts', 'bin.js', 'bin.mjs', 'dsh', 'dsh.js', 'dsh.mjs'])
+
+/**
+ * Whether a recorded command line is a supported `dsh` profile invocation.
+ *
+ * The repository permits a supported Node application to be launched only
+ * through the `dsh` CLI and a named profile, because that launch is what owns
+ * the composition and the shutdown path this update depends on. Replaying
+ * anything else would restart an application whose disposal and exit behavior
+ * this feature has no contract with, so such a record is not replayable and the
+ * update is refused instead.
+ * @param args - the recorded `argv` without the executable.
+ * @returns true when the command line names the `dsh` CLI.
+ */
+export function isProfiledLaunch(args) {
+  if (!Array.isArray(args) || args.length === 0) return false
+  if (args.some(argument => argument === '--profile' || argument.startsWith('--profile='))) return true
+  const entry = typeof args[0] === 'string' ? args[0].replaceAll('\\', '/') : ''
+  const basename = entry.slice(entry.lastIndexOf('/') + 1).toLowerCase()
+  return DSH_ENTRY_NAMES.has(basename)
+}
+
 /**
  * Whether a launch record can be replayed.
  * @param record - candidate record read from disk.
@@ -191,4 +214,5 @@ export function isReplayableLaunch(record) {
     && record.argv.every(entry => typeof entry === 'string')
     && Array.isArray(record.execArgv) && record.execArgv.every(entry => typeof entry === 'string')
     && typeof record.cwd === 'string' && record.cwd !== ''
+    && isProfiledLaunch(record.argv)
 }

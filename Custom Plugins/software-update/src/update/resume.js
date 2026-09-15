@@ -177,17 +177,36 @@ export function continuationMessage(prompt) {
  * synthetic repair already recorded its in-flight tool calls as failed: naming
  * that is what stops it from re-running a side effect that may have completed
  * before the process died.
+ *
+ * The restart the session actually came back from is described from the
+ * terminal update state, never assumed. A failed update rolls the checkout back
+ * to the commit it started from, so a prompt claiming the new revision is now
+ * running would have the model reason about code that is not there.
  * @param session - the recorded session.
  * @param message - the operator's continuation text.
- * @param detail - facts about this restart.
+ * @param detail - the update record describing the restart.
  * @returns the model-facing continuation prompt.
  */
 export function continuationPrompt(session, message, detail) {
-  const lines = [message]
-  lines.push('')
-  lines.push(`The restart applied a software update: ${short(detail.previousBranch) ?? 'the previous checkout'} at ${short(detail.fromSha) ?? 'an unknown commit'} became ${short(detail.toSha) ?? 'an unknown commit'}.`)
+  const lines = [message, '', restartDescription(detail)]
   if (session.title !== null) lines.push(`Session: ${session.title}.`)
   return lines.join('\n')
+}
+
+/** Describe the restart from what the update record actually concluded. */
+function restartDescription(detail) {
+  const from = short(detail.fromSha) ?? 'an unknown commit'
+  const to = short(detail.toSha)
+  switch (detail.state) {
+    case 'done':
+      return `The restart applied a software update: ${short(detail.previousBranch) ?? 'the previous checkout'} at ${from} became ${to ?? 'an unknown commit'}.`
+    case 'failed':
+      // `toSha` is recorded before a rollback, so it names a revision that is
+      // no longer checked out. Naming it here would be actively misleading.
+      return `The restart followed a software update that failed and was rolled back: the checkout is back at ${from}, so the code you were working on is unchanged.`
+    default:
+      return `The restart followed a software update whose outcome is unknown: the checkout may be at ${from} or at a newer commit, so confirm the current state before relying on it.`
+  }
 }
 
 /** Render one recorded commit or branch for the prompt, or null when absent. */

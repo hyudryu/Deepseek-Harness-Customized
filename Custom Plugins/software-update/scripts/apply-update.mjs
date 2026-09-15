@@ -252,15 +252,16 @@ const IDENTITY_TOLERANCE_MS = 5_000
  */
 async function processStartTime(pid) {
   if (process.platform === 'win32') {
+    // PowerShell emits Unix milliseconds directly. `.NET` ticks are around 6e17
+    // today — past `Number.MAX_SAFE_INTEGER` — so parsing them as a JavaScript
+    // number would silently reject every real process.
     const result = await runCommand('powershell', [
       '-NoProfile', '-NonInteractive', '-Command',
-      `(Get-Process -Id ${String(pid)} -ErrorAction Stop).StartTime.ToUniversalTime().Ticks`,
+      `[long]((Get-Process -Id ${String(pid)} -ErrorAction Stop).StartTime.ToUniversalTime() - [datetime]'1970-01-01').TotalMilliseconds`,
     ], { timeoutMs: 15_000 })
     if (!result.ok) return null
-    const ticks = Number.parseInt(result.stdout.trim(), 10)
-    if (!Number.isSafeInteger(ticks) || ticks <= 0) return null
-    // .NET ticks are 100 ns intervals counted from 0001-01-01.
-    return Math.round(ticks / 10_000) - 62_135_596_800_000
+    const millis = Number.parseInt(result.stdout.trim(), 10)
+    return Number.isSafeInteger(millis) && millis > 0 ? millis : null
   }
   const result = await runCommand('ps', ['-p', String(pid), '-o', 'lstart='], { timeoutMs: 15_000 })
   if (!result.ok) return null
@@ -310,6 +311,16 @@ async function main() {
   // Owner-only: the log carries complete build output, which routinely quotes
   // configuration, environment dumps, and registry URLs.
   const log = createWriteStream(paths.log, { flags: 'w', mode: 0o600 })
+  // A write can fail long after the call that started it — a full disk while a
+  // build streams is the realistic case — and an unhandled 'error' on a
+  // Writable terminates the process outright, which would bypass recovery and
+  // leave no server running. The failure is recorded here and raised at the
+  // next step boundary, so it travels the same path as any other step failure.
+  let logFailure = null
+  log.on('error', (error) => { logFailure ??= error })
+  const guardLog = (step) => {
+    if (logFailure !== null) throw new StepError(step, `the update log failed: ${String(logFailure.message)}`)
+  }
   const say = (message) => { log.write(`[${new Date().toISOString()}] ${message}\n`) }
   let record = {
     version: 1,
@@ -468,9 +479,19 @@ async function main() {
       })
       if (!result.ok) throw new StepError(`build: ${command.join(' ')}`, result.message)
     }
+    guardLog('build')
   }
 
-  /** Put the stashed work back, keeping the stash when it cannot apply cleanly. */
+  /**
+   * Put the stashed work back, keeping the stash when it cannot apply cleanly.
+   *
+   * A failed `stash pop` leaves conflict markers in the working tree, and the
+   * `dsh` CLI runs this checkout from source through tsx — so a marker inside a
+   * TypeScript module makes the replacement server exit on a syntax error, and
+   * the update then rolls back everything it had already achieved. The stash is
+   * the durable copy of that work, so the tree is reset to the updated revision
+   * and the user resolves the conflict from the stash.
+   */
   const restoreStash = async () => {
     if (!stashed) return
     const result = await git(['stash', 'pop'])
@@ -479,11 +500,11 @@ async function main() {
       stashed = false
       return
     }
-    // A conflict is not an update failure: the new code is built and the stash
-    // is intact. The record carries the state the user has to resolve.
+    const cleaned = await git(['reset', '--hard', 'HEAD'])
+    say(`cleared the conflict markers in the working tree: ${cleaned.ok ? 'ok' : `failed (${firstLine(cleaned.stderr)})`}`)
     await commit({
       stashKept: true,
-      message: `The update is applied, but your stashed changes could not be restored automatically (${firstLine(result.stderr)}). They are kept in the stash; resolve the conflicts and run "git stash pop" again.`,
+      message: `The update is applied, but your stashed changes could not be restored automatically (${firstLine(result.stderr)}). They are kept in the stash and the working tree holds the updated code; resolve the conflicts and run "git stash pop" again.`,
     })
   }
 

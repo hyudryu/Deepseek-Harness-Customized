@@ -54,9 +54,6 @@ const HANDSHAKE_POLL_MS = 100
 /** Grace between the flushed response and the process-exit request. */
 const EXIT_DELAY_MS = 300
 
-/** Charset accepted for a configured git remote or branch name. */
-const REF_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._/-]*$/
-
 function positiveInt(value, fallback, field) {
   if (value === undefined) return fallback
   if (!Number.isInteger(value) || value <= 0) {
@@ -65,10 +62,32 @@ function positiveInt(value, fallback, field) {
   return value
 }
 
+/** Characters git forbids anywhere in a ref name. */
+const REF_FORBIDDEN = /[\u0000-\u001f\u007f ~^:?*[\\]/u
+
+/**
+ * Whether a value is a ref name git can actually create.
+ *
+ * The check follows `git check-ref-format --branch` rather than a permissive
+ * character class: a name that is merely spelled plausibly — `main.lock`,
+ * `foo//bar`, `foo/.bar`, `foo.` — would load cleanly and then fail forever as
+ * a repeated fetch error, which is exactly the deferred failure a load-time
+ * check exists to prevent.
+ * @param value - the configured branch name.
+ * @returns true when git would accept it as a branch name.
+ */
+export function isGitBranchName(value) {
+  if (typeof value !== 'string' || value === '') return false
+  if (value === '@' || value.startsWith('-') || value.endsWith('/') || value.endsWith('.')) return false
+  if (value.includes('..') || value.includes('@{') || value.includes('//')) return false
+  if (REF_FORBIDDEN.test(value)) return false
+  return value.split('/').every(segment => segment !== '' && !segment.startsWith('.') && !segment.endsWith('.lock'))
+}
+
 function refName(value, fallback, field) {
   if (value === undefined) return fallback
-  if (typeof value !== 'string' || !REF_PATTERN.test(value) || value.endsWith('/') || value.includes('..')) {
-    throw new Error(`software-update: ${field} must be a git ${field} name`)
+  if (!isGitBranchName(value)) {
+    throw new Error(`software-update: ${field} must be a name git accepts as a ref`)
   }
   return value
 }
@@ -563,6 +582,15 @@ export function apply(ctx, rawConfig = {}) {
           // Forced fetch: the confirmation the user just gave is about the
           // newest commit on the branch, not one the status cache already saw.
           const status = await readStatus({ forceFetch: true })
+          // A confirmation is about the newest commit on the branch. When the
+          // fetch failed, the comparison is against whatever the remote-tracking
+          // ref happened to hold, so starting a helper from it would rebuild and
+          // restart the server over a transient outage — and risk leaving it
+          // down if recovery also fails. The browser is told to try again.
+          if (status.fetchError !== null) {
+            respond(response, 409, { ok: false, error: 'fetch-failed' })
+            return
+          }
           if (status.state !== 'behind') {
             respond(response, 409, { ok: false, error: status.state === 'current' ? 'no-update' : (status.reason ?? 'unknown') })
             return

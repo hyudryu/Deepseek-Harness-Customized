@@ -113,8 +113,14 @@ test('configuration defaults to the fork update pipeline and fails loud on a bad
   assert.equal(config.branch, 'main')
   assert.deepEqual(config.buildCommands, [['install'], ['run', 'install:custom-plugins'], ['run', 'build']])
   assert.throws(() => normalizeConfig({ fetchTtlMs: 0 }), /positive integer/u)
-  assert.throws(() => normalizeConfig({ branch: '-oops' }), /git branch name/u)
-  assert.throws(() => normalizeConfig({ remote: 'origin main' }), /git remote name/u)
+  assert.throws(() => normalizeConfig({ branch: '-oops' }), /name git accepts as a ref/u)
+  assert.throws(() => normalizeConfig({ remote: 'origin main' }), /name git accepts as a ref/u)
+  // Plausible-looking names git can never create fail at load, not as a
+  // repeated fetch error the operator has to decode later.
+  for (const invalid of ['main.lock', 'foo//bar', 'foo/.bar', 'foo.', 'a..b', '@{now}', 'x.lock/y']) {
+    assert.throws(() => normalizeConfig({ branch: invalid }), /name git accepts as a ref/u, invalid)
+  }
+  assert.equal(normalizeConfig({ branch: 'feat/update-1.2' }).branch, 'feat/update-1.2')
   assert.throws(() => normalizeConfig({ buildCommands: [] }), /non-empty list/u)
   assert.deepEqual(normalizeConfig({ buildCommands: [['ci']] }).buildCommands, [['ci']])
 })
@@ -134,11 +140,19 @@ test('an update record is projected onto the fields the browser may read', () =>
   assert.equal(normalizeRecord({ state: 'forged' }).state, 'unknown')
 })
 
-test('a launch record is replayable only with an executable and an entry module', () => {
-  assert.equal(isReplayableLaunch({ execPath: 'node', argv: ['x.js'], execArgv: [], cwd: '/tmp' }), true)
-  assert.equal(isReplayableLaunch({ execPath: '', argv: ['x.js'], execArgv: [], cwd: '/tmp' }), false)
-  assert.equal(isReplayableLaunch({ execPath: 'node', argv: [], execArgv: [], cwd: '/tmp' }), false)
-  assert.equal(isReplayableLaunch({ execPath: 'node', argv: [1], execArgv: [], cwd: '/tmp' }), false)
+test('a launch record is replayable only for a supported dsh profile launch', () => {
+  const record = overrides => ({ execPath: 'node', argv: ['x.js'], execArgv: [], cwd: '/tmp', ...overrides })
+  assert.equal(isReplayableLaunch(record({ argv: ['/repo/apps/cli/src/bin.ts', 'web'] })), true)
+  assert.equal(isReplayableLaunch(record({ argv: ['/usr/local/bin/dsh', 'web'] })), true)
+  assert.equal(isReplayableLaunch(record({ argv: ['anything.js', '--profile', 'web'] })), true)
+  // A record that names no dsh profile is refused: the repository supports a
+  // Node application only through the dsh CLI and a named profile, and this
+  // update depends on the composition and shutdown that launch owns.
+  assert.equal(isReplayableLaunch(record({ argv: ['x.js'] })), false)
+  assert.equal(isReplayableLaunch(record({ argv: ['server.mjs', 'serve'] })), false)
+  assert.equal(isReplayableLaunch(record({ execPath: '' })), false)
+  assert.equal(isReplayableLaunch(record({ argv: [] })), false)
+  assert.equal(isReplayableLaunch(record({ argv: [1] })), false)
   assert.equal(isReplayableLaunch(null), false)
 })
 

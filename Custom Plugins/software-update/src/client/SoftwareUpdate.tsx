@@ -156,11 +156,14 @@ async function readStatus(): Promise<SoftwareUpdateStatus> {
  * Ask the host to start the update.
  * @returns the update's start timestamp, which identifies its outcome record.
  */
+/** Ask the host to start the update, reporting the host's own refusal code. */
 async function requestUpdate(): Promise<string> {
   const response = await fetch('/software-update', { method: 'POST', credentials: 'same-origin' })
-  const body = await response.json().catch(() => null) as { startedAt?: unknown } | null
+  const body = await response.json().catch(() => null) as { startedAt?: unknown; error?: unknown } | null
   if (!response.ok || typeof body?.startedAt !== 'string') {
-    throw new Error(`Software update request failed: ${String(response.status)}`)
+    // The host names why it refused; the dialog turns that into copy the user
+    // can act on rather than one generic failure message.
+    throw new Error(typeof body?.error === 'string' ? body.error : 'update-request-failed')
   }
   return body.startedAt
 }
@@ -202,7 +205,8 @@ export function SoftwareUpdate({ t }: SoftwareUpdateProps) {
   const [phase, setPhase] = useState<Phase>('idle')
   const [pending, setPending] = useState<string | null>(null)
   const [slow, setSlow] = useState(false)
-  const [startFailed, setStartFailed] = useState(false)
+  const [startError, setStartError] = useState<string | null>(null)
+  const [gaveUp, setGaveUp] = useState(false)
 
   // The host owns the cadence; until its first response arrives the control
   // polls at a fallback, then adopts whatever the deployment configured.
@@ -234,10 +238,19 @@ export function SoftwareUpdate({ t }: SoftwareUpdateProps) {
     if (pending === null) return
     let live = true
     let timer: ReturnType<typeof setTimeout> | undefined
-    const deadline = Date.now() + timing.waitTimeoutMs
+    // `slowAfterMs` is the deployment's expectation of a normal update, so it
+    // drives the "taking longer than expected" message; `waitTimeoutMs` is the
+    // point past which the dialog stops claiming it will reload on its own.
+    const startedAt = Date.parse(pending)
+    const slowAt = Number.isFinite(startedAt) ? startedAt + timing.slowAfterMs : Number.POSITIVE_INFINITY
+    const giveUpAt = Number.isFinite(startedAt) ? startedAt + timing.waitTimeoutMs : Number.POSITIVE_INFINITY
     const tick = async (): Promise<void> => {
       if (!live) return
-      if (Date.now() > deadline) setSlow(true)
+      if (Date.now() > giveUpAt) {
+        setGaveUp(true)
+        return
+      }
+      if (Date.now() > slowAt) setSlow(true)
       try {
         const value = await readStatus()
         if (!live) return
@@ -258,10 +271,10 @@ export function SoftwareUpdate({ t }: SoftwareUpdateProps) {
       live = false
       if (timer !== undefined) clearTimeout(timer)
     }
-  }, [pending, timing.outcomeMs, timing.waitTimeoutMs])
+  }, [pending, timing.outcomeMs, timing.slowAfterMs, timing.waitTimeoutMs])
 
   const openDialog = useCallback(() => {
-    setStartFailed(false)
+    setStartError(null)
     setOpen(true)
     readStatus().then(
       (value) => { setStatus(value) },
@@ -272,15 +285,16 @@ export function SoftwareUpdate({ t }: SoftwareUpdateProps) {
   }, [])
 
   const confirm = useCallback(() => {
-    setStartFailed(false)
+    setStartError(null)
     setPhase('starting')
     requestUpdate().then(
       (startedAt) => {
         setPending(startedAt)
+        setGaveUp(false)
         setPhase('waiting')
       },
-      () => {
-        setStartFailed(true)
+      (error: unknown) => {
+        setStartError(error instanceof Error ? error.message : 'update-request-failed')
         setPhase('idle')
       },
     )
@@ -324,7 +338,7 @@ export function SoftwareUpdate({ t }: SoftwareUpdateProps) {
     >
       {running ? (
         <p style={LEAD_STYLE}>
-          {phase === 'starting' ? t('starting') : slow ? t('slow') : t('waiting')}
+          {phase === 'starting' ? t('starting') : gaveUp ? t('gaveUp') : slow ? t('slow') : t('waiting')}
         </p>
       ) : status !== null && (
         <>
@@ -354,10 +368,21 @@ export function SoftwareUpdate({ t }: SoftwareUpdateProps) {
           {status.unsupportedReason === 'ephemeral-port' && (
             <p style={NOTE_STYLE}>{t('ephemeralPort')}</p>
           )}
-          {startFailed && <p role="alert" style={ERROR_STYLE}>{t('startFailed')}</p>}
+          {startError !== null && (
+            <p role="alert" style={ERROR_STYLE}>
+              {startError === 'fetch-failed' ? t('fetchFailed')
+                : startError === 'ephemeral-port' ? t('ephemeralPort')
+                  : t('startFailed')}
+            </p>
+          )}
           {update !== null && update.state !== 'running' && (
             <p style={NOTE_STYLE} role={update.state === 'failed' ? 'alert' : undefined}>
-              {update.state === 'failed' ? t('lastFailed') : t('lastDone')}
+              {update.state === 'done' ? t('lastDone')
+                : update.state === 'failed' ? t('lastFailed')
+                  // A record this build cannot interpret is not a success: the
+                  // parser keeps `unknown` precisely so it is never rendered as
+                  // one.
+                  : t('lastUnknown')}
               {update.stashKept ? ` ${t('stashKept')}` : ''}
               {update.message !== null ? ` ${update.message}` : ''}
             </p>

@@ -41,7 +41,9 @@ An invalid value stops the plugin from loading rather than silently taking a def
 
 ## How the server is stopped and restarted
 
-The plugin records the running server's identity — executable, `execArgv`, entry module, working directory, listen address, and start time — in `launch.json` before any update can be requested, and rewrites it whenever it names a different process. The helper replays that identity, so a checkout started as `pnpm dsh web`, a direct `node` entry, or an installed binary restarts the same way, with no package manager needed to start it.
+The plugin records the running server's identity — executable, `execArgv`, entry module, working directory, listen address, and start time — in `launch.json` before any update can be requested, and rewrites it whenever it names a different process. The helper replays that command line, so a checkout started by any `dsh` profile launcher restarts the same way, with no package manager needed to start it.
+
+A launch record that is not a `dsh` profile invocation is refused rather than replayed. The repository permits a supported Node application to be launched only through the `dsh` CLI and a named profile, and that launch is what owns the composition and the graceful shutdown this update depends on.
 
 Shutdown is the server's own graceful exit: the plugin calls the launcher-provided `appExit` after the response flushes, which disposes the tree through the same path a signal uses. The helper terminates the process only when that exit does not complete inside `gracefulStopMs`, and it identifies the process by the recorded id **and** the recorded start time — a bare pid is reused once the original exits, and signalling whatever inherited that number would kill an unrelated process. Where the platform cannot report a start time the helper says so in the log and falls back to the id alone.
 
@@ -77,6 +79,7 @@ A `running` record whose helper is no longer alive is concluded as failed and th
 - **A session running in another `dsh` process is not captured.** The registry answers for this process only.
 - **The session set is captured at the shutdown boundary, not fenced there.** The plugin photographs the running roots as the response flushes, which is the last moment they exist, but the server still accepts a new turn for the fraction of a second before its exit request runs. Fencing admission would need a seam the harness does not expose.
 - **Two `dsh web` instances on the same checkout still share one state directory.** Namespacing separates different checkouts, not two servers pointed at the same one; the last to write `launch.json` owns the update identity. Run one server per checkout.
+- **The update is refused for a launch it cannot replay.** A server started without a `dsh` profile, or one started with `--port 0`, reports that instead of offering an update that cannot work.
 - **A refresh command runs without credential environment variables.** Variables whose names look like a secret are dropped, so a build script that reads one from the environment — rather than from `.npmrc` or a config file — must be given it another way.
 
 ## Layout

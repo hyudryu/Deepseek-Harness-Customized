@@ -16,9 +16,12 @@ export const en = {
   starting: 'Starting the update…',
   waiting: 'Installing and rebuilding. The server restarts on its own and this page reloads when it is back.',
   slow: 'This is taking longer than expected. The install and build keep running in the background; leave this page open.',
+  gaveUp: 'This has taken longer than the configured update budget, so this page stopped checking. Reload it once the server is back; the update continued in the background.',
   startFailed: 'The update could not be started. Check that git and the package manager are available, then try again.',
+  fetchFailed: 'The newest commits could not be fetched, so the update was not started. Check the connection to the remote, then try again.',
   lastFailed: 'The last update attempt failed.',
   lastDone: 'The last update completed.',
+  lastUnknown: 'The last update left a record this version cannot interpret.',
   stashKept: 'Your stashed changes could not be restored automatically and are still in the stash.',
 } satisfies Record<string, string>
 /** Keys shared by the software-update dictionaries. */
@@ -41,8 +44,11 @@ export const zh = {
   starting: '正在启动更新…',
   waiting: '正在安装并重新构建。服务器会自动重启，恢复后本页面将自动刷新。',
   slow: '耗时比预期更长。安装和构建仍在后台运行，请保持本页面打开。',
+  gaveUp: '已超过配置的更新时限，本页面已停止检查。服务器恢复后请重新加载页面；更新仍在后台继续。',
   startFailed: '无法启动更新。请确认 git 与包管理器可用后重试。',
+  fetchFailed: '无法获取最新提交，因此未启动更新。请检查与远程仓库的连接后重试。',
   lastFailed: '上次更新失败。',
   lastDone: '上次更新已完成。',
+  lastUnknown: '上次更新留下的记录无法被当前版本识别。',
   stashKept: '暂存的更改无法自动恢复，仍保存在 stash 中。',
 } satisfies Record<SoftwareUpdateKey, string>

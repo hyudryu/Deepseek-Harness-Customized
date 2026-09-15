@@ -337,4 +337,16 @@ test('local work that cannot be restored is kept in the stash and reported', asy
   assert.match(log, /git stash pop -> 1/u)
   const stash = await run('git', ['stash', 'list'], scenario.work)
   assert.match(stash.stdout, /dsh software update/u)
+
+  // The `dsh` CLI runs this checkout from source through tsx, so a conflict
+  // marker left in a TypeScript module would make the replacement server exit
+  // and roll the whole update back. The tree must hold the updated revision.
+  const conflicted = await readFile(join(scenario.work, 'a.txt'), 'utf8')
+  assert.equal(conflicted.includes('<<<<<<<'), false)
+  assert.equal(conflicted.trim(), 'two')
+  const dirty = await run('git', ['status', '--porcelain', '--untracked-files=normal'], scenario.work)
+  assert.equal(dirty.stdout.trim(), '')
+  // And the work that could not be replayed is still recoverable.
+  const listed = await run('git', ['stash', 'show', '--name-only', 'stash@{0}'], scenario.work)
+  assert.equal(listed.stdout.includes('a.txt'), true)
 })

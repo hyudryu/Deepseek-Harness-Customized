@@ -138,15 +138,33 @@ describe('the sessions an update captures', () => {
     const prompt = continuationPrompt(
       { id: 's', title: 'Fix the parser' },
       'Continue the task.',
-      { previousBranch: 'main', fromSha: 'a'.repeat(40), toSha: 'b'.repeat(40) },
+      { state: 'done', previousBranch: 'main', fromSha: 'a'.repeat(40), toSha: 'b'.repeat(40) },
     )
     assert.match(prompt, /Continue the task\./)
     assert.match(prompt, /main at a{12} became b{12}/u)
     assert.match(prompt, /Session: Fix the parser\./u)
 
-    const bare = continuationPrompt({ id: 's', title: null }, 'Continue.', {})
+    const bare = continuationPrompt({ id: 's', title: null }, 'Continue.', { state: 'done' })
     assert.match(bare, /the previous checkout at an unknown commit became an unknown commit/u)
     assert.equal(bare.includes('Session:'), false)
+  })
+
+  test('a rolled-back update is never described as applied', () => {
+    // `toSha` is recorded before a rollback, so it names a revision that is no
+    // longer checked out; telling the model it is running would be a lie.
+    const rolledBack = continuationPrompt({ id: 's', title: null }, 'Continue.', {
+      state: 'failed',
+      previousBranch: 'main',
+      fromSha: 'a'.repeat(40),
+      toSha: 'b'.repeat(40),
+    })
+    assert.match(rolledBack, /failed and was rolled back/u)
+    assert.match(rolledBack, /back at a{12}/u)
+    assert.equal(rolledBack.includes(`became b`), false)
+
+    const unknown = continuationPrompt({ id: 's', title: null }, 'Continue.', { state: null })
+    assert.match(unknown, /outcome is unknown/u)
+    assert.equal(unknown.includes('applied a software update'), false)
   })
 })
 
