@@ -31,6 +31,24 @@ for (const entry of readdirSync(plugins, { withFileTypes: true }).sort((a, b) =>
   if (installed.status !== 0) {
     throw new Error(`${manifest.name}: dependency installation failed (${installed.status ?? installed.signal}).`)
   }
+  // A plugin's declared client entry is a build artifact, and this installer is
+  // the documented way a fresh checkout acquires one. Without this step the
+  // profile mounts a row whose `dsh.client` export does not exist yet, and the
+  // web host fails startup on a missing bundle. A plugin with no build script
+  // ships its entry as source and needs nothing here.
+  if (typeof manifest.scripts?.build === 'string') {
+    const built = spawnSync(installCommand, [
+      ...(scriptEntrypoint ? [pnpm] : []), 'run', 'build',
+    ], {
+      cwd: directory,
+      env: { ...process.env, CI: 'true' },
+      stdio: 'inherit',
+    })
+    if (built.error) throw built.error
+    if (built.status !== 0) {
+      throw new Error(`${manifest.name}: build failed (${built.status ?? built.signal}); application startup stopped.`)
+    }
+  }
   const imported = spawnSync(process.execPath, ['--input-type=module', '-e', 'await import(process.argv[1])', pathToFileURL(resolve(directory, manifest.main)).href], {
     cwd: directory,
     stdio: 'inherit',

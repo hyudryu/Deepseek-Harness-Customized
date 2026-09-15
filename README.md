@@ -354,6 +354,32 @@ See the [bundle README](<Custom Plugins/project-system-prompt/README.md>) for th
 
 </details>
 
+#### 10. `dsh-software-update`
+
+<details>
+<summary><b>One-click software update from the sidebar</b> — click to expand</summary>
+
+A button beside the Settings trigger updates this checkout to the latest commit on `origin/main`, rebuilds it, and restarts the server — so a user who walks away comes back to a running, updated application.
+
+The button **appears only while the tracked branch carries commits this checkout lacks**. Opening it lists those commits, the branch the checkout will move to, and how many uncommitted changes will be set aside; confirming asks nothing further of the user.
+
+Applying the update shuts the server down through its own graceful exit, then runs a detached helper that fetches, sets local work aside with `git stash --include-untracked`, moves the checkout to the branch, runs `pnpm install` → `pnpm run install:custom-plugins` → `pnpm run build`, puts the local work back, and starts a replacement server using the executable, arguments, and working directory the running server recorded about itself. Once the helper reports an outcome, the browser drops its caches and reloads.
+
+A failure after the checkout moved returns it to the commit the update started from, rebuilds, and **starts the previous server anyway**: an update that left nothing listening would be worse than one that did not happen. A stash that cannot be replayed is kept and reported rather than discarded, and the update still counts as applied.
+
+The control contributes to `sidebar.settings.action` at order 1, immediately right of the mobile-access action. The helper is a single Node script with no dependency beyond the repository's own Node runtime, so the update path is identical on Windows, macOS, and Linux.
+
+Install it with the custom-plugin installer, then add the bundle to your profile:
+
+```sh
+pnpm run install:custom-plugins
+pnpm dsh plugin --profile web add "./Custom Plugins/software-update"
+```
+
+See the [bundle README](<Custom Plugins/software-update/README.md>) for the config fields, the `/software-update` route, and the known limitations.
+
+</details>
+
 ## Developer preview
 
 DeepSeek Harness is in _developer preview_ and iterating rapidly. **THERE WILL BE COMPATIBILITY-BREAKING CHANGES.**
