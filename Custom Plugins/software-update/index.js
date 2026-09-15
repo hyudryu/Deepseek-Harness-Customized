@@ -20,6 +20,7 @@ import {
   isReplayableLaunch,
   launchRecord,
   normalizeUpdateRecord,
+  processIsAlive,
   readJson,
   statePaths,
   writeJsonAtomic,
@@ -93,6 +94,19 @@ function boolean(value, fallback, field) {
   return value
 }
 
+/**
+ * The checkout to update. An empty value means "discover it from the server's
+ * working directory"; anything that is present but not a string fails the load
+ * rather than falling back to that discovery, because a mistyped checkout
+ * setting would otherwise update a different repository than the operator
+ * selected.
+ */
+function checkoutPath(value) {
+  if (value === undefined) return ''
+  if (typeof value !== 'string') throw new Error('software-update: checkout must be a string')
+  return value
+}
+
 /** The refresh pipeline an update runs after pulling, before the server restarts. */
 const DEFAULT_BUILD_COMMANDS = [
   ['install'],
@@ -100,7 +114,7 @@ const DEFAULT_BUILD_COMMANDS = [
   ['run', 'build'],
 ]
 
-function buildCommands(value) {
+function buildCommandsOf(value) {
   if (value === undefined) return DEFAULT_BUILD_COMMANDS.map(command => [...command])
   if (!Array.isArray(value) || value.length === 0) {
     throw new Error('software-update: buildCommands must be a non-empty list of argument lists')
@@ -120,21 +134,56 @@ function buildCommands(value) {
  * @returns every setting this plugin reads, with its default applied.
  */
 export function normalizeConfig(raw = {}) {
+  const commandTimeoutMs = positiveInt(raw.commandTimeoutMs, 300_000, 'commandTimeoutMs')
+  const buildTimeoutMs = positiveInt(raw.buildTimeoutMs, 1_800_000, 'buildTimeoutMs')
+  const relaunchTimeoutMs = positiveInt(raw.relaunchTimeoutMs, 1_800_000, 'relaunchTimeoutMs')
+  const buildCommands = buildCommandsOf(raw.buildCommands)
   return {
     remote: refName(raw.remote, 'origin', 'remote'),
     branch: refName(raw.branch, 'main', 'branch'),
-    checkout: typeof raw.checkout === 'string' ? raw.checkout : '',
+    checkout: checkoutPath(raw.checkout),
     fetchTtlMs: positiveInt(raw.fetchTtlMs, 60_000, 'fetchTtlMs'),
-    commandTimeoutMs: positiveInt(raw.commandTimeoutMs, 300_000, 'commandTimeoutMs'),
-    buildTimeoutMs: positiveInt(raw.buildTimeoutMs, 1_800_000, 'buildTimeoutMs'),
+    commandTimeoutMs,
+    buildTimeoutMs,
+    relaunchTimeoutMs,
     gracefulStopMs: positiveInt(raw.gracefulStopMs, 15_000, 'gracefulStopMs'),
-    relaunchTimeoutMs: positiveInt(raw.relaunchTimeoutMs, 1_800_000, 'relaunchTimeoutMs'),
     commitListLimit: positiveInt(raw.commitListLimit, 20, 'commitListLimit'),
-    buildCommands: buildCommands(raw.buildCommands),
+    buildCommands,
     resumeOnRestart: boolean(raw.resumeOnRestart, true, 'resumeOnRestart'),
     resumeMessage: resumeMessage(raw.resumeMessage),
-    resumeWindowMs: positiveInt(raw.resumeWindowMs, 3_600_000, 'resumeWindowMs'),
+    // Derived from the budgets the update actually runs under rather than
+    // fixed: a slow install that stays inside every per-step timeout would
+    // otherwise outlive a shorter window and discard the sessions it
+    // interrupted as stale.
+    resumeWindowMs: positiveInt(
+      raw.resumeWindowMs,
+      buildCommands.length * buildTimeoutMs + relaunchTimeoutMs + commandTimeoutMs,
+      'resumeWindowMs',
+    ),
+    discoveryPollMs: positiveInt(raw.discoveryPollMs, 45_000, 'discoveryPollMs'),
+    outcomePollMs: positiveInt(raw.outcomePollMs, 3_000, 'outcomePollMs'),
+    slowAfterMs: positiveInt(raw.slowAfterMs, 45 * 60_000, 'slowAfterMs'),
+    waitTimeoutMs: positiveInt(raw.waitTimeoutMs, 45 * 60_000, 'waitTimeoutMs'),
   }
+}
+
+/**
+ * Whether a recorded launch asks the operating system to choose the port.
+ *
+ * The replay contains the same `--port 0`, so the successor would bind a
+ * different ephemeral port while the helper waits on the recorded one; the
+ * update is refused instead, because the browser could never find the server
+ * again.
+ * @param args - the recorded `argv` replayed to relaunch the server.
+ * @returns true when the relaunch would request an OS-assigned port.
+ */
+function requestsEphemeralPort(args) {
+  for (let index = 0; index < args.length; index += 1) {
+    const argument = args[index]
+    if (argument === '--port' && args[index + 1] === '0') return true
+    if (argument === '--port=0') return true
+  }
+  return false
 }
 
 function respond(response, status, value, onFlushed) {
@@ -185,19 +234,29 @@ function requestProcessExit(ctx) {
  */
 export function apply(ctx, rawConfig = {}) {
   const config = normalizeConfig(rawConfig)
-  const paths = statePaths(updateStateDir())
   const checkout = config.checkout === '' ? process.cwd() : config.checkout
+  // Namespaced by checkout: several profiles can share one harness home, and a
+  // shared directory would let one overwrite the other's relaunch identity.
+  const paths = statePaths(updateStateDir(checkout))
   let lastFetchAt = 0
   let inFlight = null
   let starting = false
   // Serialized so a poll that lands while the load-time claim is still running
   // waits for it instead of writing a second, racing record.
   let claiming = null
+  // A launch that asked the OS for a port cannot be updated in place: the
+  // replay would request another ephemeral port, so the browser could never
+  // find the replacement server again.
+  const ephemeralPort = requestsEphemeralPort(process.argv.slice(1))
 
   const identity = () => ({
     checkout,
     host: typeof ctx.webServer.host === 'string' ? ctx.webServer.host : null,
     port: Number.isInteger(ctx.webServer.port) ? ctx.webServer.port : null,
+    // Epoch milliseconds this process started. The helper compares it against
+    // the operating system's own view of the recorded pid before it signals,
+    // because a bare pid is reused after the original process exits.
+    startedAt: Date.now() - Math.round(process.uptime() * 1000),
   })
 
   /**
@@ -298,6 +357,56 @@ export function apply(ctx, rawConfig = {}) {
     return () => { dispose?.() }
   }, 'software-update: continue the sessions an update interrupts')
 
+  /**
+   * Capture the sessions a coming restart will interrupt.
+   *
+   * Called at the shutdown boundary rather than when the request is built,
+   * because the helper still has to be spawned, acknowledged, and answered
+   * before the server actually stops, and a turn that starts or finishes in
+   * between would otherwise be continued after it completed or dropped after
+   * it was cut off.
+   */
+  const captureResumeSet = async (status) => {
+    if (!config.resumeOnRestart) return 0
+    const sessions = runningRootSessions(ctx.get('agents'))
+    const record = resumeRecord(sessions, {
+      previousBranch: status.currentBranch,
+      fromSha: status.localSha,
+      toSha: status.remoteSha,
+    })
+    if (record === null) await rm(paths.resume, { force: true })
+    else await writeJsonAtomic(paths.resume, record)
+    return sessions.length
+  }
+
+  /**
+   * Conclude a `running` record whose helper is gone.
+   *
+   * The helper writes `running` before it does any work, so a helper that is
+   * killed — a crash, a power loss, an explicit `kill` — leaves a record that
+   * would reject every later request forever. A process that is no longer alive
+   * cannot write again, which makes observing its absence a safe point to
+   * commit the failure. The age of the record is deliberately not used here:
+   * only a confirmed-dead helper may have its record rewritten.
+   * @param update - the projected record just read from disk.
+   * @returns the record to report, after any conclusion written to disk.
+   */
+  const reconcileUpdate = async (update) => {
+    if (update === null || update.state !== 'running') return update
+    const request = await readJson(paths.request)
+    const helperPid = request?.helperPid
+    if (typeof helperPid !== 'number' || processIsAlive(helperPid)) return update
+    const concluded = {
+      ...update,
+      state: 'failed',
+      finishedAt: new Date().toISOString(),
+      message: 'The update helper stopped before it reported an outcome.',
+    }
+    await writeJsonAtomic(paths.update, concluded)
+    ctx.logger?.warn?.('software-update: the previous update helper is gone; its attempt is recorded as failed')
+    return concluded
+  }
+
   /** Refresh the remote-tracking ref at most once per configured interval. */
   const refreshFetch = async () => {
     if (Date.now() - lastFetchAt < config.fetchTtlMs) return null
@@ -315,7 +424,18 @@ export function apply(ctx, rawConfig = {}) {
 
   /** One serialized status read; concurrent polls share the in-flight probe. */
   const readStatus = async (options = {}) => {
-    if (inFlight !== null) return inFlight
+    if (inFlight !== null) {
+      const current = inFlight
+      if (options.forceFetch !== true) return await current
+      // A confirmation must not be answered from a poll that began before the
+      // user asked: that read may have skipped its fetch on the TTL and would
+      // report a stale branch tip. Let it settle, then probe again for real.
+      try {
+        await current
+      } catch {
+        // The fresh probe below is what reports a failure to this caller.
+      }
+    }
     const operation = (async () => {
       if (options.forceFetch === true) lastFetchAt = 0
       // Before any update can be started from this call: the record must name
@@ -329,7 +449,11 @@ export function apply(ctx, rawConfig = {}) {
         timeoutMs: config.commandTimeoutMs,
         commitLimit: config.commitListLimit,
       })
-      return { ...status, fetchError, update: normalizeUpdateRecord(await readJson(paths.update)) }
+      return {
+        ...status,
+        fetchError,
+        update: await reconcileUpdate(normalizeUpdateRecord(await readJson(paths.update))),
+      }
     })()
     inFlight = operation
     try {
@@ -342,10 +466,8 @@ export function apply(ctx, rawConfig = {}) {
   const startUpdate = async (status) => {
     const record = await readJson(paths.launch)
     if (!isReplayableLaunch(record)) return { ok: false, error: 'no-launch-record' }
+    if (requestsEphemeralPort(record.argv)) return { ok: false, error: 'ephemeral-port' }
     const startedAt = new Date().toISOString()
-    // Captured here, immediately before the server is asked to exit, because
-    // this is the last moment the in-flight turns still exist to be named.
-    const sessions = config.resumeOnRestart ? runningRootSessions(ctx.get('agents')) : []
     await writeJsonAtomic(paths.request, {
       version: 1,
       startedAt,
@@ -356,11 +478,15 @@ export function apply(ctx, rawConfig = {}) {
       fromSha: status.localSha,
       toSha: status.remoteSha,
       serverPid: process.pid,
+      serverStartedAt: Date.now() - Math.round(process.uptime() * 1000),
       gracefulStopMs: config.gracefulStopMs,
+      // The helper's git commands must be bounded too: without this the
+      // documented commandTimeoutMs does not reach it, and a hung fetch after
+      // the server has exited would leave the application offline.
+      commandTimeoutMs: config.commandTimeoutMs,
       relaunchTimeoutMs: config.relaunchTimeoutMs,
       buildTimeoutMs: config.buildTimeoutMs,
       buildCommands: config.buildCommands,
-      resumableSessions: sessions.length,
       host: typeof ctx.webServer.host === 'string' ? ctx.webServer.host : null,
       port: Number.isInteger(ctx.webServer.port) ? ctx.webServer.port : null,
       relaunch: {
@@ -369,9 +495,6 @@ export function apply(ctx, rawConfig = {}) {
         cwd: record.cwd,
       },
     })
-    const resume = resumeRecord(sessions)
-    if (resume === null) await rm(paths.resume, { force: true })
-    else await writeJsonAtomic(paths.resume, resume)
     const child = spawn(process.execPath, [HELPER_PATH, '--state-dir', paths.dir], {
       detached: true,
       stdio: 'ignore',
@@ -381,13 +504,15 @@ export function apply(ctx, rawConfig = {}) {
     })
     child.unref()
     const acknowledged = await awaitHelperAcknowledgement(paths.update, startedAt, HELPER_HANDSHAKE_MS)
-    if (!acknowledged) {
-      // This server stays alive, so no restart will consume the record and a
-      // later unrelated boot must not resume sessions it still names.
-      await rm(paths.resume, { force: true })
-      return { ok: false, error: 'helper-did-not-start' }
+    if (!acknowledged) return { ok: false, error: 'helper-did-not-start' }
+    // Recorded after the acknowledgement, which is proof the helper has already
+    // read the request: a reader of this file can then tell whether the helper
+    // that owns a `running` record is still alive.
+    const request = await readJson(paths.request)
+    if (request !== null && typeof request === 'object') {
+      await writeJsonAtomic(paths.request, { ...request, helperPid: child.pid })
     }
-    return { ok: true, startedAt, sessions: sessions.length }
+    return { ok: true, startedAt }
   }
 
   ctx.effect(() => ctx.webServer.register({
@@ -413,7 +538,17 @@ export function apply(ctx, rawConfig = {}) {
           // Read live rather than cached: it describes what the restart would
           // interrupt right now, which is what the confirmation is about.
           runningSessions: config.resumeOnRestart ? runningRootSessions(ctx.get('agents')).length : 0,
-          canUpdate: status.state === 'behind' && !starting,
+          // Deployment timing is resolved on the host and reported here, so the
+          // control's cadence follows the configured budget instead of
+          // duplicating it as client constants.
+          polling: {
+            discoveryMs: config.discoveryPollMs,
+            outcomeMs: config.outcomePollMs,
+            slowAfterMs: config.slowAfterMs,
+            waitTimeoutMs: config.waitTimeoutMs,
+          },
+          canUpdate: status.state === 'behind' && !starting && !ephemeralPort,
+          unsupportedReason: ephemeralPort ? 'ephemeral-port' : null,
         })
         return
       }
@@ -438,11 +573,18 @@ export function apply(ctx, rawConfig = {}) {
           }
           const started = await startUpdate(status)
           if (!started.ok) {
-            respond(response, 500, { ok: false, error: started.error })
+            respond(response, started.error === 'ephemeral-port' ? 409 : 500, { ok: false, error: started.error })
             return
           }
-          respond(response, 202, { ok: true, started: true, startedAt: started.startedAt, sessions: started.sessions }, () => {
-            requestProcessExit(ctx)
+          respond(response, 202, { ok: true, started: true, startedAt: started.startedAt }, () => {
+            // The last moment the in-flight turns still exist to be named. The
+            // browser already has its answer, so nothing after this is a
+            // response the user is waiting on.
+            captureResumeSet(status)
+              .catch((error) => {
+                ctx.logger?.warn?.(`software-update: the interrupted sessions were not recorded: ${String(error)}`)
+              })
+              .finally(() => { requestProcessExit(ctx) })
           })
         } catch (error) {
           ctx.logger?.warn?.(`software-update: update request failed: ${String(error)}`)
@@ -463,5 +605,6 @@ export const __test = {
   normalizeUpdateRecord,
   normalizeResumeRecord,
   awaitHelperAcknowledgement,
+  requestsEphemeralPort,
   HELPER_PATH,
 }

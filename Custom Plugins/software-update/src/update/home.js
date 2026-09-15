@@ -1,4 +1,5 @@
 /** DeepSeek Harness home resolution, mirroring `@deepseek-ai/dsh-home-paths`. */
+import { createHash } from 'node:crypto'
 import { homedir } from 'node:os'
 import { join, resolve } from 'node:path'
 
@@ -35,9 +36,32 @@ export function resolveDshHome(env = process.env) {
  * pending update request, and the helper's progress record. It lives under the
  * harness home rather than the checkout so a `git checkout` during an update
  * cannot remove the file the helper is still writing.
+ *
+ * The directory is namespaced by the checkout it describes, because several
+ * profiles can share one harness home while serving different checkouts. A
+ * shared directory would let one profile's poll overwrite another's relaunch
+ * identity, and let a request written for one checkout be executed against
+ * another.
+ * @param checkout - absolute checkout this state belongs to.
  * @param env - environment mapping read for `DSH_HOME`.
  * @returns the absolute state directory.
  */
-export function updateStateDir(env = process.env) {
-  return join(resolveDshHome(env), 'software-update')
+export function updateStateDir(checkout, env = process.env) {
+  return join(resolveDshHome(env), 'software-update', checkoutKey(checkout))
+}
+
+/**
+ * Stable directory name for one checkout.
+ *
+ * The path is normalized so the same checkout always maps to the same key:
+ * separators become `/`, and Windows comparisons ignore case. The key is a
+ * digest rather than the path itself so the directory name cannot collide two
+ * checkouts that differ only in a character the filesystem rejects.
+ * @param checkout - absolute checkout path.
+ * @returns a short lowercase hexadecimal key.
+ */
+export function checkoutKey(checkout) {
+  const normalized = resolve(checkout).replaceAll('\\', '/')
+  const canonical = process.platform === 'win32' ? normalized.toLowerCase() : normalized
+  return createHash('sha256').update(canonical).digest('hex').slice(0, 16)
 }

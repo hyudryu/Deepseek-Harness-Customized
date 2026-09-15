@@ -8,7 +8,11 @@
 #
 # resumeOnRestart continues the sessions whose turns the restart interrupts.
 # resumeMessage is the prompt those sessions receive, and resumeWindowMs is how
-# long a captured session list stays actionable.
+# long a captured session list stays actionable; its default already covers the
+# whole pipeline and relaunch budget.
+#
+# The four polling fields are reported to the browser with every status read, so
+# the control's cadence follows this budget rather than duplicating it.
 - insert:
     - id: software-update
       name: dsh-software-update
@@ -22,7 +26,10 @@
         relaunchTimeoutMs: 1800000
         commitListLimit: 20
         resumeOnRestart: true
-        resumeWindowMs: 3600000
+        discoveryPollMs: 45000
+        outcomePollMs: 3000
+        slowAfterMs: 2700000
+        waitTimeoutMs: 2700000
         buildCommands:
           - ['install']
           - ['run', 'install:custom-plugins']

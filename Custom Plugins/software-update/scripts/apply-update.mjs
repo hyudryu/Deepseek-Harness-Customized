@@ -24,6 +24,9 @@ import { delay } from '../src/update/delay.js'
 import { runCommand } from '../src/update/exec.js'
 import { readJson, statePaths, writeJsonAtomic } from '../src/update/records.js'
 
+/** Bound applied to one git command when the request does not carry one. */
+const DEFAULT_COMMAND_TIMEOUT_MS = 300_000
+
 /** A failure attributed to the step that owns it, so recovery can report where the update stopped. */
 class StepError extends Error {
   constructor(step, message) {
@@ -80,32 +83,189 @@ function resolvePackageManager(env = process.env) {
   return { command: 'pnpm', prefix: [], shell: process.platform === 'win32' }
 }
 
-/** Run one pipeline command, streaming its output into the update log. */
-function runStreaming(command, args, { cwd, shell, timeoutMs, onOutput }) {
+/**
+ * Environment variables a refresh command must not receive.
+ *
+ * The pipeline runs code that the update just fetched, so handing it the
+ * server's whole environment would let a compromised revision read this
+ * deployment's credentials — the launcher loads `.env` into `process.env`, so
+ * `DEEPSEEK_API_KEY` and everything like it is in scope. Names are matched by
+ * suffix rather than listed, because a deployment adds its own.
+ */
+const SECRET_NAME_PATTERN = /(?:^|_)(?:API_?KEY|KEY|TOKEN|SECRET|PASSWORD|PASSWD|CREDENTIALS?|AUTH)(?:_|$)/iu
+
+/** Variables that must survive scrubbing because a build cannot run without them. */
+const ENV_KEEP_ALWAYS = new Set(['PATH', 'Path', 'PATHEXT', 'HOME', 'USERPROFILE', 'SystemRoot', 'windir', 'COMSPEC', 'TMPDIR', 'TEMP', 'TMP', 'SHELL', 'LANG', 'LC_ALL', 'APPDATA', 'LOCALAPPDATA', 'PROGRAMFILES', 'ProgramData', 'NUMBER_OF_PROCESSORS', 'OS', 'TERM'])
+
+/**
+ * Build the environment a refresh command runs with.
+ *
+ * Everything needed to find a toolchain or a home directory survives; anything
+ * that looks like a credential is dropped, so a build script — or a dependency
+ * that a compromised revision introduced — cannot read this deployment's keys.
+ * @param env - the helper's own environment.
+ * @returns the scrubbed environment for the pipeline.
+ */
+function scrubbedEnvironment(env = process.env) {
+  const scrubbed = {}
+  for (const [name, value] of Object.entries(env)) {
+    if (value === undefined) continue
+    if (ENV_KEEP_ALWAYS.has(name)) {
+      scrubbed[name] = value
+      continue
+    }
+    if (SECRET_NAME_PATTERN.test(name)) continue
+    // Node and npm/pnpm runtime plumbing is how the resolved package manager is
+    // reached; it carries no deployment secret and the pipeline cannot start
+    // without it.
+    if (name.startsWith('npm_') || name === 'NODE' || name.startsWith('NODE_')) {
+      scrubbed[name] = value
+      continue
+    }
+    scrubbed[name] = value
+  }
+  return scrubbed
+}
+
+/**
+ * Run one pipeline command, streaming its output into the update log.
+ *
+ * Output is written through the sink with backpressure: when the log reports a
+ * full buffer both child streams pause until it drains, which bounds the
+ * helper's memory no matter how much a build prints.
+ */
+function runStreaming(command, args, { cwd, shell, timeoutMs, sink }) {
   return new Promise((settle) => {
     const child = spawn(command, args, {
       cwd,
       shell,
       windowsHide: true,
-      env: process.env,
+      env: scrubbedEnvironment(),
       stdio: ['ignore', 'pipe', 'pipe'],
+      // Its own process group, so a timeout can end the whole tree a build
+      // started rather than only its top process.
+      detached: process.platform !== 'win32',
     })
-    const timer = setTimeout(() => { child.kill() }, timeoutMs)
-    child.stdout.on('data', chunk => onOutput(chunk))
-    child.stderr.on('data', chunk => onOutput(chunk))
+    let settled = false
+    let timer = null
+    const finish = (outcome) => {
+      if (settled) return
+      settled = true
+      if (timer !== null) clearTimeout(timer)
+      settle(outcome)
+    }
+    /**
+     * End the command and everything it started.
+     *
+     * `kill()` alone is not a bound: a build that ignores the signal, or one
+     * whose descendant keeps the inherited pipes open, leaves `close` pending
+     * forever — and by then the server is already stopped. So the tree is
+     * signalled, then given a bounded window to die, after which the timeout is
+     * reported regardless of whether `close` ever arrives.
+     */
+    const terminate = () => {
+      const forced = terminateTree(child.pid)
+      const giveUp = setTimeout(() => {
+        finish({ ok: false, code: 124, message: `exceeded ${timeoutMs}ms and did not exit after termination` })
+      }, TERMINATION_GRACE_MS)
+      giveUp.unref?.()
+      child.once('close', (code, signal) => {
+        clearTimeout(giveUp)
+        finish({ ok: false, code: 124, message: `exceeded ${timeoutMs}ms and was terminated${signal === null ? '' : ` (${String(signal)})`}${forced ? '' : ' without a reachable process tree'}` })
+      })
+    }
+    timer = setTimeout(terminate, timeoutMs)
+    let paused = false
+    const write = (chunk) => {
+      if (sink.write(chunk) || paused) return
+      paused = true
+      child.stdout.pause()
+      child.stderr.pause()
+      sink.once('drain', () => {
+        paused = false
+        child.stdout.resume()
+        child.stderr.resume()
+      })
+    }
+    child.stdout.on('data', write)
+    child.stderr.on('data', write)
     child.once('error', (error) => {
-      clearTimeout(timer)
-      settle({ ok: false, code: 127, message: String(error.message) })
+      finish({ ok: false, code: 127, message: String(error.message) })
     })
     child.once('close', (code, signal) => {
-      clearTimeout(timer)
-      settle({
+      finish({
         ok: code === 0,
         code: code ?? 1,
         message: code === 0 ? null : `exited ${code ?? `on ${String(signal)}`}`,
       })
     })
   })
+}
+
+/** How long a signalled process tree is given to die before the timeout is reported anyway. */
+const TERMINATION_GRACE_MS = 10_000
+
+/**
+ * End one process and every process it started.
+ *
+ * POSIX gets a signal to the whole process group the child was given. Windows
+ * has no group signal, so `taskkill /T` walks the tree the operating system
+ * recorded; it is the only portable way to reach a build's descendants there.
+ * @param pid - the process to terminate.
+ * @returns true when a termination attempt was made without error.
+ */
+function terminateTree(pid) {
+  if (typeof pid !== 'number' || pid <= 0) return false
+  if (process.platform === 'win32') {
+    try {
+      spawn('taskkill', ['/pid', String(pid), '/T', '/F'], { stdio: 'ignore', windowsHide: true })
+      return true
+    } catch {
+      return false
+    }
+  }
+  try {
+    // The negative id addresses the child's process group.
+    process.kill(-pid, 'SIGTERM')
+    return true
+  } catch {
+    try {
+      process.kill(pid, 'SIGKILL')
+      return true
+    } catch {
+      return false
+    }
+  }
+}
+
+/** Tolerance when comparing a recorded start time with the operating system's. */
+const IDENTITY_TOLERANCE_MS = 5_000
+
+/**
+ * Ask the operating system when one process started.
+ *
+ * This is what makes a recorded process id verifiable: after the original
+ * process exits the id can be reused, and only a start time distinguishes the
+ * original from whatever inherited its number.
+ * @param pid - the process to describe.
+ * @returns epoch milliseconds, or null when the platform cannot report it.
+ */
+async function processStartTime(pid) {
+  if (process.platform === 'win32') {
+    const result = await runCommand('powershell', [
+      '-NoProfile', '-NonInteractive', '-Command',
+      `(Get-Process -Id ${String(pid)} -ErrorAction Stop).StartTime.ToUniversalTime().Ticks`,
+    ], { timeoutMs: 15_000 })
+    if (!result.ok) return null
+    const ticks = Number.parseInt(result.stdout.trim(), 10)
+    if (!Number.isSafeInteger(ticks) || ticks <= 0) return null
+    // .NET ticks are 100 ns intervals counted from 0001-01-01.
+    return Math.round(ticks / 10_000) - 62_135_596_800_000
+  }
+  const result = await runCommand('ps', ['-p', String(pid), '-o', 'lstart='], { timeoutMs: 15_000 })
+  if (!result.ok) return null
+  const parsed = Date.parse(result.stdout.trim())
+  return Number.isFinite(parsed) ? parsed : null
 }
 
 /** Probe one listen address once; a refused or silent connection means "not up yet". */
@@ -135,8 +295,21 @@ async function main() {
     process.exitCode = 1
     return
   }
+  // Every git command is bounded. The plugin sends its resolved value; a
+  // request written by an older version, or edited by hand, still gets a bound
+  // rather than none, because an unbounded fetch after the server has exited
+  // would leave the application offline with no one to notice.
+  if (request.commandTimeoutMs !== undefined
+    && (!Number.isInteger(request.commandTimeoutMs) || request.commandTimeoutMs <= 0)) {
+    process.stderr.write('apply-update: request.json has an invalid commandTimeoutMs\n')
+    process.exitCode = 1
+    return
+  }
+  if (!Number.isInteger(request.commandTimeoutMs)) request.commandTimeoutMs = DEFAULT_COMMAND_TIMEOUT_MS
 
-  const log = createWriteStream(paths.log, { flags: 'w' })
+  // Owner-only: the log carries complete build output, which routinely quotes
+  // configuration, environment dumps, and registry URLs.
+  const log = createWriteStream(paths.log, { flags: 'w', mode: 0o600 })
   const say = (message) => { log.write(`[${new Date().toISOString()}] ${message}\n`) }
   let record = {
     version: 1,
@@ -179,6 +352,24 @@ async function main() {
     await gitRequire('fetch', ['fetch', '--quiet', '--no-tags', request.remote, refspec])
   }
 
+  /**
+   * Whether the recorded process is still the server this update is replacing.
+   *
+   * A process id is not durable ownership: once the original server exits, the
+   * operating system may hand that id to anything, and signalling it then would
+   * kill an unrelated process. The recorded start time is compared against the
+   * operating system's own view, a few seconds of tolerance covering clock
+   * granularity. When the platform cannot report a start time the check has to
+   * trust the id, which is why the caller says so in the log.
+   */
+  const serverIdentityMatches = async (pid) => {
+    const expected = request.serverStartedAt
+    if (!Number.isFinite(expected)) return { known: false, matches: true }
+    const observed = await processStartTime(pid)
+    if (observed === null) return { known: false, matches: true }
+    return { known: true, matches: Math.abs(observed - expected) < IDENTITY_TOLERANCE_MS }
+  }
+
   /** Wait for the recorded server process to exit, terminating it only past the grace. */
   const stopServer = async () => {
     const pid = request.serverPid
@@ -193,6 +384,14 @@ async function main() {
         return
       }
       await delay(200)
+    }
+    const identity = await serverIdentityMatches(pid)
+    if (!identity.known) {
+      say(`could not verify that ${pid} is still the recorded server; relying on the recorded id`)
+    } else if (!identity.matches) {
+      // The recorded server is gone and its id now names something else.
+      say(`server ${pid} is no longer the process this update recorded; leaving it alone`)
+      return
     }
     say(`server ${pid} was still running after ${request.gracefulStopMs} ms; terminating`)
     try {
@@ -241,6 +440,10 @@ async function main() {
 
   /** Fast-forward onto the fetched commit; a diverged branch fails here, not silently. */
   const mergeRemote = async () => {
+    // Captured before the merge so a rollback can put the tracked branch back
+    // exactly where it was, instead of leaving it at the merged commit.
+    const tip = await git(['rev-parse', `refs/heads/${request.branch}`])
+    if (tip.ok) request.branchTipBefore = tip.stdout.trim()
     await gitRequire('merge', ['merge', '--ff-only', `refs/remotes/${request.remote}/${request.branch}`])
     merged = true
     const head = await git(['rev-parse', 'HEAD'])
@@ -258,7 +461,10 @@ async function main() {
         cwd: request.checkout,
         shell: manager.shell,
         timeoutMs: request.buildTimeoutMs,
-        onOutput: chunk => log.write(chunk),
+        // The sink, not a fire-and-forget write: a verbose install can emit far
+        // faster than the log drains, and by this point the server is stopped,
+        // so unbounded buffering would end the update in an out-of-memory kill.
+        sink: log,
       })
       if (!result.ok) throw new StepError(`build: ${command.join(' ')}`, result.message)
     }
@@ -285,8 +491,8 @@ async function main() {
   const relaunchServer = async () => {
     const { command, args, cwd } = request.relaunch
     say(`starting ${command} ${args.join(' ')}`)
-    const out = openSync(paths.server, 'a')
-    const error = openSync(paths.server, 'a')
+    const out = openSync(paths.server, 'a', 0o600)
+    const error = openSync(paths.server, 'a', 0o600)
     try {
       const child = spawn(command, args, {
         cwd,
@@ -323,33 +529,64 @@ async function main() {
   const recover = async (failure) => {
     const step = failure instanceof StepError ? failure.step : 'unknown'
     say(`FAILED at ${step}: ${failure.message}`)
+    // Every recovery step is reported for what it actually did: claiming a
+    // restoration that did not happen would hide a machine left on the wrong
+    // branch, or with nothing listening at all.
+    const outcomes = []
     try {
-      if (merged) await gitRequire('rollback', ['reset', '--hard', request.fromSha])
-      else if (switchedFrom !== null) await gitRequire('rollback', ['checkout', switchedFrom])
+      if (merged) {
+        // The fast-forward moved the TRACKED branch. When the checkout started
+        // on that branch, its ref and the working tree both have to go back
+        // together. When it started elsewhere, HEAD is restored to the original
+        // branch first — resetting here would otherwise drag the tracked branch
+        // to the other branch's commit and leave the user on the wrong one.
+        if (switchedFrom === null) {
+          await gitRequire('rollback', ['reset', '--hard', request.branchTipBefore ?? request.fromSha])
+          outcomes.push(`the checkout is back at ${String(request.fromSha).slice(0, 12)}`)
+        } else {
+          await gitRequire('rollback', ['checkout', switchedFrom])
+          await gitRequire('rollback', ['update-ref', `refs/heads/${request.branch}`, request.branchTipBefore ?? request.fromSha])
+          outcomes.push(`the checkout is back on ${switchedFrom}`)
+        }
+      } else if (switchedFrom !== null) {
+        await gitRequire('rollback', ['checkout', switchedFrom])
+        outcomes.push(`the checkout is back on ${switchedFrom}`)
+      } else {
+        outcomes.push('the checkout had not moved')
+      }
     } catch (rollbackError) {
       say(`rollback failed: ${String(rollbackError.message)}`)
+      outcomes.push(`the checkout could NOT be returned (${firstLine(rollbackError.message)})`)
       await commit({ step: 'rollback' })
     }
     try {
       await restoreStash()
+      if (stashed) outcomes.push('your stashed changes are kept in the stash')
+      else outcomes.push('your local changes were restored')
     } catch (restoreError) {
       say(`stash restore failed during recovery: ${String(restoreError.message)}`)
+      outcomes.push('your stashed changes could not be restored and remain in the stash')
     }
     try {
       await runPipeline()
     } catch (rebuildError) {
       say(`rebuild after rollback failed: ${String(rebuildError.message)}`)
+      outcomes.push(`the previous code could NOT be rebuilt (${firstLine(rebuildError.message)})`)
     }
+    let relaunched = false
     try {
       await relaunchServer()
+      relaunched = true
     } catch (relaunchError) {
       say(`relaunch after rollback failed: ${String(relaunchError.message)}`)
+      outcomes.push(`no server could be started (${firstLine(relaunchError.message)})`)
     }
+    if (relaunched) outcomes.push('the previous server is running again')
     await commit({
       state: 'failed',
       step,
       finishedAt: new Date().toISOString(),
-      message: `${failure.message}. The checkout was returned to ${String(request.fromSha)} and the previous server was started again.`,
+      message: `${failure.message}. Recovery: ${outcomes.join('; ')}.`,
     })
   }
 

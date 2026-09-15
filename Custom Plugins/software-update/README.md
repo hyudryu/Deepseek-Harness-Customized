@@ -6,7 +6,7 @@ A sidebar button appears beside the Settings trigger **only while the tracked br
 
 ## Model Experience
 
-No model-visible content. The plugin adds no tools, prompt sections, or session events; it reaches the application only through the authenticated HTTP route below and the sidebar slot.
+The plugin adds no tools and no prompt sections. It does contribute model-visible content in one case: when an update restarts the server, each session whose turn it interrupted receives one continuation prompt as a user-role message with a `plugin` source, so it is logged and replayed like any other turn input. Its wording is [`resumeMessage`](#configuration) plus a line naming the interrupted calls; nothing else the plugin does reaches a model request.
 
 ## Configuration
 
@@ -14,9 +14,9 @@ No model-visible content. The plugin adds no tools, prompt sections, or session 
 |---|---|---|
 | `remote` | `origin` | Git remote the update tracks. |
 | `branch` | `main` | Branch the update compares against and moves to. |
-| `checkout` | `''` | Checkout to update. Empty discovers the enclosing repository from the server's working directory. |
+| `checkout` | `''` | Checkout to update. Empty discovers the enclosing repository from the server's working directory. A present but non-string value fails the load rather than falling back to discovery. |
 | `fetchTtlMs` | `60000` | Shortest interval between two `git fetch` runs. |
-| `commandTimeoutMs` | `300000` | Timeout for one git command. |
+| `commandTimeoutMs` | `300000` | Timeout for one git command, applied in the plugin and in the helper. |
 | `buildTimeoutMs` | `1800000` | Timeout for one refresh-pipeline command. |
 | `gracefulStopMs` | `15000` | Time the helper waits for the server to exit before it terminates the process. |
 | `relaunchTimeoutMs` | `1800000` | Time the helper waits for the replacement server's listen address. |
@@ -24,22 +24,30 @@ No model-visible content. The plugin adds no tools, prompt sections, or session 
 | `buildCommands` | `[['install'], ['run', 'install:custom-plugins'], ['run', 'build']]` | Arguments appended to the launcher's package manager, run in order after the update. |
 | `resumeOnRestart` | `true` | Continue the sessions whose turns the restart interrupts. |
 | `resumeMessage` | A paragraph naming the interrupted calls | The instruction those sessions receive. |
-| `resumeWindowMs` | `3600000` | How long a captured session list stays actionable. |
+| `resumeWindowMs` | One pipeline and relaunch budget | How long a captured session list stays actionable. Derived from `buildCommands.length × buildTimeoutMs + relaunchTimeoutMs + commandTimeoutMs`, so a slow update cannot outlive it. |
+| `discoveryPollMs` | `45000` | How often the control re-reads the comparison while nothing is running. |
+| `outcomePollMs` | `3000` | How often the control asks the restarted server whether the update finished. |
+| `slowAfterMs` | `2700000` | How long a normal update may take before the dialog says it is slow. |
+| `waitTimeoutMs` | `2700000` | How long the dialog waits before it stops expecting an answer. |
 
-An invalid value stops the plugin from loading rather than silently taking a default.
+An invalid value stops the plugin from loading rather than silently taking a default. The four polling fields are reported to the browser with every status read, so the control's cadence follows the configured budget instead of duplicating it as client constants.
 
 ## HTTP route
 
 `/software-update` is authenticated like every other named route: the plugin calls `connection.requestRejection(request)` and answers its status code before reading any git state.
 
-- `GET` returns the checkout comparison — state, branch, both commit ids, the commit list, and the count of local changes — plus the most recent update record.
-- `POST` starts an update. It re-reads the status with a forced fetch, refuses unless an update still exists, writes the request, starts the helper, and waits for the helper's first record before answering `202`. The response is flushed before the plugin asks the launcher to exit.
+- `GET` returns the checkout comparison — state, branch, both commit ids, the commit list, and the count of local changes — plus the most recent update record, the resolved polling cadence, and how many sessions a restart would interrupt.
+- `POST` starts an update. It waits out any in-flight status read, performs a **forced fetch** of its own (a cached poll must not answer a confirmation), refuses unless an update still exists, writes the request, starts the helper, and waits for the helper's first record before answering `202`. The response is flushed, the sessions to continue are captured, and only then does the plugin ask the launcher to exit.
 
 ## How the server is stopped and restarted
 
-The plugin records the running server's identity — executable, `execArgv`, entry module, working directory, and listen address — in `$DSH_HOME/software-update/launch.json` before any update can be requested, and rewrites it whenever it names a different process. The helper replays that identity, so a checkout started as `pnpm dsh web`, a direct `node` entry, or an installed binary restarts the same way, with no package manager needed to start it.
+The plugin records the running server's identity — executable, `execArgv`, entry module, working directory, listen address, and start time — in `launch.json` before any update can be requested, and rewrites it whenever it names a different process. The helper replays that identity, so a checkout started as `pnpm dsh web`, a direct `node` entry, or an installed binary restarts the same way, with no package manager needed to start it.
 
-Shutdown is the server's own graceful exit: the plugin calls the launcher-provided `appExit` after the response flushes, which disposes the tree through the same path a signal uses. The helper terminates the process only when that exit does not complete inside `gracefulStopMs`, and it identifies the process by the recorded id rather than by the port owner.
+Shutdown is the server's own graceful exit: the plugin calls the launcher-provided `appExit` after the response flushes, which disposes the tree through the same path a signal uses. The helper terminates the process only when that exit does not complete inside `gracefulStopMs`, and it identifies the process by the recorded id **and** the recorded start time — a bare pid is reused once the original exits, and signalling whatever inherited that number would kill an unrelated process. Where the platform cannot report a start time the helper says so in the log and falls back to the id alone.
+
+State lives under `$DSH_HOME/software-update/<checkout-key>/`, where the key is a digest of the resolved checkout path. Several profiles can share one harness home while serving different checkouts, and a shared directory would let one profile's poll overwrite another's relaunch identity, or a request written for one checkout be executed against another. The directory is created `0700` and every record `0600`, because they carry session identities and titles, the checkout path, and complete build output.
+
+A launch that asked the operating system for its port (`--port 0`) cannot be updated in place: replaying that command line would bind a different port, so the browser could never find the replacement again. The control says so instead of offering an update that cannot work.
 
 ## Continuing the sessions it interrupts
 
@@ -53,18 +61,23 @@ The continuation is submitted as a plugin-source notice, not as a user prompt, a
 
 ## Failure behaviour
 
-A failure after the checkout moved returns it to the commit the update started from, restores the local work, runs the pipeline once more, and starts the previous server anyway. A failed build that left nothing listening would be worse than an update that did not happen. The outcome, the failing step, and the full command output are written to `$DSH_HOME/software-update/update.json` and `update.log`.
+A failure after the checkout moved returns it to the commit the update started from, restores the local work, runs the pipeline once more, and starts the previous server anyway. A failed build that left nothing listening would be worse than an update that did not happen. When the checkout started on another branch, recovery restores that branch **and** the tracked branch's previous tip, so neither is left moved. The outcome, the failing step, and the full command output are written to `update.json` and `update.log`; the recorded message reports what recovery actually achieved, including the steps that failed.
+
+A `running` record whose helper is no longer alive is concluded as failed and the update can be retried. Without that, a helper killed by a crash or a power loss would leave a record that rejected every later request forever.
 
 ## Known Limitations and Deferred Work
 
 - **Local work is restored with `git stash pop`, and a conflict is not an update failure.** The new code is built and the stash is kept; the record reports `stashKept` and the dialog tells the user to resolve it. The checkout is left with conflict markers.
 - **The update moves the checkout to the tracked branch.** Work committed on another branch is not lost, but it is not in the working tree afterwards, and the dialog names the branch for that reason.
 - **A diverged branch fails rather than merging.** The update uses `merge --ff-only`; local commits that are not on the tracked branch stop the update and the checkout is returned.
-- **The replacement server has no console.** Its output goes to `$DSH_HOME/software-update/server.log`.
+- **The replacement server has no console.** Its output goes to `server.log` in the state directory.
 - **The update runs the refresh pipeline of this fork.** `buildCommands` names a different pipeline for a checkout whose build entry point differs.
 - **A continued session's interrupted turn stays in its transcript as a failure.** The harness closes it as `interrupted` with synthetic tool errors, and the continuation is a new turn after it. The record is the honest account; nothing rewrites it.
 - **Only root sessions are captured.** A running subagent is continued through its parent's delegation rather than resumed on its own, so a subagent whose parent finished before the restart is not continued.
 - **A session running in another `dsh` process is not captured.** The registry answers for this process only.
+- **The session set is captured at the shutdown boundary, not fenced there.** The plugin photographs the running roots as the response flushes, which is the last moment they exist, but the server still accepts a new turn for the fraction of a second before its exit request runs. Fencing admission would need a seam the harness does not expose.
+- **Two `dsh web` instances on the same checkout still share one state directory.** Namespacing separates different checkouts, not two servers pointed at the same one; the last to write `launch.json` owns the update identity. Run one server per checkout.
+- **A refresh command runs without credential environment variables.** Variables whose names look like a secret are dropped, so a build script that reads one from the environment — rather than from `.npmrc` or a config file — must be given it another way.
 
 ## Layout
 

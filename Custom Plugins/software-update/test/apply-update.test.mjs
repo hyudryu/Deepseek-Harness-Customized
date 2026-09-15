@@ -17,7 +17,7 @@ import assert from 'node:assert/strict'
 import { execFile, spawn } from 'node:child_process'
 import { existsSync } from 'node:fs'
 import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
-import { createServer } from 'node:net'
+import { connect, createServer } from 'node:net'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { after, before, test } from 'node:test'
@@ -28,6 +28,7 @@ const AUTHOR = ['-c', 'user.name=test', '-c', 'user.email=test@example.com']
 
 let sandbox
 const started = new Set()
+const holders = new Set()
 
 before(async () => {
   sandbox = await mkdtemp(join(tmpdir(), 'dsh-apply-update-'))
@@ -35,6 +36,7 @@ before(async () => {
 })
 
 after(async () => {
+  for (const holder of holders) holder.clearInterval()
   for (const pid of started) {
     try {
       process.kill(pid, 'SIGKILL')
@@ -70,13 +72,32 @@ function run(command, args, cwd, options = {}) {
   })
 }
 
-/** Reserve a port and release it, so the relaunched listener can bind it. */
-function freePort() {
+/**
+ * Hold a port for the whole scenario and forward to whatever the replacement
+ * server binds.
+ *
+ * Releasing a port and hoping the fixture wins the race makes these cases
+ * nondeterministic under load: another process can take the port in the gap,
+ * and the helper then polls an unrelated listener. Keeping the test itself on
+ * the recorded address closes the gap — the helper's readiness probe always
+ * reaches the backend, and the backend is the fixture's own ephemeral port.
+ */
+function holdPort() {
   return new Promise((settle) => {
-    const probe = createServer()
-    probe.listen(0, '127.0.0.1', () => {
-      const { port } = probe.address()
-      probe.close(() => { settle(port) })
+    const backend = { port: null }
+    const holder = createServer((client) => {
+      if (backend.port === null) {
+        client.destroy()
+        return
+      }
+      const upstream = connect(backend.port, '127.0.0.1')
+      client.pipe(upstream).pipe(client)
+      client.on('error', () => { upstream.destroy() })
+      upstream.on('error', () => { client.destroy() })
+    })
+    holder.listen(0, '127.0.0.1', () => {
+      const { port } = holder.address()
+      settle({ port, backend, close: () => { holder.close() } })
     })
   })
 }
@@ -127,18 +148,38 @@ async function makeScenario({ pipelineFails = false } = {}) {
 
   const relaunchPidFile = join(root, 'relaunched.pid')
   const relaunchScript = join(root, 'relaunch.mjs')
-  const port = await freePort()
+  const portFile = join(root, 'backend.port')
+  const held = await holdPort()
+  held.backend.port = null
   await writeFile(relaunchScript, [
     "import { createServer } from 'node:http'",
     "import { writeFileSync } from 'node:fs'",
     `writeFileSync(${JSON.stringify(relaunchPidFile)}, String(process.pid))`,
-    `createServer((_, res) => { res.end('ok') }).listen(${String(port)}, '127.0.0.1')`,
+    // The fixture takes its own ephemeral port and reports it; the test's
+    // holder is what answers on the recorded address, so no window exists in
+    // which another process could claim it.
+    'const server = createServer((_, res) => { res.end("ok") })',
+    `server.listen(0, '127.0.0.1', () => { writeFileSync(${JSON.stringify(portFile)}, String(server.address().port)) })`,
     // Detached and out of the test's control once started, so it retires
     // itself well after the helper's readiness poll has seen it.
     'setTimeout(() => { process.exit(0) }, 30000)',
   ].join('\n'))
+  // Forward to whichever port the fixture actually bound.
+  const forward = setInterval(async () => {
+    if (held.backend.port !== null) return
+    try {
+      held.backend.port = Number.parseInt(await readFile(portFile, 'utf8'), 10)
+    } catch {
+      // The fixture has not bound yet; the next tick tries again.
+    }
+  }, 25)
+  forward.unref()
+  holders.add({ clearInterval: () => { clearInterval(forward); held.close() } })
 
-  return { root, work, state, pipelineLog, packageManager, relaunchScript, relaunchPidFile, port }
+  return {
+    root, work, state, pipelineLog, packageManager, relaunchScript, relaunchPidFile,
+    portFile, port: held.port,
+  }
 }
 
 /** Write the request the plugin would have written, then run the helper. */
@@ -155,6 +196,7 @@ async function runHelper(scenario, { serverPid, gracefulStopMs = 1_000, host = '
     toSha: null,
     serverPid,
     gracefulStopMs,
+    commandTimeoutMs: 120_000,
     relaunchTimeoutMs: 60_000,
     buildTimeoutMs: 60_000,
     buildCommands: [['install'], ['run', 'build']],
@@ -252,6 +294,31 @@ test('a failed build returns the checkout and starts the previous server again',
 
   // And something is listening again, even though the update failed.
   await awaitPidFile(scenario.relaunchPidFile)
+})
+
+test('a failed build on another branch returns the user to their own branch', async () => {
+  // The checkout starts somewhere other than the tracked branch, so the update
+  // has to switch first. A rollback that resets while standing on the tracked
+  // branch would drag that branch back to the other branch's commit and leave
+  // the user on the wrong one.
+  const scenario = await makeScenario({ pipelineFails: true })
+  await run('git', ['checkout', '-b', 'feature/local'], scenario.work)
+  await writeFile(join(scenario.work, 'feature.txt'), 'local work\n')
+  await run('git', AUTHOR.concat(['add', '.']), scenario.work)
+  await run('git', AUTHOR.concat(['commit', '-m', 'local feature']), scenario.work)
+  const featureSha = (await run('git', ['rev-parse', 'HEAD'], scenario.work)).stdout.trim()
+  const trackedBefore = (await run('git', ['rev-parse', 'refs/heads/main'], scenario.work)).stdout.trim()
+
+  const outcome = await runHelper(scenario, { serverPid: 0 })
+
+  assert.equal(outcome.record.state, 'failed')
+  const branch = (await run('git', ['rev-parse', '--abbrev-ref', 'HEAD'], scenario.work)).stdout.trim()
+  assert.equal(branch, 'feature/local')
+  const head = (await run('git', ['rev-parse', 'HEAD'], scenario.work)).stdout.trim()
+  assert.equal(head, featureSha)
+  // The tracked branch is exactly where the update found it.
+  const trackedAfter = (await run('git', ['rev-parse', 'refs/heads/main'], scenario.work)).stdout.trim()
+  assert.equal(trackedAfter, trackedBefore)
 })
 
 test('local work that cannot be restored is kept in the stash and reported', async () => {

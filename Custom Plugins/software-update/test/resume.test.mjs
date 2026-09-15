@@ -16,6 +16,7 @@ import { join } from 'node:path'
 import { after, beforeEach, describe, test } from 'node:test'
 
 import { apply, __test } from '../index.js'
+import { checkoutKey } from '../src/update/home.js'
 import {
   continuationMessage,
   continuationPrompt,
@@ -31,7 +32,9 @@ let stateDir
 beforeEach(async () => {
   home = await mkdtemp(join(tmpdir(), 'dsh-resume-'))
   process.env.DSH_HOME = home
-  stateDir = join(home, 'software-update')
+  // The plugin resolves its checkout from the server's working directory when
+  // none is configured, and namespaces its state directory by that checkout.
+  stateDir = join(home, 'software-update', checkoutKey(process.cwd()))
 })
 
 after(async () => {

@@ -100,8 +100,17 @@ export async function readCheckoutStatus({
   }
 
   const counted = await gitAt(root, ['rev-list', '--count', `HEAD..${remoteRef(remote, branch)}`])
-  const parsed = counted.ok ? Number.parseInt(counted.stdout.trim(), 10) : 0
-  const behind = Number.isSafeInteger(parsed) && parsed > 0 ? parsed : 0
+  // A failed count is not a count of zero: reporting `current` here would hide
+  // the update control on a checkout that may well be behind, so the probe
+  // failure becomes the same "unknown" every other failure produces.
+  if (!counted.ok) {
+    return { ...unknown('comparison-failed', root), localSha, currentBranch, remoteSha, changes }
+  }
+  const parsed = Number.parseInt(counted.stdout.trim(), 10)
+  if (!Number.isSafeInteger(parsed) || parsed < 0) {
+    return { ...unknown('comparison-failed', root), localSha, currentBranch, remoteSha, changes }
+  }
+  const behind = parsed
   const logged = behind > 0
     ? await gitAt(root, ['log', `--max-count=${commitLimit}`, '--format=%h%x09%s', `HEAD..${remoteRef(remote, branch)}`])
     : { ok: true, stdout: '' }

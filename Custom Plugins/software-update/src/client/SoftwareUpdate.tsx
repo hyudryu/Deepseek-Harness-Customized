@@ -18,14 +18,31 @@ import {
 import type { PropsLocale, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
 import type {} from '@deepseek-ai/dsh-client-ui-sidebar/client'
 
-/** How often the control re-reads the checkout comparison while nothing is running. */
-const POLL_MS = 45_000
+/**
+ * Cadence used until the first response arrives.
+ *
+ * These are fallbacks, not the settings: the host resolves the real values from
+ * its own configuration and reports them with every status, so a deployment
+ * that changes its update budget changes the control's cadence with it.
+ */
+const FALLBACK_TIMING = {
+  discoveryMs: 45_000,
+  outcomeMs: 3_000,
+  slowAfterMs: 45 * 60_000,
+  waitTimeoutMs: 45 * 60_000,
+}
 
-/** How often the control asks the restarted server whether the update finished. */
-const WAIT_POLL_MS = 3_000
-
-/** How long a normal update may take before the dialog says so. */
-const WAIT_TIMEOUT_MS = 45 * 60_000
+/** How the host reports its resolved polling cadence. */
+export interface SoftwareUpdateTiming {
+  /** Interval between checkout comparisons while nothing is running. */
+  discoveryMs: number
+  /** Interval between checks for the restarted server. */
+  outcomeMs: number
+  /** How long a normal update may take before the dialog says it is slow. */
+  slowAfterMs: number
+  /** How long the dialog waits before it stops expecting an answer. */
+  waitTimeoutMs: number
+}
 
 /** Commit rows the dialog lists before it summarizes the rest. */
 const COMMIT_ROWS = 8
@@ -66,6 +83,10 @@ export interface SoftwareUpdateStatus {
   branch: string
   /** Sessions whose turns the restart would interrupt and then continue. */
   runningSessions: number
+  /** The host's resolved polling cadence. */
+  polling?: SoftwareUpdateTiming
+  /** Why this launch cannot be updated in place, when it cannot. */
+  unsupportedReason?: string | null
   fetchError: string | null
   canUpdate: boolean
   update: SoftwareUpdateOutcome | null
@@ -183,6 +204,10 @@ export function SoftwareUpdate({ t }: SoftwareUpdateProps) {
   const [slow, setSlow] = useState(false)
   const [startFailed, setStartFailed] = useState(false)
 
+  // The host owns the cadence; until its first response arrives the control
+  // polls at a fallback, then adopts whatever the deployment configured.
+  const timing = status?.polling ?? FALLBACK_TIMING
+
   // Discovery stops once an update is running: the outcome poll owns the
   // endpoint from then on, and the checkout is mid-change anyway.
   useEffect(() => {
@@ -197,9 +222,9 @@ export function SoftwareUpdate({ t }: SoftwareUpdateProps) {
       )
     }
     load()
-    const timer = setInterval(load, POLL_MS)
+    const timer = setInterval(load, timing.discoveryMs)
     return () => { live = false; clearInterval(timer) }
-  }, [phase])
+  }, [phase, timing.discoveryMs])
 
   // The outcome record is the only signal that the restarted server is really
   // serving the new build, so the reload waits for it rather than for any
@@ -209,7 +234,7 @@ export function SoftwareUpdate({ t }: SoftwareUpdateProps) {
     if (pending === null) return
     let live = true
     let timer: ReturnType<typeof setTimeout> | undefined
-    const deadline = Date.now() + WAIT_TIMEOUT_MS
+    const deadline = Date.now() + timing.waitTimeoutMs
     const tick = async (): Promise<void> => {
       if (!live) return
       if (Date.now() > deadline) setSlow(true)
@@ -226,14 +251,14 @@ export function SoftwareUpdate({ t }: SoftwareUpdateProps) {
         // The server is down for the whole install and build, which is exactly
         // the state this poll exists to wait out; the next tick retries.
       }
-      if (live) timer = setTimeout(() => { void tick() }, WAIT_POLL_MS)
+      if (live) timer = setTimeout(() => { void tick() }, timing.outcomeMs)
     }
-    timer = setTimeout(() => { void tick() }, WAIT_POLL_MS)
+    timer = setTimeout(() => { void tick() }, timing.outcomeMs)
     return () => {
       live = false
       if (timer !== undefined) clearTimeout(timer)
     }
-  }, [pending])
+  }, [pending, timing.outcomeMs, timing.waitTimeoutMs])
 
   const openDialog = useCallback(() => {
     setStartFailed(false)
@@ -326,6 +351,9 @@ export function SoftwareUpdate({ t }: SoftwareUpdateProps) {
             <p style={NOTE_STYLE}>{t('switchBranch')} <code>{status.branch}</code></p>
           )}
           {status.runningSessions > 0 && <p style={NOTE_STYLE}>{t('sessionsContinue')}</p>}
+          {status.unsupportedReason === 'ephemeral-port' && (
+            <p style={NOTE_STYLE}>{t('ephemeralPort')}</p>
+          )}
           {startFailed && <p role="alert" style={ERROR_STYLE}>{t('startFailed')}</p>}
           {update !== null && update.state !== 'running' && (
             <p style={NOTE_STYLE} role={update.state === 'failed' ? 'alert' : undefined}>

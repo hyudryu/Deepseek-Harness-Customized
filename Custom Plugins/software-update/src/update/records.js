@@ -92,16 +92,39 @@ async function replaceFile(temporary, path) {
  * @param value - JSON-serializable value.
  */
 export async function writeJsonAtomic(path, value) {
-  await mkdir(dirname(path), { recursive: true })
+  // Owner-only on POSIX. These records carry session identities, titles, the
+  // checkout path, and the relaunch command line, and the helper's logs carry
+  // complete build output; under the usual umask 022 the default modes would
+  // publish all of it to every local user. Windows ignores the mode and keeps
+  // its own profile ACL, which already restricts the harness home.
+  await mkdir(dirname(path), { recursive: true, mode: 0o700 })
   const temporary = `${path}.${randomBytes(6).toString('hex')}.tmp`
   try {
-    await writeFile(temporary, `${JSON.stringify(value, null, 2)}\n`, 'utf8')
+    await writeFile(temporary, `${JSON.stringify(value, null, 2)}\n`, { encoding: 'utf8', mode: 0o600 })
     await replaceFile(temporary, path)
   } catch (error) {
     // The temporary file is this call's own residue; the original error is
     // the one the caller needs, so a failed cleanup is discarded.
     await rm(temporary, { force: true }).catch(() => undefined)
     throw error
+  }
+}
+
+/**
+ * Whether a process id names a live process.
+ *
+ * `EPERM` means the process exists but belongs to another user, which is still
+ * alive for the purpose of deciding whether it may yet write a record.
+ * @param pid - candidate process id.
+ * @returns true when something is running under that id.
+ */
+export function processIsAlive(pid) {
+  if (!Number.isInteger(pid) || pid <= 0) return false
+  try {
+    process.kill(pid, 0)
+    return true
+  } catch (error) {
+    return error?.code === 'EPERM'
   }
 }
 
